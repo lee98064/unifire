@@ -7,6 +7,7 @@ Claude (the architect) owns the plan, the shared API contract and the entire UI,
 
 ## Read before coding
 - `docs/PLAN.md` — the approved plan (Traditional Chinese). Architecture section is binding.
+- `docs/PLAN-infra.md` — phase 2 plan (switches/APs: fleet, ports, PoE, topology, rooms/roaming, incidents). Binding for WP8+.
 - `shared/api.ts` — **the HTTP API contract** (every endpoint: method, path, auth, input/output zod schema).
 - `shared/schemas/*.ts` — domain schemas. Responses MUST validate against the output schema.
 - `docs/unifi-api-research.md` — UniFi API research (endpoints, payloads, pitfalls).
