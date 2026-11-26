@@ -42,7 +42,7 @@ const userMenu = computed(() => [
 </script>
 
 <template>
-  <header class="sticky top-0 z-20 h-14 shrink-0 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 uf-glass border-b border-(--ui-border-muted) pt-[env(safe-area-inset-top)] box-content">
+  <header class="sticky top-0 z-20 h-14 shrink-0 min-w-0 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 uf-glass border-b border-(--ui-border-muted) pt-[env(safe-area-inset-top)] box-content">
     <NuxtLink to="/" class="lg:hidden">
       <AppLogo :size="26" />
     </NuxtLink>
@@ -63,7 +63,7 @@ const userMenu = computed(() => [
 
     <!-- Search -->
     <button
-      class="flex-1 md:flex-none md:w-[300px] flex items-center gap-2 h-8 px-2.5 rounded-md bg-(--uf-surface-2) ring-1 ring-(--ui-border-muted) text-dimmed hover:ring-(--ui-border-accented) transition text-left"
+      class="flex-1 min-w-0 md:flex-none md:w-[300px] flex items-center gap-2 h-8 px-2.5 rounded-md bg-(--uf-surface-2) ring-1 ring-(--ui-border-muted) text-dimmed hover:ring-(--ui-border-accented) transition text-left"
       @click="palette = true"
     >
       <UIcon name="i-lucide-search" class="size-4" />
@@ -83,7 +83,7 @@ const userMenu = computed(() => [
           class="flex items-center gap-1.5 h-7 px-2 rounded-full ring-1 ring-(--ui-border-muted) bg-(--uf-surface) text-[12px] hover:ring-(--ui-border-accented) transition"
         >
           <StatusDot :status="w.health.status" pulse />
-          <span class="font-medium text-highlighted">{{ w.wanGroup?.replace('WAN', 'WAN') ?? w.name }}</span>
+          <span class="font-medium text-highlighted">{{ w.wanGroup === 'WAN' ? 'WAN1' : (w.wanGroup ?? w.name) }}</span>
           <span class="text-dimmed uf-num">{{ fmt.ms(w.health.latencyMs) }}</span>
         </NuxtLink>
       </UTooltip>
@@ -124,7 +124,7 @@ const userMenu = computed(() => [
 
     <UDropdownMenu :items="userMenu" :content="{ align: 'end' }" :ui="{ content: 'w-56' }">
       <UButton color="neutral" variant="ghost" class="px-1.5" :aria-label="t('topbar.userMenu')">
-        <UAvatar :text="user?.displayName?.slice(0, 1) ?? '?'" size="sm" class="bg-primary text-white" />
+        <UAvatar :text="user?.displayName?.slice(0, 1) ?? '?'" size="sm" class="bg-primary text-white" :ui="{ fallback: 'text-white font-semibold' }" />
       </UButton>
     </UDropdownMenu>
   </header>

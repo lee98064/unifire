@@ -13,6 +13,8 @@ export default defineAppConfig({
     button: {
       slots: { base: 'font-medium transition-colors duration-150' },
       defaultVariants: { size: 'md' },
+      // UniFi uses white labels on solid buttons in both themes.
+      compoundVariants: (['primary', 'secondary', 'success', 'error', 'warning', 'info', 'vpn'] as const).map(color => ({ color, variant: 'solid' as const, class: 'text-white' })),
     },
     card: {
       slots: {
@@ -24,6 +26,7 @@ export default defineAppConfig({
     },
     badge: {
       slots: { base: 'font-medium' },
+      compoundVariants: (['primary', 'secondary', 'success', 'error', 'warning', 'info', 'vpn'] as const).map(color => ({ color, variant: 'solid' as const, class: 'text-white' })),
     },
     table: {
       slots: {

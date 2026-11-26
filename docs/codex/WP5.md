@@ -17,6 +17,10 @@ Read `docs/codex/BRIEF.md` first. WP1–WP4 are in the repo.
 - `GET /api/clients/:mac/usage?range=24h|7d|30d` → hourly buckets for 24h, daily for 7d/30d.
 
 ## 3. Approvals
+- **Baseline first:** on the first successful client sync for a controller (or after switching controllers),
+  every client already known to UniFi (`rest/user` + active) is imported as `approved` silently. Only MACs
+  first seen *after* the baseline become `pending`. (WP2 currently marks everything pending — fix it and add a
+  migration that approves clients whose `first_seen` in UniFi predates Unifire's first sync.)
 - When the cache sees a MAC never seen before (not in `clients`) and `settings.approval.mode != 'off'`:
   approval `pending`, `detected_at`. If `matchRandomizedByHostname` and the MAC is locally administered and
   an approved client has the same hostname → auto-approve (audit it). Strict mode → desired block with

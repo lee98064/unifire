@@ -4,7 +4,7 @@ onMounted(() => live.connect())
 </script>
 
 <template>
-  <div class="flex min-h-dvh">
+  <div class="flex min-h-dvh overflow-x-clip">
     <AppRail />
     <div class="flex-1 min-w-0 flex flex-col">
       <AppTopbar />

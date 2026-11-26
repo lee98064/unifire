@@ -120,6 +120,7 @@
 }
 
 .dark {
+  --ui-primary: var(--color-unifi-500);
   --uf-page: var(--color-ufgray-950);
   --uf-surface: var(--color-ufgray-900);
   --uf-surface-2: #232529;

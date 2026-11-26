@@ -117,7 +117,7 @@ onMounted(() => nextTick(measure))
 <template>
   <div class="relative">
     <!-- Desktop constellation -->
-    <div ref="root" class="relative hidden md:grid grid-cols-[minmax(150px,1fr)_minmax(180px,1.15fr)_minmax(170px,1fr)_64px] gap-x-14 items-center py-2 min-h-[300px]">
+    <div v-show="routes.length" ref="root" class="relative hidden md:grid grid-cols-[minmax(150px,1fr)_minmax(180px,1.15fr)_minmax(170px,1fr)_64px] gap-x-14 items-center py-2 min-h-[300px]">
       <svg class="absolute inset-0 pointer-events-none overflow-visible" :width="size.w" :height="size.h" aria-hidden="true">
         <g v-for="p in paths" :key="p.key">
           <path :d="p.d" fill="none" :stroke="p.color" :stroke-opacity="p.active ? 0.38 : 0.14" stroke-width="1.75" :stroke-dasharray="p.dashed ? '5 5' : undefined" />
@@ -222,8 +222,13 @@ onMounted(() => nextTick(measure))
       </NuxtLink>
     </div>
 
-    <EmptyState v-if="!routes.length" icon="i-lucide-waypoints" :title="t('dashboard.noRoutes')" :description="t('dashboard.noRoutesDesc')">
-      <UButton to="/routes" icon="i-lucide-plus">{{ t('routes.add') }}</UButton>
-    </EmptyState>
+    <div v-if="!routes.length" class="py-4">
+      <EmptyState icon="i-lucide-waypoints" :title="t('dashboard.noRoutes')" :description="t('dashboard.noRoutesDesc')">
+        <UButton to="/routes" icon="i-lucide-plus">{{ t('routes.add') }}</UButton>
+      </EmptyState>
+      <div v-if="egresses.length" class="flex flex-wrap justify-center gap-1.5 max-w-2xl mx-auto -mt-2">
+        <EgressChip v-for="e in egresses" :key="e.id" :id="e.id" size="sm" show-health />
+      </div>
+    </div>
   </div>
 </template>

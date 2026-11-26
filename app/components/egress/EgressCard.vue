@@ -24,7 +24,7 @@ const kindLabel = computed(() => t(`egresses.kind.${props.egress.kind}`))
             <span class="text-[14px] font-semibold text-highlighted truncate">{{ egress.name }}</span>
             <UIcon v-if="!egress.enabled" name="i-lucide-pause" class="size-3.5 text-dimmed" />
           </div>
-          <div class="text-[11.5px] text-dimmed">{{ kindLabel }}<template v-if="egress.wanGroup"> · {{ egress.wanGroup }}</template> · {{ t('egresses.routesN', { n: egress.routeCount }) }}</div>
+          <div class="text-[11.5px] text-dimmed">{{ egress.kind === 'wan' ? (egress.wanGroup === 'WAN' ? 'WAN1' : egress.wanGroup ?? 'WAN') : kindLabel }} · {{ t('egresses.routesN', { n: egress.routeCount }) }}</div>
         </div>
         <UBadge :color="egress.health.status === 'healthy' ? 'success' : egress.health.status === 'degraded' ? 'warning' : egress.health.status === 'down' ? 'error' : 'neutral'" variant="subtle" size="sm" class="gap-1.5">
           <StatusDot :status="egress.health.status" :size="6" pulse />{{ t(`health.${egress.health.status}`) }}

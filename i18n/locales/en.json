@@ -43,6 +43,7 @@
   },
   "errors": {
     "generic": "Something went wrong",
+    "notFound": "Not found",
     "invalidInput": "The request failed validation",
     "invalidCursor": "The pagination cursor is invalid",
     "invalidTimezone": "Not a valid IANA time zone",

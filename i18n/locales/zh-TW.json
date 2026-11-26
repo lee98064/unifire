@@ -43,6 +43,7 @@
   },
   "errors": {
     "generic": "操作失敗",
+    "notFound": "找不到資源",
     "invalidInput": "輸入的資料格式不正確",
     "invalidCursor": "分頁游標無效",
     "invalidTimezone": "不是有效的 IANA 時區",

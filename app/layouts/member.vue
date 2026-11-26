@@ -17,7 +17,7 @@ async function logout() {
         <NuxtLink to="/me"><AppLogo :size="26" wordmark /></NuxtLink>
         <div class="flex-1" />
         <UDropdownMenu :items="[[{ label: t('topbar.account'), icon: 'i-lucide-user-round-cog', to: '/account' }], [{ label: t('topbar.logout'), icon: 'i-lucide-log-out', color: 'error', onSelect: logout }]]" :content="{ align: 'end' }">
-          <UButton color="neutral" variant="ghost" class="px-1.5"><UAvatar :text="user?.displayName?.slice(0, 1)" size="sm" class="bg-primary text-white" /></UButton>
+          <UButton color="neutral" variant="ghost" class="px-1.5"><UAvatar :text="user?.displayName?.slice(0, 1)" size="sm" class="bg-primary text-white" :ui="{ fallback: 'text-white font-semibold' }" /></UButton>
         </UDropdownMenu>
       </div>
     </header>

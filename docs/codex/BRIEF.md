@@ -20,6 +20,8 @@ Claude (the architect) owns the plan, the shared API contract and the entire UI,
    do NOT change it — write a "Contract change requests" section in your final report instead and
    implement the closest compliant behaviour. You may edit `nuxt.config.ts` only inside the `nitro` and
    `runtimeConfig` blocks (say so in the report).
+1b. Keep `server/api/[...slug].ts` (JSON 404 for unknown /api paths — added by Claude). Keep
+   `service-worker/sw.ts` untouched (Claude's). Push action endpoints must be `/api/push/action?token=…`.
 2. Your files: `server/**`, `tests/**`, `vitest.config.ts`, `docs/backend/**`, deployment files
    (`Dockerfile`, `docker-compose.yml`, `ecosystem.config.cjs`, `deploy/**`) when a WP asks.
 3. TypeScript strict. No `any` unless unavoidable at the UniFi wire boundary (prefer `unknown` + zod
