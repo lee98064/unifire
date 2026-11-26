@@ -5,8 +5,10 @@ export type FieldKind =
   | 'macs' | 'mac' | 'person' | 'personOpt' | 'group' | 'egressOpt' | 'egress' | 'route' | 'quotaOpt' | 'cron' | 'tz'
   | 'number' | 'minutes' | 'minutesOpt' | 'bytes' | 'text' | 'textarea' | 'days' | 'time' | 'bool'
   | 'channels' | 'wlan' | 'wol' | 'switchport' | 'method' | 'target' | 'scope' | 'url' | 'headers'
+  | 'device' | 'deviceOpt' | 'switchOpt' | 'room' | 'roomOpt' | 'portKinds' | 'severity' | 'celsius' | 'percent'
 
-export interface FieldSpec { key: string, kind: FieldKind, required?: boolean }
+/** `min` overrides the default minimum of numeric fields (e.g. 0 = "immediately"). */
+export interface FieldSpec { key: string, kind: FieldKind, required?: boolean, min?: number }
 export interface BlockSpec<T> { icon: string, tone: string, fields: FieldSpec[], defaults: () => T }
 
 type TriggerType = RuleTriggerT['type']
@@ -27,6 +29,16 @@ export const triggerSpecs: Record<TriggerType, BlockSpec<RuleTriggerT>> = {
   'quota.exceeded': { icon: 'i-lucide-octagon-x', tone: 'error', fields: [{ key: 'quotaId', kind: 'quotaOpt' }], defaults: () => ({ type: 'quota.exceeded', quotaId: null }) },
   'device.offline': { icon: 'i-lucide-unplug', tone: 'error', fields: [{ key: 'mac', kind: 'mac', required: true }, { key: 'minutes', kind: 'minutes' }], defaults: () => ({ type: 'device.offline', mac: '', minutes: 5 }) as RuleTriggerT },
   'traffic.threshold': { icon: 'i-lucide-gauge', tone: 'vpn', fields: [{ key: 'scope', kind: 'scope', required: true }, { key: 'bytes', kind: 'bytes' }, { key: 'windowMinutes', kind: 'minutes' }], defaults: () => ({ type: 'traffic.threshold', scope: { type: 'person', id: '' }, bytes: 1e9, windowMinutes: 60 }) },
+  'infra.offline': { icon: 'i-lucide-server-off', tone: 'error', fields: [{ key: 'mac', kind: 'deviceOpt' }, { key: 'minutes', kind: 'minutes', min: 0 }], defaults: () => ({ type: 'infra.offline', mac: null, minutes: 2 }) },
+  'infra.online': { icon: 'i-lucide-server', tone: 'success', fields: [{ key: 'mac', kind: 'deviceOpt' }], defaults: () => ({ type: 'infra.online', mac: null }) },
+  'infra.rebooted': { icon: 'i-lucide-rotate-ccw', tone: 'warning', fields: [{ key: 'mac', kind: 'deviceOpt' }, { key: 'unexpectedOnly', kind: 'bool' }], defaults: () => ({ type: 'infra.rebooted', mac: null, unexpectedOnly: true }) },
+  'infra.overheat': { icon: 'i-lucide-thermometer', tone: 'error', fields: [{ key: 'mac', kind: 'deviceOpt' }, { key: 'celsius', kind: 'celsius' }], defaults: () => ({ type: 'infra.overheat', mac: null, celsius: 80 }) },
+  'infra.firmware': { icon: 'i-lucide-package-check', tone: 'primary', fields: [{ key: 'mac', kind: 'deviceOpt' }], defaults: () => ({ type: 'infra.firmware', mac: null }) },
+  'port.issue': { icon: 'i-lucide-cable', tone: 'warning', fields: [{ key: 'switchMac', kind: 'switchOpt' }, { key: 'kinds', kind: 'portKinds' }], defaults: () => ({ type: 'port.issue', switchMac: null, kinds: [] }) },
+  'poe.budget': { icon: 'i-lucide-zap', tone: 'warning', fields: [{ key: 'switchMac', kind: 'switchOpt' }, { key: 'percent', kind: 'percent' }], defaults: () => ({ type: 'poe.budget', switchMac: null, percent: 90 }) },
+  'person.room_entered': { icon: 'i-lucide-door-open', tone: 'success', fields: [{ key: 'personId', kind: 'personOpt' }, { key: 'roomId', kind: 'roomOpt' }], defaults: () => ({ type: 'person.room_entered', personId: null, roomId: null }) },
+  'person.room_left': { icon: 'i-lucide-door-closed', tone: 'neutral', fields: [{ key: 'personId', kind: 'personOpt' }, { key: 'roomId', kind: 'roomOpt' }], defaults: () => ({ type: 'person.room_left', personId: null, roomId: null }) },
+  'incident.opened': { icon: 'i-lucide-siren', tone: 'error', fields: [{ key: 'minSeverity', kind: 'severity' }], defaults: () => ({ type: 'incident.opened', minSeverity: 'warning' }) },
 }
 
 export const conditionSpecs: Record<ConditionType, BlockSpec<RuleConditionT>> = {
@@ -35,6 +47,7 @@ export const conditionSpecs: Record<ConditionType, BlockSpec<RuleConditionT>> = 
   'anyone.home': { icon: 'i-lucide-users', tone: 'success', fields: [{ key: 'home', kind: 'bool' }], defaults: () => ({ type: 'anyone.home', home: false }) },
   'egress.health': { icon: 'i-lucide-heart-pulse', tone: 'vpn', fields: [{ key: 'egressId', kind: 'egress', required: true }, { key: 'healthy', kind: 'bool' }], defaults: () => ({ type: 'egress.health', egressId: '', healthy: true }) },
   'client.online': { icon: 'i-lucide-wifi', tone: 'primary', fields: [{ key: 'mac', kind: 'mac', required: true }, { key: 'online', kind: 'bool' }], defaults: () => ({ type: 'client.online', mac: '', online: true }) as RuleConditionT },
+  'person.room': { icon: 'i-lucide-sofa', tone: 'success', fields: [{ key: 'personId', kind: 'person', required: true }, { key: 'roomId', kind: 'room', required: true }, { key: 'inRoom', kind: 'bool' }], defaults: () => ({ type: 'person.room', personId: '', roomId: '', inRoom: true }) },
 }
 
 export const actionSpecs: Record<ActionType, BlockSpec<RuleActionT>> = {
@@ -53,6 +66,9 @@ export const actionSpecs: Record<ActionType, BlockSpec<RuleActionT>> = {
   'wol': { icon: 'i-lucide-power', tone: 'success', fields: [{ key: 'targetId', kind: 'wol', required: true }], defaults: () => ({ type: 'wol', targetId: '' }) },
   'device.restart': { icon: 'i-lucide-rotate-cw', tone: 'warning', fields: [{ key: 'mac', kind: 'mac', required: true }], defaults: () => ({ type: 'device.restart', mac: '' }) as RuleActionT },
   'delay': { icon: 'i-lucide-hourglass', tone: 'neutral', fields: [{ key: 'seconds', kind: 'number' }], defaults: () => ({ type: 'delay', seconds: 30 }) },
+  'poe.set': { icon: 'i-lucide-zap-off', tone: 'warning', fields: [{ key: 'port', kind: 'switchport', required: true }, { key: 'on', kind: 'bool' }, { key: 'minutes', kind: 'minutesOpt' }], defaults: () => ({ type: 'poe.set', switchMac: '', portIdx: 1, on: false, minutes: 60 }) as RuleActionT },
+  'device.locate': { icon: 'i-lucide-locate-fixed', tone: 'primary', fields: [{ key: 'mac', kind: 'device', required: true }, { key: 'minutes', kind: 'minutes' }], defaults: () => ({ type: 'device.locate', mac: '', minutes: 5 }) as RuleActionT },
+  'client.kick': { icon: 'i-lucide-wifi-off', tone: 'warning', fields: [{ key: 'mac', kind: 'mac', required: true }], defaults: () => ({ type: 'client.kick', mac: '' }) as RuleActionT },
 }
 
 export const toneClass: Record<string, string> = {

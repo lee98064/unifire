@@ -17,6 +17,8 @@ export const SnapshotResource = z.enum([
   'qos-rules',
   'users',
   'portconf',
+  /** Config-like keys of adopted devices (port_overrides, radio config, LED…) read from stat/device. Phase 2. */
+  'devices',
 ])
 
 export const Snapshot = z.object({
@@ -103,7 +105,7 @@ export const AuditActor = z.object({
   name: z.string().nullable(),
 })
 
-export const AuditCategory = z.enum(['route', 'egress', 'client', 'approval', 'quota', 'pause', 'config', 'auth', 'rule', 'poe', 'wifi', 'wol', 'snapshot', 'system'])
+export const AuditCategory = z.enum(['route', 'egress', 'client', 'approval', 'quota', 'pause', 'config', 'auth', 'rule', 'poe', 'wifi', 'wol', 'snapshot', 'system', 'device'])
 
 export const AuditEvent = z.object({
   id: Id,

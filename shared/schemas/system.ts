@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { Id, Mac, Ts } from './common'
+import { Incident, IncidentSeverity } from './infra'
 import { HealthStatus } from './egress'
 import { AuditEvent } from './insight'
 import { SwitchReason, SwitchLogEntry } from './routes'
@@ -21,6 +22,12 @@ export const NotificationEvent = z.enum([
   'guest_wifi_rotated',
   'controller_error',
   'rule',
+  /* phase 2 */
+  'device_firmware',
+  'port_issue',
+  'poe_schedule',
+  'incident_opened',
+  'incident_resolved',
 ])
 
 export const ChannelType = z.enum(['webpush', 'telegram', 'discord', 'webhook', 'ntfy'])
@@ -98,6 +105,47 @@ export const Settings = z.object({
   selfMacOverride: Mac.nullable(),
   /** UniFi route ids Unifire must never write. */
   excludedRouteIds: z.array(Id),
+  /* ── phase 2 (docs/PLAN-infra.md) ── */
+  infra: z.object({
+    tempWarnC: z.number().min(30).max(120),
+    cpuWarnPct: z.number().min(10).max(100),
+    memWarnPct: z.number().min(10).max(100),
+    /** RX+TX errors as % of packets over an hour that counts as a port issue. */
+    errorRatePct: z.number().min(0.001).max(100),
+    flapsPerHour: z.number().int().min(2).max(100),
+    /** Consecutive polls below baseline before a downgrade is reported. */
+    downgradeMinPolls: z.number().int().min(1).max(30),
+    /** Ports whose issues are ignored (e.g. a device that only does 100M). */
+    ignoredPorts: z.array(z.object({ switchMac: Mac, portIdx: z.number().int().min(1) })),
+    retainRawDays: z.number().int().min(1).max(90),
+    retainRollupDays: z.number().int().min(30).max(3650),
+  }),
+  energy: z.object({
+    /** Price per kWh; null = don't show cost. */
+    ratePerKwh: z.number().min(0).nullable(),
+    currency: z.string().min(1).max(8),
+  }),
+  rooms: z.object({
+    /** Minutes on a new AP before the person's room changes. */
+    dwellMinutes: z.number().int().min(1).max(30),
+  }),
+  sticky: z.object({
+    enabled: z.boolean(),
+    signalDbm: z.number().int().min(-95).max(-50),
+    minutes: z.number().int().min(1).max(120),
+    /** Automatically kick sticky clients so they re-associate. */
+    nudge: z.boolean(),
+    maxNudgesPerDay: z.number().int().min(1).max(20),
+    /** Never nudge while the client moves more than this (bps), e.g. during a video call. */
+    skipAboveBps: z.number().int().min(0),
+  }),
+  incidents: z.object({
+    windowMinutes: z.number().int().min(1).max(60),
+    quietMinutes: z.number().int().min(1).max(60),
+    notifyMinSeverity: z.union([IncidentSeverity, z.literal('off')]),
+    massDisconnectMin: z.number().int().min(2).max(100),
+    massDisconnectPct: z.number().min(5).max(100),
+  }),
 })
 
 export const SettingsInput = Settings.partial()
@@ -126,6 +174,20 @@ export const DashboardSummary = z.object({
   recentAudit: z.array(AuditEvent),
   /** Traffic sparkline for the gateway (last 60 min, 1-min buckets). */
   throughput: z.array(z.object({ ts: Ts, rxBps: z.number(), txBps: z.number() })),
+  /** Phase 2: infrastructure health strip. */
+  infra: z.object({
+    total: z.number().int(),
+    online: z.number().int(),
+    offline: z.number().int(),
+    /** Devices with at least one warning/error issue. */
+    withIssues: z.number().int(),
+    /** Unacknowledged port events. */
+    portEvents: z.number().int(),
+    poeWatts: z.number().nullable(),
+    openIncidents: z.number().int(),
+  }),
+  /** Open incidents (most severe first, max 3) for the dashboard banner. WP11; [] before. */
+  incidents: z.array(Incident),
 })
 
 /* ───────────────────────────── Live events (SSE) ───────────────────────────── */
@@ -148,6 +210,13 @@ export const LiveEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('audit'), data: AuditEvent }),
   z.object({ type: z.literal('sweep'), data: z.object({ running: z.boolean(), done: z.number(), total: z.number() }) }),
   z.object({ type: z.literal('toast'), data: z.object({ level: z.enum(['info', 'success', 'warning', 'error']), titleKey: z.string(), params: z.record(z.string(), z.string()) }) }),
+  /* phase 2 */
+  z.object({ type: z.literal('device'), data: z.object({ macs: z.array(Mac) }) }),
+  z.object({ type: z.literal('port.event'), data: z.object({ id: Id, switchMac: Mac, portIdx: z.number().int(), kind: z.string() }) }),
+  z.object({ type: z.literal('poe'), data: z.object({ switchMac: Mac, portIdx: z.number().int() }) }),
+  z.object({ type: z.literal('topology'), data: z.object({ ts: Ts }) }),
+  z.object({ type: z.literal('room'), data: z.object({ personId: Id, roomId: Id.nullable() }) }),
+  z.object({ type: z.literal('incident'), data: z.object({ id: Id, status: z.enum(['open', 'resolved']), severity: IncidentSeverity }) }),
 ])
 
 export type NotificationEventT = z.infer<typeof NotificationEvent>

@@ -19,6 +19,7 @@ import * as X from './schemas/access'
 import * as M from './schemas/automation'
 import * as I from './schemas/insight'
 import * as S from './schemas/system'
+import * as N from './schemas/infra'
 import { BoolQuery, Ok, Paged } from './schemas/common'
 
 type Auth = 'public' | 'any' | 'admin' | 'member'
@@ -169,6 +170,39 @@ export const api = {
   pushAction: ep('POST', '/api/push/action', 'public', Ok, z.object({ token: z.string() }), 'Signed one-time token from a notification action button.'),
   settings: ep('GET', '/api/settings', 'admin', S.Settings),
   settingsSave: ep('PATCH', '/api/settings', 'admin', S.Settings, S.SettingsInput),
+  // ── infra (phase 2, docs/PLAN-infra.md) — note = implementing WP ─────────
+  devices: ep('GET', '/api/devices', 'admin', z.array(N.InfraDevice), undefined, 'WP8'),
+  device: ep('GET', '/api/devices/:mac', 'admin', N.InfraDeviceDetail, undefined, 'WP8 (ports enriched in WP9, roams24h in WP10)'),
+  deviceSeries: ep('GET', '/api/devices/:mac/series', 'admin', N.DeviceSeries, z.object({ range: N.SeriesRange.default('24h') }), 'WP8'),
+  deviceEvents: ep('GET', '/api/devices/:mac/events', 'admin', N.DeviceEvents, z.object({ from: z.coerce.number().int(), to: z.coerce.number().int() }), 'WP8 (portEvents from WP9)'),
+  deviceLocate: ep('POST', '/api/devices/:mac/locate', 'admin', N.InfraDevice, N.LocateInput, 'WP8'),
+  deviceRestart: ep('POST', '/api/devices/:mac/restart', 'admin', Ok, z.object({ confirmGateway: z.boolean().default(false) }), 'WP8 — restarting the gateway requires confirmGateway=true'),
+  deviceUpdate: ep('PATCH', '/api/devices/:mac', 'admin', N.InfraDevice, N.DeviceUpdateInput, 'WP10 (room assignment)'),
+  portDetail: ep('GET', '/api/devices/:mac/ports/:idx', 'admin', N.PortDetail, z.object({ range: N.SeriesRange.default('24h') }), 'WP9'),
+  portEvents: ep('GET', '/api/ports/events', 'admin', Paged(N.PortEvent), N.PortEventQuery, 'WP9'),
+  portEventUpdate: ep('PATCH', '/api/ports/events/:id', 'admin', N.PortEvent, N.PortEventUpdateInput, 'WP9'),
+  portEventsAckAll: ep('POST', '/api/ports/events/ack', 'admin', z.object({ count: z.number().int() }), N.PortEventAckAllInput, 'WP9'),
+  poe: ep('GET', '/api/poe', 'admin', N.PoeOverview, undefined, 'WP9'),
+  poeScheduleCreate: ep('POST', '/api/poe/schedules', 'admin', N.PoeSchedule, N.PoeScheduleInput, 'WP9'),
+  poeScheduleUpdate: ep('PATCH', '/api/poe/schedules/:id', 'admin', N.PoeSchedule, N.PoeScheduleInput.partial(), 'WP9'),
+  poeScheduleDelete: ep('DELETE', '/api/poe/schedules/:id', 'admin', Ok, undefined, 'WP9 — powers the port back on if Unifire holds it off'),
+  poeScheduleResume: ep('POST', '/api/poe/schedules/:id/resume', 'admin', N.PoeSchedule, undefined, 'WP9 — accept the current UniFi state after drift and resume'),
+  poeOverride: ep('POST', '/api/poe/override', 'admin', N.PoeOverview, N.PoeOverrideInput, 'WP9'),
+  poeQualify: ep('POST', '/api/poe/qualify', 'admin', N.PoeQualification, N.PoeQualifyInput, 'WP9 — off → read-back → on → read-back on a user-chosen port'),
+  energy: ep('GET', '/api/energy', 'admin', N.EnergyReport, N.EnergyQuery, 'WP9'),
+  topology: ep('GET', '/api/topology', 'admin', N.Topology, undefined, 'WP10'),
+  rooms: ep('GET', '/api/rooms', 'admin', z.array(N.Room), undefined, 'WP10'),
+  roomCreate: ep('POST', '/api/rooms', 'admin', N.Room, N.RoomInput, 'WP10'),
+  roomUpdate: ep('PATCH', '/api/rooms/:id', 'admin', N.Room, N.RoomInput.partial(), 'WP10'),
+  roomDelete: ep('DELETE', '/api/rooms/:id', 'admin', Ok, undefined, 'WP10 — unassigns its APs'),
+  roomAssign: ep('PUT', '/api/rooms/assign', 'admin', z.array(N.Room), N.RoomAssignInput, 'WP10'),
+  roomTimeline: ep('GET', '/api/presence/rooms', 'admin', N.RoomTimeline, z.object({ from: z.coerce.number(), to: z.coerce.number() }), 'WP10'),
+  clientRoams: ep('GET', '/api/clients/:mac/roams', 'admin', N.ClientRoams, z.object({ from: z.coerce.number(), to: z.coerce.number() }), 'WP10'),
+  stickyClients: ep('GET', '/api/roaming/sticky', 'admin', z.array(N.StickyClient), undefined, 'WP10'),
+  incidents: ep('GET', '/api/incidents', 'admin', Paged(N.Incident), N.IncidentQuery, 'WP11'),
+  incident: ep('GET', '/api/incidents/:id', 'admin', N.IncidentDetail, undefined, 'WP11'),
+  incidentUpdate: ep('PATCH', '/api/incidents/:id', 'admin', N.Incident, N.IncidentUpdateInput, 'WP11'),
+
   networks: ep('GET', '/api/networks', 'admin', z.array(z.object({ id: z.string(), name: z.string(), purpose: z.string(), subnet: z.string().nullable(), vlan: z.number().nullable() }))),
 } as const satisfies Record<string, Endpoint>
 

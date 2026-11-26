@@ -4,6 +4,8 @@ import type { ClientT, GroupT, QuotaT } from '#shared/schemas/access'
 import type { ManagedRouteT } from '#shared/schemas/routes'
 import type { NotificationChannelT } from '#shared/schemas/system'
 import type { WlanT, WolTargetT, PoePortT } from '#shared/schemas/automation'
+import type { InfraDeviceT, RoomT } from '#shared/schemas/infra'
+import { PortIssueKind } from '#shared/schemas/infra'
 import { cronPresets } from '~/utils/rules'
 
 /** Metadata-driven field editor for one trigger / condition / action block. */
@@ -23,12 +25,18 @@ const channels = useFetch<NotificationChannelT[]>('/api/notifications/channels',
 const wlans = useFetch<WlanT[]>('/api/wlans', { key: 'wlans', default: () => [], immediate: needs('wlan'), dedupe: 'defer' }).data
 const wols = useFetch<WolTargetT[]>('/api/wol', { key: 'wol', default: () => [], immediate: needs('wol'), dedupe: 'defer' }).data
 const ports = useFetch<PoePortT[]>('/api/watchdogs/ports', { key: 'poe-ports', default: () => [], immediate: needs('switchport'), dedupe: 'defer' }).data
+const devices = useFetch<InfraDeviceT[]>('/api/devices', { key: 'devices', default: () => [], immediate: needs('device') || needs('deviceOpt') || needs('switchOpt'), dedupe: 'defer' }).data
+const rooms = useFetch<RoomT[]>('/api/rooms', { key: 'rooms', default: () => [], immediate: needs('room') || needs('roomOpt'), dedupe: 'defer' }).data
 
 const clientItems = computed(() => clients.value.map(c => ({ label: c.displayName, value: c.mac, description: c.mac })))
 const personItems = computed(() => people.value.map(p => ({ label: `${p.avatar} ${p.name}`, value: p.id })))
 const groupItems = computed(() => groups.value.map(g => ({ label: g.name, value: g.id })))
 const egressItems = computed(() => egresses.value.map(e => ({ label: e.name, value: e.id })))
 const anyItem = (label: string) => ({ label, value: null })
+const deviceItems = computed(() => devices.value.map(d => ({ label: d.name, value: d.mac, description: d.modelName ?? d.model ?? d.mac })))
+const switchItems = computed(() => devices.value.filter(d => d.ports && d.ports.total > 0).map(d => ({ label: d.name, value: d.mac, description: d.modelName ?? d.model ?? d.mac })))
+const roomItems = computed(() => rooms.value.map(r => ({ label: r.floor ? `${r.name} · ${r.floor}` : r.name, value: r.id })))
+const portKindItems = PortIssueKind.options.map(k => ({ label: t(`ports.issue.${k}`), value: k }))
 
 function set(key: string, v: unknown) { block.value = { ...block.value, [key]: v } }
 const label = (f: FieldSpec) => t(`rules.field.${f.key}`)
@@ -91,11 +99,32 @@ const times = Array.from({ length: 96 }, (_, k) => `${String(Math.floor(k / 4)).
         <UInput :model-value="block.timezone" class="w-full" @update:model-value="set('timezone', $event)" />
       </UFormField>
       <UFormField v-else-if="f.kind === 'number'" :label="label(f)">
-        <UInputNumber :model-value="block[f.key]" :min="1" class="w-full" @update:model-value="set(f.key, $event)" />
+        <UInputNumber :model-value="block[f.key]" :min="f.min ?? 1" class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'celsius' || f.kind === 'percent'" :label="label(f)">
+        <div class="flex items-center gap-2">
+          <UInputNumber :model-value="block[f.key]" :min="f.kind === 'celsius' ? 30 : 10" :max="f.kind === 'celsius' ? 120 : 100" class="flex-1" @update:model-value="set(f.key, $event)" />
+          <span class="text-[12px] text-dimmed">{{ f.kind === 'celsius' ? '°C' : '%' }}</span>
+        </div>
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'device' || f.kind === 'deviceOpt'" :label="label(f)">
+        <USelectMenu :model-value="block[f.key]" :items="f.kind === 'deviceOpt' ? [anyItem(t('rules.anyDevice')), ...deviceItems] : deviceItems" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'switchOpt'" :label="label(f)">
+        <USelectMenu :model-value="block[f.key]" :items="[anyItem(t('rules.anySwitch')), ...switchItems]" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'room' || f.kind === 'roomOpt'" :label="label(f)">
+        <USelectMenu :model-value="block[f.key]" :items="f.kind === 'roomOpt' ? [anyItem(t('rules.anyRoom')), ...roomItems] : roomItems" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'portKinds'" :label="label(f)" class="sm:col-span-2" :hint="t('rules.anyIfEmpty')">
+        <USelectMenu :model-value="block[f.key]" :items="portKindItems" value-key="value" multiple class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'severity'" :label="label(f)">
+        <USelect :model-value="block[f.key]" :items="['warning', 'critical'].map(v => ({ value: v, label: t(`incidents.severity.${v}`) }))" class="w-full" @update:model-value="set(f.key, $event)" />
       </UFormField>
       <UFormField v-else-if="f.kind === 'minutes' || f.kind === 'minutesOpt'" :label="label(f)">
         <div class="flex items-center gap-2">
-          <UInputNumber :model-value="block[f.key] ?? undefined" :min="1" class="flex-1" :placeholder="f.kind === 'minutesOpt' ? t('common.indefinitely') : ''" @update:model-value="set(f.key, $event ?? null)" />
+          <UInputNumber :model-value="block[f.key] ?? undefined" :min="f.min ?? 1" class="flex-1" :placeholder="f.kind === 'minutesOpt' ? t('common.indefinitely') : ''" @update:model-value="set(f.key, $event ?? null)" />
           <span class="text-[12px] text-dimmed">{{ t('rules.minutesUnit') }}</span>
         </div>
       </UFormField>

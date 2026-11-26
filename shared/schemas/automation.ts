@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { HHMM, Id, Mac, Ts, Weekday } from './common'
+import { IncidentSeverity, PortIssueKind } from './infra'
 
 /* ───────────────────────────── Rule engine ───────────────────────────── */
 
@@ -24,6 +25,22 @@ export const RuleTrigger = z.discriminatedUnion('type', [
     bytes: z.number().positive(),
     windowMinutes: z.number().int().min(1).max(1440),
   }),
+  /* ── infra (phase 2). `mac: null` = any device. ── */
+  /** UniFi infrastructure device offline for `minutes` (0 = immediately). WP8. */
+  z.object({ type: z.literal('infra.offline'), mac: Mac.nullable().default(null), minutes: z.number().int().min(0).max(1440).default(2) }),
+  z.object({ type: z.literal('infra.online'), mac: Mac.nullable().default(null) }),
+  z.object({ type: z.literal('infra.rebooted'), mac: Mac.nullable().default(null), unexpectedOnly: z.boolean().default(true) }),
+  z.object({ type: z.literal('infra.overheat'), mac: Mac.nullable().default(null), celsius: z.number().min(30).max(120).default(80) }),
+  z.object({ type: z.literal('infra.firmware'), mac: Mac.nullable().default(null) }),
+  /** Port/cable issue detected (empty kinds = any). WP9. */
+  z.object({ type: z.literal('port.issue'), switchMac: Mac.nullable().default(null), kinds: z.array(PortIssueKind).default([]) }),
+  /** PoE draw reached `percent` of the switch budget. WP9. */
+  z.object({ type: z.literal('poe.budget'), switchMac: Mac.nullable().default(null), percent: z.number().int().min(10).max(100).default(90) }),
+  /** Room-level presence (null = any person / any room). WP10. */
+  z.object({ type: z.literal('person.room_entered'), personId: Id.nullable().default(null), roomId: Id.nullable().default(null) }),
+  z.object({ type: z.literal('person.room_left'), personId: Id.nullable().default(null), roomId: Id.nullable().default(null) }),
+  /** A correlated incident opened with at least this severity. WP11. */
+  z.object({ type: z.literal('incident.opened'), minSeverity: IncidentSeverity.default('warning') }),
 ])
 
 export const RuleCondition = z.discriminatedUnion('type', [
@@ -32,6 +49,8 @@ export const RuleCondition = z.discriminatedUnion('type', [
   z.object({ type: z.literal('anyone.home'), home: z.boolean() }),
   z.object({ type: z.literal('egress.health'), egressId: Id, healthy: z.boolean() }),
   z.object({ type: z.literal('client.online'), mac: Mac, online: z.boolean() }),
+  /** Person is (not) in a room right now. WP10. */
+  z.object({ type: z.literal('person.room'), personId: Id, roomId: Id, inRoom: z.boolean() }),
 ])
 
 const ClientOrPerson = z.object({ type: z.enum(['client', 'person', 'group']), id: z.string() })
@@ -61,6 +80,12 @@ export const RuleAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('wol'), targetId: Id }),
   z.object({ type: z.literal('device.restart'), mac: Mac }),
   z.object({ type: z.literal('delay'), seconds: z.number().int().min(1).max(3600) }),
+  /** Temporary PoE override; expires back to the PoE schedule (or "leave alone"). null minutes = until cleared. WP9. */
+  z.object({ type: z.literal('poe.set'), switchMac: Mac, portIdx: z.number().int().min(1), on: z.boolean(), minutes: z.number().int().min(1).max(10080).nullable().default(60) }),
+  /** Blink the device's locate LED. WP8. */
+  z.object({ type: z.literal('device.locate'), mac: Mac, minutes: z.number().int().min(1).max(60).default(5) }),
+  /** Disconnect a wireless client so it re-associates (kick-sta). WP10. */
+  z.object({ type: z.literal('client.kick'), mac: Mac }),
 ])
 
 export const Rule = z.object({
