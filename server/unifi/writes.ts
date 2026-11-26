@@ -1,20 +1,38 @@
 import { performance } from 'node:perf_hooks'
+import { setTimeout as delay } from 'node:timers/promises'
 import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import type { ControllerModeT } from '#shared/schemas/controller'
 import type { AuditEventT, SnapshotResourceT } from '#shared/schemas/insight'
-import { createDeviceGraph } from '../engine/infra/poe-safety'
+import { createDeviceGraph, createPoeSafety } from '../engine/infra/poe-safety'
 import { deviceName, isGateway } from './device-shape'
 import { digest, fieldDiff, normalize } from '../engine/snapshots/diff'
 import { classifyRoute, PROBE_PREFIX, QUOTA_PREFIX, routeFingerprint } from '../services/ownership'
 import type { createAuditService } from '../services/audit'
 import { type UnifiTransport } from './client'
 import { parseWire, type UnifiEndpoints } from './endpoints'
-import { Doc, Route, type WireDoc, type WireRoute } from './endpoints/schemas'
+import { Doc, Docs, Route, type WireDoc, type WireRoute } from './endpoints/schemas'
 import { UnifiError, unifiErrorCode } from './errors'
 import { segment } from './paths'
-import { assertPoePort } from './poe-ports'
-import { itemIdentity, itemLabel, readCollection, resourcePath, snapshotResources } from './snapshot-resources'
+import { assertPoePort, portIndex } from './poe-ports'
+import { deviceConfig, itemIdentity, itemLabel, readCollection, resourcePath, snapshotResources } from './snapshot-resources'
+
+export type PortOverrideChange = { poe_mode: string } | { remove: true }
+export type SnapshotPowerChange = { idx: number, mode: string, previous: PortBefore }
+type PortBefore = { previousMode: string, createdEntry: boolean }
+type PortWriteOptions = {
+  acknowledgedAp?: boolean
+  restoreMode?: string
+  beforeSend?: (previous: PortBefore) => void
+  readBack?: (mode: string) => void
+}
+
+export function mergePortOverride(entries: WireDoc[], idx: number, change: PortOverrideChange): WireDoc[] {
+  const match = (entry: WireDoc) => portIndex(entry.port_idx) === idx
+  if ('remove' in change) return entries.filter(entry => !match(entry))
+  if (!entries.some(match)) return [...entries, { port_idx: idx, poe_mode: change.poe_mode }]
+  return entries.map(entry => match(entry) ? { ...entry, poe_mode: change.poe_mode } : entry)
+}
 
 type ConfigWrite = (resource: SnapshotResourceT, id: string, before?: WireDoc, after?: WireDoc) => void
 export type RestoreMutation = {
@@ -77,6 +95,11 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   onRoutesChanged?: () => void
   onConfigWrite?: ConfigWrite
   onDevicePower?: (macs: string[]) => void
+  poeSelf?: () => { mac: string | null, ip: string | null }
+  poeQualified?: () => boolean
+  poeOwned?: (mac: string, idx: number) => boolean
+  onSnapshotPower?: (mac: string, changes: SnapshotPowerChange[], verified: boolean) => void
+  verifyDelay?: () => Promise<void>
 }) {
   const { paths, write } = transport
   const queue = <T>(work: () => Promise<T>) => serializeSite(siteKey(transport.origin.origin, options.site), work)
@@ -106,7 +129,7 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
       if (!dryRun && plan.apply && !scratchCheck && options.qualified?.() === false) {
         throw new UnifiError('UNIFI_QUALIFICATION_REQUIRED')
       }
-      if (!dryRun && plan.apply && !preCaptured && options.preWrite() && options.hooks.size) {
+      if (!dryRun && plan.apply && !preCaptured && (action === 'poe.qualify' || options.preWrite()) && options.hooks.size) {
         for (const hook of options.hooks) await hook({ action, target })
         if (!options.active()) throw new UnifiError('UNIFI_INACTIVE')
         // A snapshot may take time. Revalidate and merge against fresh data.
@@ -330,6 +353,169 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
     })
   }
 
+  async function verifyPortOverride(mac: string, modes: ReadonlyMap<number, string>, entries?: WireDoc[]) {
+    const durationMs = 20_000
+    const deadline = performance.now() + durationMs
+    const timeout = new AbortController()
+    const expired = delay(durationMs, undefined, { signal: timeout.signal, ref: false })
+    try {
+      for (let attempt = 0; attempt <= 10; attempt++) {
+        if (!options.active()) throw new UnifiError('UNIFI_INACTIVE')
+        try {
+          const device = await Promise.race([api.device(mac), expired])
+          if (!device) break
+          if ([...modes].every(([idx, mode]) => device.port_table?.find(port => portIndex(port.port_idx) === idx)?.poe_mode === mode)
+            && (!entries || digest(deviceConfig({ port_overrides: device.port_overrides ?? [] }))
+              === digest(deviceConfig({ port_overrides: entries })))) return device
+        } catch (error) {
+          if (!['UNIFI_TIMEOUT', 'UNIFI_NOT_FOUND', 'DEVICE_NOT_FOUND', 'UNIFI_UNREACHABLE'].includes(unifiErrorCode(error))) throw error
+        }
+        if (attempt === 10 || performance.now() + 2000 > deadline) break
+        if (options.verifyDelay) await options.verifyDelay()
+        else await delay(2000)
+      }
+      throw new UnifiError('UNIFI_VERIFY_FAILED')
+    } finally {
+      timeout.abort()
+    }
+  }
+
+  async function restoreDevicePorts(step: RestoreMutation, ctx: WriteContext) {
+    return execute('restore.devicePorts', 'poe', { type: 'device', id: step.id, label: step.label }, ctx, async () => {
+      const mac = step.before?.mac
+      if (typeof mac !== 'string' || step.method !== 'PUT' || !step.body) throw new UnifiError('UNIFI_RESTORE_UNSUPPORTED')
+      const { device, graph, safety } = await freshPort(mac, true)
+      if (device._id !== step.id || digest(deviceConfig(device)) !== digest(step.before)) throw new UnifiError('UNIFI_RESTORE_STALE')
+      const entries = parseWire(Docs, step.body.port_overrides)
+      const modes = new Map<number, string>()
+      const power: SnapshotPowerChange[] = []
+      const reportedPorts = new Set((device.port_table ?? []).map(port => portIndex(port.port_idx)))
+      for (const entry of entries) {
+        if (entry.poe_mode === 'off' && !reportedPorts.has(portIndex(entry.port_idx))
+          && !device.port_overrides?.some(current => current.poe_mode === 'off' && current.port_idx === entry.port_idx)) {
+          throw new UnifiError('POE_UNSAFE', 409)
+        }
+      }
+      const affected = new Set<string>()
+      for (const port of device.port_table ?? []) {
+        const idx = portIndex(port.port_idx)
+        if (idx === null) continue
+        const before = device.port_overrides?.find(entry => portIndex(entry.port_idx) === idx)
+        const after = entries.find(entry => portIndex(entry.port_idx) === idx)
+        if (before?.poe_mode === after?.poe_mode) continue
+        const desired = typeof after?.poe_mode === 'string' ? after.poe_mode : 'auto'
+        const actual = port.poe_mode
+        if (desired !== 'off' && (actual === 'off' || before?.poe_mode === 'off') && options.poeOwned?.(mac, idx) === false) {
+          throw new UnifiError('POE_NOT_OWNED', 409)
+        }
+        if (actual === desired) continue
+        if (typeof actual !== 'string') {
+          if (after?.poe_mode != null) throw new UnifiError('POE_UNSAFE', 409)
+          continue
+        }
+        if (desired === 'off') {
+          const check = safety(device, port)
+          if (!check.allowed) throw new UnifiError('POE_UNSAFE', 409)
+          if (check.requiresAck) throw new UnifiError('POE_ACK_REQUIRED', 409)
+          if (options.poeQualified?.() === false && !ctx.dryRun && options.mode() === 'live') throw new UnifiError('POE_NOT_QUALIFIED', 409)
+        }
+        if (actual === 'off' || desired === 'off') power.push({ idx, mode: desired,
+          previous: { previousMode: typeof before?.poe_mode === 'string' && before.poe_mode !== 'off' ? before.poe_mode : actual, createdEntry: !before } })
+        modes.set(idx, desired)
+        for (const child of graph.descendants(mac, idx)) affected.add(child.mac)
+      }
+      const after = { port_overrides: entries }
+      return { before: { port_overrides: device.port_overrides ?? [] }, after,
+        apply() {
+          options.onSnapshotPower?.(mac, power, false)
+          options.onDevicePower?.([...affected])
+          return write('PUT', resourcePath(paths, 'devices', step.id), after)
+        },
+        async verify() {
+          const latest = await verifyPortOverride(mac, modes, entries)
+          options.onSnapshotPower?.(mac, power, true)
+          options.onConfigWrite?.('devices', step.id, deviceConfig(device), deviceConfig(latest))
+          step.onVerified?.(step.id, deviceConfig(latest))
+        },
+      }
+    }, true, true)
+  }
+
+  async function freshPort(mac: string, needsSafety: boolean) {
+    const [devices, clients] = await Promise.all([api.devices(), needsSafety ? api.activeClients() : []])
+    const device = await api.device(mac)
+    const graph = createDeviceGraph([...devices.filter(row => row.mac !== mac), device])
+    const safety = createPoeSafety(graph, clients, options.poeSelf?.() ?? { mac: null, ip: null })
+    return { device, graph, safety }
+  }
+
+  function updatePortOverride(mac: string, idx: number, change: PortOverrideChange, ctx: WriteContext, input: PortWriteOptions = {},
+    qualification = false, requireChange = false) {
+    const off = 'poe_mode' in change && change.poe_mode === 'off'
+    return execute(qualification ? 'poe.qualify' : 'poe.portOverride', 'poe', { type: 'port', id: `${mac}/${idx}` }, ctx, async setLabel => {
+      const { device, graph, safety } = await freshPort(mac, off)
+      setLabel(deviceName(device))
+      const port = device.port_table?.find(port => portIndex(port.port_idx) === idx)
+      if (!device._id || !port) throw new UnifiError('POE_PORT_NOT_FOUND', 404)
+      if (off) {
+        const check = safety(device, port)
+        if (!check.allowed) throw new UnifiError('POE_UNSAFE', 409)
+        if (check.requiresAck && !input.acknowledgedAp) throw new UnifiError('POE_ACK_REQUIRED', 409)
+      }
+      const expected = 'poe_mode' in change ? change.poe_mode : input.restoreMode ?? 'auto'
+      const previousMode = typeof port.poe_mode === 'string' ? port.poe_mode : null
+      if (previousMode === null) throw new UnifiError('POE_UNSAFE', 409)
+      if (off && previousMode === 'off') {
+        if (requireChange) throw new UnifiError('POE_NOT_OWNED', 409)
+        return {}
+      }
+      if (!off && options.poeOwned?.(mac, idx) === false) throw new UnifiError('POE_NOT_OWNED', 409)
+      const entries = device.port_overrides ?? []
+      const previous = entries.find(row => portIndex(row.port_idx) === idx)
+      if (off && previous?.poe_mode === 'off') throw new UnifiError('POE_NOT_OWNED', 409)
+      if (!off && previousMode !== 'off' && previous?.poe_mode !== 'off') {
+        if (qualification && previousMode !== expected) throw new UnifiError('UNIFI_VERIFY_FAILED')
+        return { commit: () => input.readBack?.(previousMode) }
+      }
+      // An administrator may have added other configuration to an entry we created.
+      const patch = 'remove' in change && previous && Object.keys(previous).some(key => key !== 'port_idx' && key !== 'poe_mode')
+        ? { poe_mode: expected } : change
+      const merged = mergePortOverride(entries, idx, patch)
+      const before = { port_overrides: entries }
+      const after = { port_overrides: merged }
+      return { before, after,
+        apply: () => {
+          if (off && !qualification && options.poeQualified?.() === false) throw new UnifiError('POE_NOT_QUALIFIED', 409)
+          input.beforeSend?.({ previousMode: typeof previous?.poe_mode === 'string' ? previous.poe_mode : previousMode, createdEntry: !previous })
+          options.onDevicePower?.(graph.descendants(mac, idx).map(child => child.mac))
+          return write('PUT', paths.classic(`rest/device/${segment(device._id!)}`), after)
+        },
+        async verify() {
+          const latest = await verifyPortOverride(mac, new Map([[idx, expected]]))
+          options.onConfigWrite?.('devices', device._id!, deviceConfig(device), deviceConfig(latest))
+          input.readBack?.(expected)
+        },
+      }
+    }, true, qualification && !off)
+  }
+
+  async function qualifyPoe(mac: string, idx: number, ctx: WriteContext, input: PortWriteOptions & { rollback: () => PortBefore | undefined, beforeRestore?: () => void }) {
+    return queue(async () => {
+      if (options.mode() !== 'live' || ctx.dryRun) throw new UnifiError('DRY_RUN', 409)
+      // Keep the off/read/restore sequence inside the site queue; even a timed-out PUT can have committed.
+      try {
+        await updatePortOverride(mac, idx, { poe_mode: 'off' }, ctx, input, true, true)
+      } finally {
+        const previous = input.rollback()
+        if (previous) {
+          const result = await updatePortOverride(mac, idx, previous.createdEntry ? { remove: true } : { poe_mode: previous.previousMode },
+            ctx, { restoreMode: previous.previousMode, readBack: input.readBack, beforeSend: input.beforeRestore }, true)
+          if (!result.verified) throw new UnifiError('UNIFI_VERIFY_FAILED')
+        }
+      }
+    })
+  }
+
   function assertRestoreRoute(id: string, doc: WireDoc) {
     const route = Route.safeParse({ ...doc, _id: id }).data
     const ownership = options.ownership()
@@ -340,6 +526,7 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
 
   function restoreMutation(ctx: WriteContext, step: RestoreMutation) {
     const { resource, id, method, before, body, label } = step
+    if (resource === 'devices') return restoreDevicePorts(step, ctx)
     const config = snapshotResources[resource].write
     return execute(`restore.${method.toLowerCase()}`, 'snapshot', { type: resource, id, label }, ctx, async () => {
       if (!config || method === 'DELETE' && !config.remove || method !== 'DELETE' && !body
@@ -409,6 +596,9 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
     updateRouteEgress: (routeId: string, egressId: string, ctx: WriteContext, onVerified?: (before: WireRoute, after: WireRoute) => void) =>
       updateRoute(routeId, { network_id: egressId }, ctx, true, run, onVerified),
     qualifyRoutes,
+    qualifyPoe,
+    updatePortOverride: (mac: string, idx: number, change: PortOverrideChange, ctx: WriteContext, input?: PortWriteOptions) =>
+      queue(() => updatePortOverride(mac, idx, change, ctx, input)),
     updateUser: (id: string, patch: { name?: string, use_fixedip?: boolean, fixed_ip?: string, network_id?: string }, ctx: WriteContext) =>
       updateDocument('user', id, patch, api.user, ctx),
     updateWlan: (id: string, patch: { enabled?: boolean, x_passphrase?: string }, ctx: WriteContext) =>
@@ -435,12 +625,13 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
         async () => ({ after: body, apply: () => write('POST', paths.classic('cmd/devmgr'), body), commit: options?.onSent }))
     },
     deviceAction(command: { cmd: 'restart', macs: string[] } | { cmd: 'power-cycle', mac: string, port_idx: number } | { cmd: 'speedtest' },
-      ctx: WriteContext, confirmGateway = false) {
+      ctx: WriteContext, confirmGateway = false, canCycle?: () => boolean) {
       const id = command.cmd === 'restart' ? command.macs.join(',') : command.cmd === 'power-cycle' ? command.mac : 'gateway'
       const category = command.cmd === 'power-cycle' ? 'poe' : command.cmd === 'restart' ? 'device' : 'system'
       return run(`device.${command.cmd}`, category, { type: 'device', id }, ctx, async setLabel => {
         let affected: string[] = []
         if (command.cmd === 'power-cycle') {
+          if (canCycle?.() === false) throw new UnifiError('POE_HELD', 409)
           const devices = await api.devices()
           const device = assertPoePort(devices, command.mac, command.port_idx)
           setLabel(deviceName(device))

@@ -50,11 +50,11 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
 
   const resourceForTarget: Record<string, SnapshotResourceT> = { route: 'trafficroutes', wlanconf: 'wlanconf', user: 'users', client: 'users' }
 
-  const preWrite: BeforeWrite = async ({ target }) => {
+  const preWrite: BeforeWrite = async ({ target, action }) => {
     const runtime = requireRuntime(service)
-    const resource = resourceForTarget[target.type]
+    const resource = action.startsWith('poe.') ? 'devices' : resourceForTarget[target.type]
     const prior = store.recent(runtime.scope, now() - 120_000)
-    if (prior && (!resource || !prior.failed.includes(resource))) return
+    if (action !== 'poe.qualify' && prior && (!resource || !prior.failed.includes(resource))) return
     const snapshot = persist(runtime, await capture(runtime), 'pre-write', null, systemContext)
     if (resource && snapshot.failed.includes(resource)) throw new UnifiError('UNIFI_SNAPSHOT_INCOMPLETE')
   }

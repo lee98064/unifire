@@ -176,7 +176,7 @@ describe('infrastructure sampling', () => {
     let time = at
     const ledger = createWriteLedger(() => time)
     const record = (fields: Record<string, unknown>) => sample([reading(fields)], site, scope, time, ledger.explainsDeviceReboot)
-    record({ uptime: 50_000 })
+    record({ uptime: 50_000, upgradable: true, upgrade_to_firmware: '1.1' })
     time += 30_000
     record({ uptime: 20 })
     time += MINUTE
@@ -199,7 +199,7 @@ describe('infrastructure sampling', () => {
     const history = deviceEvents(store.db, AP1)
     expect(history.transitions.filter(item => ['unexpected_reboot', 'unifire_restart', 'upgrade'].includes(item.reason ?? ''))
       .map(item => item.reason)).toEqual(['unexpected_reboot', 'upgrade', 'unifire_restart', 'unexpected_reboot'])
-    expect(history.firmware).toMatchObject([{ from: '1.0', to: '2.0' }, { from: null, to: '1.0' }])
+    expect(history.firmware).toMatchObject([{ from: '1.0', to: '2.0' }])
     expect(events.filter(event => event.type === 'infra.firmware')).toEqual([
       { type: 'infra.firmware', mac: AP1, version: '3.0' }, { type: 'infra.firmware', mac: AP1, version: '3.1' },
     ])

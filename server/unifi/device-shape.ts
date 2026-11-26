@@ -106,7 +106,6 @@ export function normalizePort(device: WireDevice, port: WireDoc): PortFields | n
   if (idx === null) return null
   const capable = poeCapable(port)
   const media = String(port.media ?? '').toLowerCase()
-  const poeOverride = device.port_overrides?.find(item => portIndex(item.port_idx) === idx)
   return {
     switchMac: device.mac, idx, name: text(port.name),
     media: media.includes('qsfp') ? 'qsfp' : media.includes('sfp28') ? 'sfp28'
@@ -118,7 +117,7 @@ export function normalizePort(device: WireDevice, port: WireDoc): PortFields | n
     fullDuplex: bool(port.full_duplex), isUplink: isUplink(device, port),
     rxBps: bps(port['rx_bytes-r']), txBps: bps(port['tx_bytes-r']), stp: text(port.stp_state),
     poe: capable ? {
-      capable, mode: text(port.poe_mode ?? poeOverride?.poe_mode), powerW: nonnegative(port.poe_power),
+      capable, mode: text(port.poe_mode), powerW: nonnegative(port.poe_power),
       poeClass: text(port.poe_class), scheduleId: null, heldOffByUnifire: false,
     } : null,
   }

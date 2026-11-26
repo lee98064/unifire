@@ -1,3 +1,5 @@
+import { portKey } from '../engine/infra/port-history'
+import { heldPort, invalidatePoeQualification, readPoeQualification, releasePoe } from '../engine/infra/poe-state'
 import { digest } from '../engine/snapshots/diff'
 import { createWriteLedger } from '../unifi/write-ledger'
 import { createHash } from 'node:crypto'
@@ -8,7 +10,7 @@ import {
   type ControllerModeT, type ControllerStatusT,
 } from '#shared/schemas/controller'
 import type { Db } from '../db'
-import { controller, egresses, guestWifi, managedRoutes, quotaRoutes, settings } from '../db/schema'
+import { controller, egresses, guestWifi, managedRoutes, poeApplied, quotaRoutes, settings } from '../db/schema'
 import { probeCapabilities } from '../unifi/capabilities'
 import { createUnifiTransport, type UnifiConfig } from '../unifi/client'
 import { createUnifiEndpoints } from '../unifi/endpoints'
@@ -252,6 +254,25 @@ export async function createControllerService(db: Db, options: {
         engine.emit('event', { type: 'config.unifire_write' })
       },
       onDevicePower: ledger.recordDevicePower,
+      poeSelf: () => ({ mac: settingsService.get().selfMacOverride ?? state.selfMac, ip: state.selfIp }),
+      poeOwned: (switchMac, portIdx) => !!heldPort(db, { scope, switchMac, portIdx }),
+      poeQualified: () => readPoeQualification(db, scope, state.networkVersion).qualified,
+      onSnapshotPower(switchMac, changes, verified) {
+        const at = Date.now()
+        db.transaction(tx => {
+          for (const { idx: portIdx, mode, previous } of changes) {
+            const key = { scope, switchMac, portIdx }
+            if (mode === 'off' && !verified) {
+              tx.insert(poeApplied).values({ ...key, ...previous, at, scheduleId: null,
+                source: 'snapshot', phase: 'applying' }).onConflictDoNothing().run()
+            } else if (mode === 'off' || !verified) {
+              tx.update(poeApplied).set({ phase: verified ? 'held' : 'restoring' }).where(portKey(poeApplied, key)).run()
+            } else {
+              releasePoe(tx, key, at, true)
+            }
+          }
+        })
+      },
       onRoutesChanged() {
         // A poll started before the mutation may still be in flight.
         void cache.refresh('routes').catch(() => {}).then(() => cache.refresh('routes')).catch(() => {})
@@ -299,6 +320,7 @@ export async function createControllerService(db: Db, options: {
         if (!info) throw new UnifiError('UNIFI_EMPTY')
         if (!live()) return
         applySysinfo(state, info)
+        invalidatePoeQualification(db, scope, state.networkVersion)
         changed = previous !== `${state.networkVersion}/${state.consoleVersion}`
         state.connected = true
         state.lastError = null
@@ -312,7 +334,10 @@ export async function createControllerService(db: Db, options: {
         }
       }).finally(() => { inspection = undefined })
       await inspection
-      if (!force && changed && live()) await qualify(systemContext)
+      if (!force && changed && live()) {
+        engine.emit('event', { type: 'controller.reconnected' })
+        await qualify(systemContext)
+      }
     }
 
     function connectEvents() {

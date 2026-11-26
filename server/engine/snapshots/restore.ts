@@ -32,6 +32,10 @@ export function restoreReason(resource: SnapshotResourceT, id: string, before: W
       if (!ownership || !route || classifyRoute(route, ownership) !== 'managed') return 'notOwned'
     }
   }
+  if (resource === 'devices') {
+    if (!before || !after || typeof after._id !== 'string') return 'unsupported'
+    return digest(before.port_overrides ?? []) === digest(after.port_overrides ?? []) ? 'unchanged' : null
+  }
   const definition = snapshotResources[resource].write
   if (!definition || !before && !definition.remove) return 'unsupported'
   if (resource === 'users' && !after && typeof before?.mac !== 'string') return 'unsupported'
@@ -39,6 +43,7 @@ export function restoreReason(resource: SnapshotResourceT, id: string, before: W
 }
 
 function restoredBody(resource: SnapshotResourceT, saved: WireDoc, method: 'PUT' | 'POST', current?: WireDoc) {
+  if (resource === 'devices') return { port_overrides: saved.port_overrides ?? [] }
   if (resource === 'users') {
     return Object.fromEntries([
       ...userFields.filter(key => Object.hasOwn(saved, key) || !!current && Object.hasOwn(current, key))
@@ -108,7 +113,7 @@ export function createRestore(db: Db, service: ControllerService, store: ReturnT
 
         if (prior && current) {
           const desired = restoredBody(resource, prior.doc, 'PUT', current.doc)
-          const payload = mergeRestore(current.doc, desired, resource === 'users')
+          const payload = resource === 'devices' ? desired : mergeRestore(current.doc, desired, resource === 'users')
           if (digest(payload) === current.hash) return { id, current, steps: [step('PUT', 'unchanged')], mutations: [] }
           if (resource === 'static-dns') {
             const create = restoredBody(resource, prior.doc, 'POST')

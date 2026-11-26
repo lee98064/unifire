@@ -19,7 +19,7 @@ export type Notification = {
   member?: { personId: string }
   variant?: 'extension_decided' | 'test'
 }
-const warning = new Set<NotificationEventT>(['new_device', 'route_drift', 'quota_warning', 'extension_request', 'poe_cycle', 'external_change'])
+const warning = new Set<NotificationEventT>(['new_device', 'route_drift', 'quota_warning', 'extension_request', 'poe_cycle', 'external_change', 'port_issue', 'poe_schedule'])
 const error = new Set<NotificationEventT>(['egress_down', 'quota_exceeded', 'controller_error'])
 const success = new Set<NotificationEventT>(['guest_wifi_rotated', 'egress_up'])
 const actionPrefix = '/api/push/action?token='
@@ -127,10 +127,14 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
     const language = locale()
     if (input.event === 'controller_error' && params.error) params.error = await t(language, params.error)
     const ts = now()
-    const key = `notification.${input.variant ?? input.event}`
+    const kind = typeof data.kind === 'string' ? data.kind : ''
+    if (input.event === 'port_issue' && kind) params.description = await t(language, `port.event.${kind}`, params)
+    if (input.event === 'poe_schedule' && params.reason) params.reason = await t(language, params.reason, params)
+    const key = input.event === 'poe_schedule' && ['drift', 'error', 'blocked'].includes(kind)
+      ? `notification.poe_schedule.${kind}` : `notification.${input.variant ?? input.event}`
     const [title, body] = input.message ? [input.message.title, input.message.body]
       : await Promise.all([t(language, `${key}.title`, params), t(language, `${key}.body`, params)])
-    const level = error.has(input.event) ? 3 : warning.has(input.event) ? 2 : success.has(input.event) ? 1 : 0
+    const level = error.has(input.event) || (input.event === 'port_issue' && kind === 'flapping') || (input.event === 'poe_schedule' && kind === 'error') ? 3 : warning.has(input.event) ? 2 : success.has(input.event) ? 1 : 0
     const site = settings.get().siteUrl
 
     switch (config.type) {

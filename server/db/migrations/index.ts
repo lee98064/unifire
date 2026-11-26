@@ -13,7 +13,9 @@ import { reportsSql } from './0006-reports'
 
 import { infraSql } from './0007-infra'
 
-const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }, { version: 6, sql: reportsSql }, { version: 7, sql: infraSql }]
+import { portsPoeSql } from './0008-ports-poe'
+
+const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }, { version: 6, sql: reportsSql }, { version: 7, sql: infraSql }, { version: 8, sql: portsPoeSql }]
 
 export function migrateDatabase(sqlite: Database.Database) {
   sqlite.transaction(() => {

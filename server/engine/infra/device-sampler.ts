@@ -120,10 +120,10 @@ export function createDeviceSampler(db: Db, options: {
         if (state === 'offline' && from !== 'offline') events.push({ type: 'infra.offline', mac })
         if (state === 'online' && from !== null && from !== 'online') events.push({ type: 'infra.online', mac, downSec: downSec ?? 0 })
         if (reboot) events.push({ type: 'infra.rebooted', mac, unexpected: reboot === 'unexpected_reboot' })
-        if (firmware !== null && firmware !== previous?.firmware) {
+        if (previous && firmware !== null && firmware !== previous.firmware) {
           tx.insert(firmwareHistory).values({ mac, ts: at, from: previous?.firmware ?? null, to: firmware }).run()
         }
-        if (upgradeTo && upgradeTo !== previous?.upgradeTo) events.push({ type: 'infra.firmware', mac, version: upgradeTo })
+        if (previous && upgradeTo && upgradeTo !== previous.upgradeTo) events.push({ type: 'infra.firmware', mac, version: upgradeTo })
         if (telemetry?.tempC != null) {
           const tempC = telemetry.tempC
           events.push({ type: 'infra.temperature', mac, tempC })

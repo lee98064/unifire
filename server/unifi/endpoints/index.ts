@@ -44,6 +44,12 @@ export function createUnifiEndpoints({ paths, read, postRead }: UnifiTransport) 
     objects: () => v2('object-oriented-network-configs', Docs),
     activeClients, statStations, users, allUsers, knownClients,
     devices: () => classic('stat/device', z.array(Device)),
+    async device(mac: string) {
+      const found = (await classic(`stat/device/${segment(mac)}`, z.array(Device)))
+        .find(device => device.mac === mac && device.adopted !== false)
+      if (!found) throw new UnifiError('DEVICE_NOT_FOUND', 404)
+      return found
+    },
     wlans: () => classic('rest/wlanconf', z.array(WlanDoc)),
     gateway: () => classic('stat/gateway', z.array(Device)),
     health: () => classic('stat/health', Docs),

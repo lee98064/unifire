@@ -152,11 +152,14 @@ describe('WP8 device commands and infra rules with a fake UniFi controller', () 
     await rules.dispatch({ type: 'infra.rebooted', mac: AP1, unexpected: true })
     expect(count(reboot.id)).toBe(1)
     expect(await rules.dispatch({ type: 'port.issue' })).toEqual([])
-    for (const future of [shipLater, actionLater, conditionLater]) {
-      expect(await rules.test(future.id, true)).toMatchObject({
-        test: true, ok: false, results: [expect.objectContaining({ message: 'rule.result.not_implemented' })],
+    for (const implemented of [shipLater, actionLater]) {
+      expect(await rules.test(implemented.id, true)).toMatchObject({
+        test: true, ok: true, results: [expect.objectContaining({ message: 'rule.result.would' })],
       })
     }
+    expect(await rules.test(conditionLater.id, true)).toMatchObject({
+      test: true, ok: false, results: [expect.objectContaining({ message: 'rule.result.not_implemented' })],
+    })
     const synthetic = await rules.test(overheat.id, true)
     expect(synthetic.event).toMatchObject({ synthetic: true, temp: 65, mac: expect.any(String), model: expect.any(String) })
   })

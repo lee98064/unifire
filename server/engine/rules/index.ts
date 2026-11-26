@@ -23,7 +23,7 @@ import { createRuleActions, type RuleEvent } from './actions'
 
 type Effects = Parameters<typeof createRuleActions>[2]
 type Options = { now?: () => number, http?: HttpTransport }
-const futureTriggers = new Set(['port.issue', 'poe.budget', 'person.room_entered', 'person.room_left', 'incident.opened'])
+const futureTriggers = new Set(['person.room_entered', 'person.room_left', 'incident.opened'])
 const stateful = new Set(['device.offline', 'traffic.threshold'])
 const mockHttp: HttpTransport = async (_url, init) => Response.json({ echo: init?.body ?? null })
 
@@ -33,6 +33,9 @@ export function matchesTrigger(trigger: RuleTriggerT, event: RuleEvent) {
   if ('mac' in trigger && trigger.mac !== null && trigger.mac !== event.mac) return false
   if (trigger.type === 'infra.rebooted' && trigger.unexpectedOnly && event.unexpected !== true) return false
   if (trigger.type === 'infra.overheat' && (typeof event.tempC !== 'number' || event.tempC < trigger.celsius)) return false
+  if ('switchMac' in trigger && trigger.switchMac !== null && trigger.switchMac !== event.switchMac) return false
+  if (trigger.type === 'port.issue' && (typeof event.kind !== 'string' || trigger.kinds.length && !trigger.kinds.some(kind => kind === event.kind))) return false
+  if (trigger.type === 'poe.budget' && (typeof event.percent !== 'number' || event.percent < trigger.percent)) return false
   if ('personId' in trigger && trigger.personId !== null && trigger.personId !== event.personId) return false
   if ('egressId' in trigger && trigger.egressId !== null && trigger.egressId !== event.egressId) return false
   if ('quotaId' in trigger && trigger.quotaId !== null && trigger.quotaId !== event.quotaId) return false
@@ -53,6 +56,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
   const latched = new Map<string, { skipped?: NonNullable<RuleRunT['skipped']> }>()
   const outages = new Map<string, number>()
   const heat = new Set<string>()
+  const budget = new Set<string>()
   let infraScope = service.runtime?.scope
   const connections = new Map<string, { type: string, at: number, source?: 'poll' }>()
   let connectionScope = service.runtime
@@ -210,6 +214,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
       infraScope = service.runtime?.scope
       outages.clear()
       heat.clear()
+      budget.clear()
     }
     return infraScope
   }
@@ -274,14 +279,30 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     }
   }
 
+  function evaluateBudget(switchMac: string, percent: number) {
+    refreshInfraScope()
+    const event = { type: 'poe.budget', switchMac, percent }
+    return Promise.all(enabled().flatMap(({ id, trigger }) => {
+      if (trigger.type !== 'poe.budget' || trigger.switchMac !== null && trigger.switchMac !== switchMac) return []
+      const key = JSON.stringify([id, switchMac])
+      if (percent <= trigger.percent - 5) budget.delete(key)
+      if (percent < trigger.percent || budget.has(key)) return []
+      budget.add(key)
+      return [run(id, event).catch(error => { budget.delete(key); throw error })]
+    }))
+  }
+
   function resetInfraRule(id: string) {
     const prefix = JSON.stringify(id)
+    for (const key of budget) if (key.startsWith(`[${prefix},`)) budget.delete(key)
     for (const key of heat) if (key.startsWith(`[${prefix},`)) heat.delete(key)
     for (const key of outages.keys()) if (key.startsWith(`[${prefix},`)) outages.delete(key)
   }
 
   const dispatch = async (event: RuleEvent) => {
     if (futureTriggers.has(event.type)) return []
+    if (event.type === 'poe.budget') return typeof event.switchMac === 'string' && typeof event.percent === 'number'
+      ? evaluateBudget(event.switchMac, event.percent) : []
     if (event.type === 'infra.offline') return evaluateOutages()
     const interested = enabled().filter(row => row.trigger.type === event.type)
     if (!interested.length) return []
@@ -300,6 +321,10 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         if (saved) sync(internal(saved))
         else jobs.set(id, null, async () => {})
       }
+      return
+    }
+    if (event.type === 'poe.reading') {
+      void evaluateBudget(event.switchMac, event.percent).catch(() => {})
       return
     }
     if (event.type === 'infra.temperature') return evaluateHeat(event.mac, event.tempC)
@@ -463,6 +488,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         ...(trigger.type === 'infra.online' && { downSec: 60 }),
         ...(trigger.type === 'infra.offline' && { downSec: trigger.minutes * 60 }),
         ...(trigger.type === 'infra.firmware' && { version: device?.upgradeTo ?? device?.firmware ?? '0.0.0' }),
+        ...(trigger.type === 'port.issue' && { kind: trigger.kinds[0] ?? 'downgrade', portIdx: 1 }),
         ...('macs' in trigger && { mac: trigger.macs[0] }),
         ...(trigger.type === 'traffic.threshold' && (trigger.scope.type === 'client'
           ? { mac: trigger.scope.id } : { personId: trigger.scope.id })) }

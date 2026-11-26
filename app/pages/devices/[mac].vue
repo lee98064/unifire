@@ -244,6 +244,7 @@ const poeMax = computed(() => Math.max(1, ...poePorts.value.map(p => p.poe?.powe
       </div>
 
       <UTabs v-model="tab" :items="tabs" :content="false" class="mb-4" />
+      <PortDrawer v-model:open="portDrawer" :mac="dev.mac" :idx="selectedPort" :device-name="dev.name" />
 
       <!-- overview -->
       <div v-if="tab === 'overview'" class="grid xl:grid-cols-[1fr_340px] gap-4">
@@ -419,8 +420,6 @@ const poeMax = computed(() => Math.max(1, ...poePorts.value.map(p => p.poe?.powe
           </div>
         </UCard>
       </div>
-
-      <PortDrawer v-model:open="portDrawer" :mac="dev.mac" :idx="selectedPort" :device-name="dev.name" />
 
       <!-- wireless -->
       <div v-else-if="tab === 'wireless'" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">

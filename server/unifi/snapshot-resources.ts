@@ -24,7 +24,7 @@ export const snapshotResources: Record<SnapshotResourceT, Resource> = {
   'qos-rules': { path: 'qos-rules', v2: true, category: 'config' },
   users: { path: 'rest/user', category: 'client', write: {} },
   portconf: { path: 'rest/portconf', category: 'config' },
-  devices: { path: 'stat/device', category: 'device' },
+  devices: { path: 'stat/device', category: 'device', write: { itemPath: 'rest/device' } },
 }
 
 export function readCollection(api: UnifiEndpoints, resource: SnapshotResourceT): Promise<WireDoc[]> {

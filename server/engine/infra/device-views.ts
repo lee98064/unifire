@@ -1,8 +1,8 @@
-import { and, desc, eq, gte, inArray } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, count } from 'drizzle-orm'
 import { InfraDevice, InfraDeviceDetail, type InfraDeviceT } from '#shared/schemas/infra'
 import type { SettingsT } from '#shared/schemas/system'
 import type { Db } from '../../db'
-import { deviceTransitions, infraDevices, personDevices } from '../../db/schema'
+import { deviceTransitions, infraDevices, personDevices, portEvents } from '../../db/schema'
 import type { ControllerService } from '../../services/controller'
 import { createSettingsService } from '../../services/settings'
 import { deviceName, deviceRadios, deviceType, normalizeDevice } from '../../unifi/device-shape'
@@ -11,6 +11,8 @@ import { UnifiError } from '../../unifi/errors'
 import { DAY } from '../access-time'
 import { availabilityByDevice, deviceEvents } from './device-history'
 import { createDeviceGraph, createPoeSafety } from './poe-safety'
+import { deviceEnergy, liveWatts } from './energy'
+import { enrichPort, portIssues } from './port-health'
 import { buildPortViews } from './ports'
 
 const rebootReasons = ['unexpected_reboot', 'unifire_restart', 'upgrade'] as const
@@ -33,7 +35,7 @@ export function deviceIssues(device: Pick<InfraDeviceT, 'state' | 'tempC' | 'cpu
 }
 
 function deviceView(db: Db, saved: typeof infraDevices.$inferSelect, wire: WireDevice | undefined,
-  availability24h: number | null, config: SettingsT['infra'], at: number): InfraDeviceT {
+  availability24h: number | null, affectedPorts: number, config: SettingsT['infra'], at: number): InfraDeviceT {
   const reading = wire && normalizeDevice(wire)
   const live = saved.lastState !== 'offline' ? reading : undefined
   const latest = db.select({ ts: deviceTransitions.ts, reason: deviceTransitions.reason }).from(deviceTransitions)
@@ -46,11 +48,13 @@ function deviceView(db: Db, saved: typeof infraDevices.$inferSelect, wire: WireD
     ip: reading?.ip ?? null, uptimeSec: live?.uptimeSec ?? null, cpuPct: live?.cpuPct ?? null,
     memPct: live?.memPct ?? null, tempC: live?.tempC ?? null, clients: live?.clients ?? null,
     rxBps: live?.rxBps ?? null, txBps: live?.txBps ?? null, uplink: reading?.uplink ?? null,
-    ports: reading?.ports ?? null, poe: reading?.poe ? { ...reading.poe, usedW: live?.poe?.usedW ?? null } : null,
+    ports: reading?.ports ? { ...reading.ports, issues: affectedPorts } : null, poe: reading?.poe ? { ...reading.poe, usedW: live?.poe?.usedW ?? null } : null,
     bands: reading?.bands ?? [], availability24h, lastReboot: latest ? { ts: latest.ts, unexpected: latest.reason === 'unexpected_reboot' } : null,
     locating: saved.locateUntil !== null && saved.locateUntil > at,
   }
   const issues = deviceIssues(device, config, at)
+  if (affectedPorts) issues.push({ kind: 'port_issue', severity: 'warning', messageKey: 'infra.issue.port_issue',
+    messageParams: { count: String(affectedPorts) } })
   if (latest && latest.reason !== 'unexpected_reboot' && !issues.some(issue => issue.kind === 'unexpected_reboot')) {
     const earlier = db.select({ id: deviceTransitions.id }).from(deviceTransitions).where(and(eq(deviceTransitions.mac, saved.mac),
       eq(deviceTransitions.reason, 'unexpected_reboot'), gte(deviceTransitions.ts, at - DAY))).limit(1).get()
@@ -65,10 +69,16 @@ export function listInfraDevices(db: Db, service: ControllerService, at: number,
   const readings = new Map(runtime.cache.snapshot().devices.filter(row => row.adopted !== false).map(row => [row.mac, row]))
   const config = createSettingsService(db).get().infra
   const availability = availabilityByDevice(db, runtime.scope, at)
+  const issues = portIssues(db, runtime.scope, config, at)
+  const affected = new Map<string, number>()
+  for (const key of issues.keys()) {
+    const mac = key.split('/')[0]!
+    affected.set(mac, (affected.get(mac) ?? 0) + 1)
+  }
   return db.select().from(infraDevices)
     .where(and(eq(infraDevices.scope, runtime.scope), mac === undefined ? undefined : eq(infraDevices.mac, mac)))
     .orderBy(infraDevices.type, infraDevices.name, infraDevices.mac).all()
-    .map(row => deviceView(db, row, readings.get(row.mac), availability.get(row.mac) ?? null, config, at))
+    .map(row => deviceView(db, row, readings.get(row.mac), availability.get(row.mac) ?? null, affected.get(row.mac) ?? 0, config, at))
 }
 
 export function infraDeviceDetail(db: Db, service: ControllerService, mac: string, at: number) {
@@ -81,22 +91,28 @@ export function infraDeviceDetail(db: Db, service: ControllerService, mac: strin
   const status = service.status()
   const safety = createPoeSafety(graph, stations, { mac: status.selfMac, ip: status.selfIp })
   const personByMac = new Map(db.select().from(personDevices).all().map(row => [row.mac, row.personId]))
+  const scope = service.runtime!.scope
   const events = deviceEvents(db, mac, undefined, undefined, 50)
+  const config = createSettingsService(db).get()
+  const issues = portIssues(db, scope, config.infra, at)
   return InfraDeviceDetail.parse({ ...view,
-    ports: wire ? buildPortViews(wire, graph, stations, safety, personByMac) : [],
+    ports: wire ? buildPortViews(wire, graph, stations, safety, personByMac)
+      .map(port => enrichPort(db, { scope, switchMac: mac, portIdx: port.idx }, port, at, issues.get(mac + '/' + port.idx) ?? [])) : [],
     radios: wire ? deviceRadios(wire) : [],
     downstream: graph.downstream(mac).map(({ device, viaPort }) => ({ mac: device.mac, name: deviceName(device), type: deviceType(device), viaPort })),
-    transitions: events.transitions, firmwareHistory: events.firmware, portEvents: events.portEvents, roams24h: null, energy: null })
+    transitions: events.transitions, firmwareHistory: events.firmware, portEvents: events.portEvents, roams24h: null, energy: view.poe ? deviceEnergy(db, scope, mac, at, config.timezone) : null })
 }
 
 export function infraDashboard(db: Db, service: ControllerService, at: number) {
   const devices = listInfraDevices(db, service, at)
-  const watts = devices.flatMap(device => device.poe?.usedW ?? [])
+  const scope = service.runtime?.scope
+  const unacknowledged = scope ? db.select({ total: count() }).from(portEvents)
+    .where(and(eq(portEvents.scope, scope), eq(portEvents.acknowledged, false))).get()?.total ?? 0 : 0
   return {
     total: devices.length,
     online: devices.filter(device => device.state === 'online').length,
     offline: devices.filter(device => device.state === 'offline').length,
     withIssues: devices.filter(device => device.issues.some(issue => issue.severity !== 'info')).length,
-    portEvents: 0, poeWatts: watts.length ? watts.reduce((sum, w) => sum + w, 0) : null, openIncidents: 0,
+    portEvents: unacknowledged, poeWatts: liveWatts(service), openIncidents: 0,
   }
 }

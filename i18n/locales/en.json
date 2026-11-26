@@ -148,7 +148,15 @@
     "poeNotOwned": "PoE on this port was turned off in UniFi; Unifire won't turn it on for you",
     "poeUnsafe": "Safety rules don't allow Unifire to cut power on this port",
     "poeAckRequired": "This port powers an AP — confirm that first",
-    "poeNotQualified": "PoE writes aren't verified yet"
+    "poeNotQualified": "PoE writes aren't verified yet",
+    "deviceNotFound": "Device not found",
+    "gatewayConfirmationRequired": "Restarting the gateway needs explicit confirmation",
+    "poeHeld": "Unifire is holding this port off or it just powered back on; the watchdog waits",
+    "poePortNotFound": "The controller doesn't report this port",
+    "poeScheduleNotFound": "PoE schedule not found",
+    "poeScheduleExists": "This port already has a schedule",
+    "portEventNotFound": "Port event not found",
+    "dryRun": "This operation needs live mode to complete safely"
   },
   "fmt": {
     "h": "{h}h",
@@ -1367,12 +1375,24 @@
       "device": {
         "restart": "restart device",
         "power_cycle": "PoE power cycle",
-        "speedtest": "speed test"
+        "speedtest": "speed test",
+        "set_locate": "Start locate LED",
+        "unset_locate": "Stop locate LED"
       },
       "approval": {
         "approve": "approve",
         "block": "block",
         "ignore": "ignore"
+      },
+      "poe": {
+        "portOverride": "Change PoE power",
+        "qualify": "PoE write check",
+        "override": {
+          "drift": "PoE quick action yielded to a UniFi change"
+        }
+      },
+      "restore": {
+        "devicePorts": "Restore port settings"
       }
     },
     "method": {
@@ -1666,13 +1686,36 @@
     "delivery": {
       "failed": "Delivery failed",
       "noSubscription": "This account has no push subscription yet — enable push on this device first"
+    },
+    "device_firmware": {
+      "title": "New firmware for {device}",
+      "body": "Version {version} is available."
+    },
+    "port_issue": {
+      "title": "Port {port} on {switch} needs attention",
+      "body": "{description}"
+    },
+    "poe_schedule": {
+      "drift": {
+        "title": "PoE schedule “{name}” paused",
+        "body": "Port {port} on {switch} was powered on in UniFi; Unifire won't fight it. Resume the schedule on the PoE page once checked."
+      },
+      "blocked": {
+        "title": "PoE schedule “{name}” blocked by a safety rule",
+        "body": "Unifire may not cut power on port {port} of {switch} right now."
+      },
+      "error": {
+        "title": "PoE schedule “{name}” failed",
+        "body": "Port {port} on {switch}: {error}"
+      }
     }
   },
   "rule": {
     "result": {
       "would": "Dry run: would run",
       "failed": "Failed",
-      "webhookFailed": "Webhook request failed"
+      "webhookFailed": "Webhook request failed",
+      "not_implemented": "This feature is still being built and doesn't run yet"
     }
   },
   "watchdog": {
@@ -2266,6 +2309,20 @@
       "failed": "Check failed",
       "running": "Checking…",
       "start": "Start check"
+    },
+    "reason": {
+      "port_missing": "The controller doesn't report this port or its PoE state",
+      "not_poe": "This port has no PoE",
+      "uplink": "Uplink ports can't be powered off",
+      "downstream_devices": "Other UniFi devices depend on this port",
+      "unifire_host": "The Unifire host is behind this port",
+      "gateway_path": "This port is on the path to the gateway",
+      "ack_required": "This port powers an AP — confirm it in the schedule first",
+      "externally_off": "PoE is off in UniFi; Unifire won't take it over",
+      "unqualified": "PoE writes aren't verified yet",
+      "drift": "Power was turned back on in UniFi; schedule paused",
+      "blocked": "Blocked by a safety rule",
+      "error": "PoE operation failed"
     }
   },
   "energy": {
@@ -2386,5 +2443,34 @@
     "stickyDesc": "{n} other APs broadcast the same SSID; nudged {nudges} times today.",
     "stickyShort": "Stuck on {ap} ({dbm} dBm)",
     "stickyBadge": "Sticky"
+  },
+  "infra": {
+    "issue": {
+      "offline": "Device offline",
+      "overheat": "Running hot ({temp} °C)",
+      "high_cpu": "High CPU ({cpu}%)",
+      "high_mem": "High memory ({mem}%)",
+      "firmware_available": "Firmware {version} available",
+      "unexpected_reboot": "Rebooted unexpectedly in the last 24 h",
+      "port_issue": "{count} ports with issues"
+    }
+  },
+  "diff": {
+    "device": {
+      "port_override": "{device} port {port}: {field} {from} → {to}",
+      "name": "Device renamed: {from} → {to}",
+      "radio": "{device} {radio}: {field} {from} → {to}",
+      "port_overrides": "Port settings of {device} changed"
+    }
+  },
+  "port": {
+    "event": {
+      "downgrade": "Port {port} on {switch} dropped from {from} to {to} ({peer})",
+      "recovered": "Port {port} on {switch} is back at {to}",
+      "errors": "High error rate on port {port} of {switch} ({rate}%) — check the cable or connector",
+      "flapping": "Port {port} on {switch} dropped its link {flaps} times in an hour",
+      "new_device": "Unknown device {peer} plugged into port {port} on {switch}",
+      "peer_changed": "{peer} is now on port {port} of {switch}"
+    }
   }
 }

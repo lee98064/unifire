@@ -29,7 +29,13 @@ const label = computed(() => {
   if (period.value === 'month') return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', timeZone: r.timezone }).format(r.from)
   return `${fmt.date(r.from)} – ${fmt.date(r.to - 1)}`
 })
-const kwh = (wh: number | null | undefined) => (wh == null ? '—' : wh >= 100_000 ? (wh / 1000).toFixed(0) : (wh / 1000).toFixed(wh < 10_000 ? 2 : 1))
+/** Energy with an automatic unit: Wh below 1 kWh, kWh above. */
+const energy = (wh: number | null | undefined) => {
+  if (wh == null) return '—'
+  if (wh < 1000) return `${wh.toFixed(wh < 10 ? 2 : wh < 100 ? 1 : 0)} Wh`
+  return `${(wh / 1000).toFixed(wh >= 100_000 ? 0 : wh < 10_000 ? 2 : 1)} kWh`
+}
+const smallScale = computed(() => Math.max(0, ...(report.value?.series ?? []).map(p => Object.values(p.byDevice).reduce((a, b) => a + b, 0))) < 1000)
 const delta = computed(() => {
   const r = report.value
   if (!r?.previousTotalWh) return null
@@ -43,16 +49,16 @@ const chart = computed<EChartsOption>(() => {
   return {
     legend: { top: 0, right: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 4, textStyle: { fontSize: 11 } },
     grid: { top: 28 },
-    tooltip: { valueFormatter: (v: unknown) => `${(Number(v) / 1000).toFixed(3)} kWh` },
+    tooltip: { valueFormatter: (v: unknown) => energy(Number(v)) },
     xAxis: { type: 'time' },
-    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => `${(v / 1000).toFixed(v < 1000 ? 2 : 1)}` }, name: 'kWh', nameTextStyle: { fontSize: 10 } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => (smallScale.value ? `${Math.round(v)}` : `${(v / 1000).toFixed(1)}`) }, name: smallScale.value ? 'Wh' : 'kWh', nameTextStyle: { fontSize: 10 } },
     series: devices.map(d => ({
       type: 'bar', name: d.name, stack: 'e', barWidth, itemStyle: { color: deviceColor.value.get(d.mac), borderRadius: 2 },
       data: (r?.series ?? []).map(p => [p.ts, p.byDevice[d.mac] ?? 0]),
     })),
   }
 })
-const topPorts = computed(() => (report.value?.byDevice ?? []).flatMap(d => d.ports.map(p => ({ ...p, device: d.name, mac: d.mac }))).sort((a, b) => b.wh - a.wh).slice(0, 10))
+const topPorts = computed(() => (report.value?.byDevice ?? []).flatMap(d => d.ports.map(p => ({ ...p, device: d.name, mac: d.mac }))).filter(p => p.wh > 0).sort((a, b) => b.wh - a.wh).slice(0, 10))
 const topMax = computed(() => Math.max(1, ...topPorts.value.map(p => p.wh)))
 const savedWh = computed(() => (report.value?.savings ?? []).reduce((s, x) => s + x.wh, 0))
 
@@ -89,11 +95,11 @@ async function saveRate() {
     </div>
 
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <KpiTile :label="t('energy.total')" :value="`${kwh(report?.totalWh)} kWh`" icon="i-lucide-zap" tone="warning">
+      <KpiTile :label="t('energy.total')" :value="energy(report?.totalWh)" icon="i-lucide-zap" tone="warning">
         <span v-if="delta != null" class="text-[12px] uf-num font-medium" :class="delta > 0 ? 'text-error' : 'text-success'">{{ delta > 0 ? '▲' : '▼' }} {{ Math.abs(delta).toFixed(0) }}%</span>
       </KpiTile>
       <KpiTile :label="t('energy.cost')" :value="report?.cost != null ? `${report.currency} ${report.cost.toFixed(report.cost < 100 ? 1 : 0)}` : '—'" icon="i-lucide-receipt" :hint="report?.ratePerKwh == null ? t('energy.noRate') : undefined" />
-      <KpiTile :label="t('energy.saved')" :value="`${kwh(savedWh)} kWh`" icon="i-lucide-leaf" tone="success" :hint="t('energy.savedHint')" />
+      <KpiTile :label="t('energy.saved')" :value="energy(savedWh)" icon="i-lucide-leaf" tone="success" :hint="t('energy.savedHint')" />
       <KpiTile :label="t('energy.live')" :value="report?.liveW != null ? `${report.liveW.toFixed(1)} W` : '—'" icon="i-lucide-activity" tone="neutral" :hint="report && report.coverage < 0.95 ? t('energy.coverage', { pct: Math.round(report.coverage * 100) }) : undefined" />
     </div>
 
@@ -116,7 +122,7 @@ async function saveRate() {
               </div>
               <div class="h-1.5 mt-1 rounded-full bg-(--ui-bg-accented) overflow-hidden"><div class="h-full rounded-full" :style="{ width: `${(p.wh / topMax) * 100}%`, background: deviceColor.get(p.mac) }" /></div>
             </div>
-            <span class="text-right uf-num font-medium text-highlighted">{{ kwh(p.wh) }} kWh</span>
+            <span class="text-right uf-num font-medium text-highlighted">{{ energy(p.wh) }}</span>
           </div>
         </div>
         <EmptyState v-else icon="i-lucide-zap" :title="t('energy.empty')" :description="t('energy.emptyDesc')" />
@@ -127,7 +133,7 @@ async function saveRate() {
           <div v-for="s in report.savings" :key="s.scheduleId" class="flex items-center gap-3 py-2.5 text-[12.5px]">
             <span class="size-7 rounded-md bg-success/10 text-success flex items-center justify-center shrink-0"><UIcon name="i-lucide-leaf" class="size-3.5" /></span>
             <span class="text-highlighted truncate flex-1">{{ s.name }}</span>
-            <span class="uf-num text-toned">{{ kwh(s.wh) }} kWh</span>
+            <span class="uf-num text-toned">{{ energy(s.wh) }}</span>
             <span v-if="s.cost != null" class="uf-num text-success w-20 text-right">{{ report.currency }} {{ s.cost.toFixed(1) }}</span>
           </div>
         </div>

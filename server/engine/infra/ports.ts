@@ -1,34 +1,55 @@
 import type { PortPeerT, PortViewT } from '#shared/schemas/infra'
-import { deviceMac, deviceName, finiteNumber, normalizePort } from '../../unifi/device-shape'
+import { deviceMac, deviceName, deviceUplink, finiteNumber, normalizePort } from '../../unifi/device-shape'
 import type { WireDevice, WireDoc, WireStation } from '../../unifi/endpoints/schemas'
 import { createDeviceGraph, createPoeSafety, lastPortConnection, wiredAttachment } from './poe-safety'
 
-export function buildPortViews(device: WireDevice, graph: ReturnType<typeof createDeviceGraph>, stations: readonly WireStation[],
-  safety: ReturnType<typeof createPoeSafety>, personByMac: ReadonlyMap<string, string>): PortViewT[] {
+export function readPorts(device: WireDevice, graph: ReturnType<typeof createDeviceGraph>, stations: readonly WireStation[],
+  safety: ReturnType<typeof createPoeSafety>, personByMac: ReadonlyMap<string, string>) {
   const byMac = new Map(stations.map(station => [station.mac, station]))
-  const clients = stations.filter(station => wiredAttachment(station)?.mac === device.mac)
-  function peerFor(port: WireDoc, idx: number): PortPeerT | null {
-    const peers = graph.downstream(device.mac, idx)
-    const attached = clients.filter(client => wiredAttachment(client)?.port === idx)
-    const lastConnection = lastPortConnection(port)
-    const lastMac = lastConnection?.connected === false || port.up === false ? null : deviceMac(lastConnection?.mac)
-    const macs = new Set([...peers.map(peer => peer.device.mac), ...attached.map(client => client.mac)])
-    if (lastMac) macs.add(lastMac)
-    const count = Math.max(macs.size, Math.floor(finiteNumber(port.mac_table_count) ?? 0))
-    const child = peers.find(({ device }) => device.mac === lastMac) ?? peers[0]
-    if (child) return { kind: 'device', mac: child.device.mac, name: deviceName(child.device), personId: null, count }
-    const lastClient = lastMac ? byMac.get(lastMac) : undefined
-    const client = attached.find(client => client.mac === lastMac) ?? attached[0]
-      ?? (lastClient?.is_wired !== false && lastClient && !wiredAttachment(lastClient) ? lastClient : undefined)
-    if (client) return { kind: 'client', mac: client.mac, name: client.name || client.hostname || client.mac,
-      personId: personByMac.get(client.mac) ?? null, count }
-    return count ? { kind: 'unknown', mac: lastMac, name: null, personId: null, count } : null
-  }
+  const clients = stations.flatMap(station => {
+    const edge = wiredAttachment(station)
+    return edge?.mac === device.mac ? [{ station, port: edge.port }] : []
+  })
+  const upstream = deviceUplink(device)
+  return (device.port_table ?? []).flatMap(raw => {
+    const port = normalizePort(device, raw)
+    if (!port) return []
+    const children = graph.downstream(device.mac, port.idx)
+    const attached = clients.filter(client => client.port === port.idx).map(client => client.station)
+    const last = lastPortConnection(raw)
+    const lastMac = deviceMac(last?.mac)
+    const lastCurrent = last?.connected !== false && port.up ? lastMac : null
+    const count = Math.max(attached.length, Math.floor(finiteNumber(raw.mac_table_count) ?? 0))
+    const peers = new Map<string, PortPeerT & { mac: string }>()
+    const adopt = (mac: string, name: string | null) =>
+      peers.set(mac, { kind: 'device', mac, name, personId: null, count: Math.max(1, count) })
+    const stationPeer = (station: WireStation) => peers.set(station.mac, {
+      kind: 'client', mac: station.mac, name: station.name || station.hostname || station.mac,
+      personId: personByMac.get(station.mac) ?? null, count: Math.max(1, count),
+    })
+    if (port.isUplink && upstream?.mac) {
+      const parent = graph.byMac.get(upstream.mac)
+      adopt(upstream.mac, parent ? deviceName(parent) : upstream.name)
+    }
+    for (const { device: child } of children) adopt(child.mac, deviceName(child))
+    for (const station of attached) if (!peers.has(station.mac)) stationPeer(station)
+    if (lastMac && !peers.has(lastMac)) {
+      const known = byMac.get(lastMac)
+      if (known) stationPeer(known)
+      else peers.set(lastMac, { kind: 'unknown', mac: lastMac, name: null, personId: null, count: Math.max(1, count) })
+    }
+    const primary = (port.isUplink ? upstream?.mac : null)
+      ?? children.find(child => child.device.mac === lastCurrent)?.device.mac ?? children[0]?.device.mac
+      ?? attached.find(client => client.mac === lastCurrent)?.mac ?? attached[0]?.mac ?? lastCurrent
+    const peer = primary ? peers.get(primary) ?? null
+      : count ? { kind: 'unknown' as const, mac: null, name: null, personId: null, count } : null
+    const view: PortViewT = { ...port, poeSafety: safety(device, raw), peer,
+      issues: [], baselineSpeedMbps: null, errorRatePct: null, flaps1h: 0 }
+    return [{ raw, view, peers: [...peers.values()], lastMac, lastCurrent,
+      lastSeen: finiteNumber(last?.last_seen), downstream: children.length > 0 }]
+  }).sort((a, b) => a.view.idx - b.view.idx)
+}
 
-  return (device.port_table ?? []).flatMap(port => {
-    const view = normalizePort(device, port)
-    if (!view) return []
-    return [{ ...view, poeSafety: safety(device, port), peer: peerFor(port, view.idx),
-      issues: [], baselineSpeedMbps: null, errorRatePct: null, flaps1h: 0 }]
-  }).sort((a, b) => a.idx - b.idx)
+export function buildPortViews(...args: Parameters<typeof readPorts>) {
+  return readPorts(...args).map(row => row.view)
 }

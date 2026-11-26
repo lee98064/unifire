@@ -125,7 +125,7 @@ export function createPoeSafety(graph: ReturnType<typeof createDeviceGraph>, cli
     // A child AP is safe to acknowledge only if it does not provide uplink to another adopted device.
     if (idx !== null && graph.descendants(device.mac, idx).some(peer => {
       const type = deviceType(peer)
-      return type === 'switch' || type === 'ap' && graph.downstream(peer.mac).length > 0
+      return type !== 'ap' || graph.downstream(peer.mac).length > 0
     })) {
       reasons.push('downstream_devices')
     }

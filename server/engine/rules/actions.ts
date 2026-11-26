@@ -77,7 +77,7 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
 
   return async (action: RuleActionT, rule: RuleT, event: RuleEvent, dryRun: boolean, explicitDryRun: boolean, signal: AbortSignal) => {
     const ctx: WriteContext = { actor: { type: 'rule', id: rule.id, name: rule.name }, dryRun }
-    if (action.type === 'poe.set' || action.type === 'client.kick') {
+    if (action.type === 'client.kick') {
       return { changed: false, ok: false, message: 'rule.result.not_implemented' }
     }
     const preview = explicitDryRun || dryRun && action.type !== 'notify' && action.type !== 'webhook' && action.type !== 'delay'
@@ -131,6 +131,10 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
         changed = false
         break
       }
+      case 'poe.set':
+        if (!effects.infra) throw new UnifiError('UNIFI_INACTIVE')
+        await effects.infra.poe.override({ ...action, action: 'set' }, ctx, 'rule')
+        break
       case 'poe.cycle':
         changed = (await watchdogs.cyclePort(action.switchMac, action.portIdx, ctx)).changed
         break

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as createSecureServer, type ServerOptions } from 'node:https'
 import { WebSocket, WebSocketServer } from 'ws'
-import { Doc, Route, Station, type WireDoc } from '../endpoints/schemas'
+import { Doc, Docs, Route, Station, type WireDoc } from '../endpoints/schemas'
 import { osPaths } from '../paths'
 import { createMockFleet } from './infra'
 import { buildFixtures, createRandom, DEMO_ROUTES, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
@@ -242,6 +242,23 @@ export async function startMockController(options: {
       if (readC) return json(res, classic(readC()))
       const readV = readV2.get(path)
       if (readV) return json(res, readV())
+      const deviceBase = paths.classic('stat/device') + '/'
+      if (path.startsWith(deviceBase)) {
+        const mac = decodeURIComponent(path.slice(deviceBase.length))
+        return json(res, classic(fleet.poll().filter(device => device.mac === mac)))
+      }
+    }
+
+    const deviceWriteBase = paths.classic('rest/device') + '/'
+    if (method === 'PUT' && path.startsWith(deviceWriteBase)) {
+      const id = decodeURIComponent(path.slice(deviceWriteBase.length))
+      const body = await readBody(req)
+      const device = fleet.setPortOverrides(id, Docs.parse(body.port_overrides))
+      if (!device) return failure(res, '404')
+      mutations++
+      rotate(res, session)
+      emit('device:sync', devices)
+      return json(res, classic([device]))
     }
 
     const routeBase = paths.v2('trafficroutes')

@@ -7,7 +7,7 @@ import { SetupStatus } from '../../shared/schemas/auth'
 import { GuestWifi, PoeWatchdog, Rule, RuleRun, WolTarget } from '../../shared/schemas/automation'
 import { ControllerStatus } from '../../shared/schemas/controller'
 import { Egress } from '../../shared/schemas/egress'
-import { InfraDevice, InfraDeviceDetail } from '../../shared/schemas/infra'
+import { InfraDevice, InfraDeviceDetail, PoeOverview, PoeQualification, PoeSchedule, PortDetail, PortEvent } from '../../shared/schemas/infra'
 import { IspReport, Snapshot, SpeedtestStatus, UsageReport } from '../../shared/schemas/insight'
 import { ManagedRoute, UnifiRoute } from '../../shared/schemas/routes'
 import { DashboardSummary, Settings } from '../../shared/schemas/system'
@@ -64,7 +64,9 @@ async function call(name: ApiName, options: {
   const ep = api[name]
   const row = { check: options.label ?? name, path: `${ep.method} ${ep.path}`, result: 'PASS' }
   try {
-    const body = options.body === undefined ? undefined : JSON.stringify(ep.input?.parse(options.body) ?? options.body)
+    const validated = options.body === undefined ? undefined : ep.input?.parse(options.body) ?? options.body
+    // Send the original patch so the server proves omitted fields keep their saved values.
+    const body = JSON.stringify(name === 'poeScheduleUpdate' ? options.body : validated)
     if (ep.method === 'GET' && ep.input) ep.input.parse(options.query ?? {})
     const response = await fetch(new URL(pathFor(name, options.params, options.query), origin), {
       method: ep.method,
@@ -150,6 +152,9 @@ async function run() {
   const month = monthAt(now)
   const options: Partial<Record<ApiName, Parameters<typeof call>[1]>> = {
     device: { params: deviceParams },
+    portDetail: { params: { mac: core.mac, idx: '8' }, query: { range: '24h' } },
+    portEvents: { query: { switchMac: core.mac, limit: '10' } },
+    energy: { query: { period: 'day' } },
     deviceSeries: { params: deviceParams, query: { range: '24h' } },
     deviceEvents: { params: deviceParams, query: { from: String(now - 86_400_000), to: String(now) } },
     egressHistory: { params: { id: egress.id }, query: { range: '24h' } },
@@ -171,7 +176,7 @@ async function run() {
     ispReport: { query: { month } },
     usageReport: { query: { range: '7d' } },
   }
-  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP(?:9|10|11)\b/.test(api[name].note ?? ''))
+  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP(?:10|11)\b/.test(api[name].note ?? ''))
   const readResults = await Promise.allSettled(allReads.map(name => get(name, options[name])))
   assert.ok(readResults.every(result => result.status === 'fulfilled'), 'One or more contract GETs failed')
   assert.equal(covered.size, allReads.length)
@@ -279,6 +284,46 @@ async function run() {
   assert.ok((await apDetail()).issues.some(issue => issue.kind === 'firmware_available'))
   await scenario('recover')
   await call('deviceRestart', { params: deviceParams, body: {} })
+
+  const filtered = { switchMac: core.mac, unacknowledged: 'true', limit: '1' }
+  const events = await call('portEvents', { query: filtered, label: 'WP9 first page' }) as { items: unknown[], nextCursor: string | null }
+  const event = PortEvent.parse(first(events.items, 'port health event'))
+  assert.ok(events.nextCursor, 'Expected more than one port event')
+  const next = await call('portEvents', { query: { ...filtered, cursor: events.nextCursor } }) as { items: unknown[] }
+  assert.notEqual(PortEvent.parse(first(next.items, 'second port event')).id, event.id)
+  const acked = PortEvent.parse(await call('portEventUpdate', { params: { id: event.id }, body: { acknowledged: true } }))
+  assert.equal(acked.acknowledged, true)
+  const ackAll = await call('portEventsAckAll', { body: { switchMac: core.mac } }) as { count: number }
+  assert.ok(ackAll.count > 0)
+  const drawer = PortDetail.parse(await call('portDetail', { params: { mac: core.mac, idx: String(link.portIdx) } }))
+  assert.ok(drawer.series.length > 0 && drawer.events.length > 0 && drawer.peers.length > 0)
+  await call('energy', { query: { period: 'month' } })
+  const poePort = { switchMac: core.mac, portIdx: 8 }
+  const testPort = { switchMac: core.mac, portIdx: 3 }
+  await call('controllerMode', { body: { mode: 'live' } })
+  const qualified = PoeQualification.parse(await call('poeQualify', { body: { ...testPort, confirm: true } }))
+  assert.equal(qualified.qualified, true)
+  const wall = new Date()
+  const hhmm = (offset: number) => new Date(wall.getTime() + offset * 60_000).toISOString().slice(11, 16)
+  const day = (new Date(wall.getTime() - 60_000).getUTCDay() + 6) % 7
+  const schedule = PoeSchedule.parse(await call('poeScheduleCreate', { body: {
+    ...poePort, name: 'WP9 contract schedule', timezone: 'UTC', acknowledgedAp: true, mode: 'preview',
+    offWindows: [{ days: [day], start: hhmm(-1), end: hhmm(5), enabled: true }],
+  } }))
+  assert.equal(schedule.state.status, 'preview')
+  const id = { id: schedule.id }
+  const active = PoeSchedule.parse(await call('poeScheduleUpdate', { params: id, body: { mode: 'active' } }))
+  assert.equal(active.acknowledgedAp, true)
+  assert.equal(active.timezone, 'UTC')
+  assert.equal(active.state.actual, 'off')
+  const poeOverridden = PoeOverview.parse(await call('poeOverride', { body: { ...poePort, action: 'set', on: true, minutes: 1 } }))
+  assert.equal(poeOverridden.schedules.find(row => row.id === schedule.id)?.state.actual, 'on')
+  await call('poeOverride', { body: { ...poePort, action: 'clear' } })
+  const resumed = PoeSchedule.parse(await call('poeScheduleResume', { params: id }))
+  assert.equal(resumed.state.actual, 'off')
+  await call('poeScheduleDelete', { params: id })
+  const restored = PoeOverview.parse(await call('poe', { label: 'WP9 restored power' }))
+  assert.equal(restored.switches.find(row => row.mac === core.mac)?.ports.find(port => port.idx === 8)?.poe?.mode, 'auto')
 
   await call('controllerMode', { body: { mode: 'dry-run' } })
   const locatePreview = InfraDevice.parse(await call('deviceLocate', { params: deviceParams, body: {} }))

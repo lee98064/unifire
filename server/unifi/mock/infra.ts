@@ -2,7 +2,8 @@ import { z } from 'zod'
 import capture from '../../../tests/fixtures/wire/infra-capture-11.0.104.json'
 import { createDeviceGraph, wiredAttachment } from '../../engine/infra/poe-safety'
 import { deviceState, finiteNumber, isGateway } from '../device-shape'
-import { Device, type WireDevice, type WireStation } from '../endpoints/schemas'
+import { poeCapable, portIndex } from '../poe-ports'
+import { Device, type WireDevice, type WireDoc, type WireStation } from '../endpoints/schemas'
 
 export const GATEWAY_MAC = '02:00:00:00:00:01'
 export const SWITCH_MAC = '02:00:00:00:00:03'
@@ -26,6 +27,20 @@ export function buildMockDevices() {
   }))
   const byMac = new Map(devices.map(device => [device.mac, device]))
   for (const device of devices) {
+    const names = new Map<number, string>()
+    let sfp = 0
+    for (const row of device.port_table ?? []) {
+      const idx = portIndex(row.port_idx)
+      if (idx === null) continue
+      const friendly = device.mac === SWITCH_MAC ? ({ 8: 'Study AP', 9: 'Desk', 11: 'Garage camera', 13: 'Living room AP' } as Record<number, string>)[idx] : undefined
+      const name = friendly ?? (String(row.media).includes('SFP') ? `SFP+ ${++sfp}` : `Port ${idx}`)
+      names.set(idx, name)
+      row.name = name
+    }
+    for (const row of device.port_overrides ?? []) {
+      const name = names.get(portIndex(row.port_idx) ?? -1)
+      if (name) row.name = name
+    }
     const upstream = device.uplink?.uplink_mac && byMac.get(device.uplink.uplink_mac)
     if (device.uplink && upstream) device.uplink.uplink_device_name = upstream.name
   }
@@ -37,6 +52,19 @@ export function buildMockDevices() {
     wan3: { ...gateway.wan3, up: true, public_ip: '198.51.100.13', 'rx_bytes-r': 2_000, 'tx_bytes-r': 420 },
     'rx_bytes-r': 128_000, 'tx_bytes-r': 38_420,
   })
+  // Keep the living-room AP's mesh branch and provide a separate leaf AP for PoE schedules.
+  const core = byMac.get(SWITCH_MAC)!
+  const desk = byMac.get(DESK_MAC)!
+  const study = byMac.get(AP2)!
+  Object.assign(study.uplink!, { uplink_mac: SWITCH_MAC, uplink_remote_port: 8, uplink_device_name: core.name, speed: 1000 })
+  Object.assign(core.port_table!.find(row => row.port_idx === 8)!, {
+    up: true, speed: 1000, poe_mode: 'auto', poe_power: '5.00', mac_table_count: 1,
+    last_connection: { connected: true, mac: AP2 },
+  })
+  core.port_overrides = core.port_overrides?.filter(row => row.port_idx !== 8)
+  core.downlink_table = [...core.downlink_table ?? [], { mac: AP2, port_idx: 8, speed: 1000, full_duplex: true }]
+  desk.downlink_table = desk.downlink_table?.filter(row => row.mac !== AP2)
+  Object.assign(desk.port_table!.find(row => row.port_idx === 4)!, { up: false, speed: 0, last_connection: null, mac_table_count: 0 })
   return [...devices, Device.parse({
     mac: MESH_MAC, _id: 'demo-infra-mesh', name: 'AP Garden', model_name: 'U6 Mesh', model: 'U6M',
     type: 'uap', adopted: true, state: 1, version: '6.7.31', ip: '192.0.2.80',
@@ -53,7 +81,7 @@ export function buildMockDevices() {
 
 export const MockScenario = z.enum([
   'reboot-ap', 'offline-switch', 'recover', 'downgrade-port', 'port-errors',
-  'flap-port', 'roam', 'overheat', 'firmware-available',
+  'flap-port', 'new-device', 'roam', 'overheat', 'firmware-available',
 ])
 type Scenario = z.infer<typeof MockScenario>
 type MockStation = WireStation & { online: boolean }
@@ -71,6 +99,9 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
   const clientPort = port(9)
   const baselinePort = () => baseline.get(SWITCH_MAC)!.port_table!.find(row => row.port_idx === 9)!
   const offline = new Set<string>()
+  const powered = new Map<string, number>()
+  let newDevices = 0
+  const initializing = (mac: string) => (powered.get(mac) ?? 0) > now()
   let hot = false
   let errors = false
 
@@ -86,7 +117,7 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
 
   function activeClient(client: MockStation) {
     const attached = client.sw_mac ?? client.ap_mac
-    return client.online && (!attached || !offline.has(attached))
+    return client.online && (!attached || !offline.has(attached) && !initializing(attached))
   }
 
   function reboot(macs: readonly string[]) {
@@ -107,6 +138,14 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
 
   function poll() {
     const at = now()
+    for (const [mac, readyAt] of powered) {
+      const device = graph.byMac.get(mac)!
+      if (readyAt <= at) {
+        reboot([mac])
+        powered.delete(mac)
+        device.state = 1
+      } else device.state = 0
+    }
     if (errors) addErrors()
     const active = [...clients.values()].filter(activeClient)
     const jitter = (value: unknown, scale: number) => {
@@ -114,7 +153,7 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
       return base === null ? null : Math.max(0, base + (random() - 0.5) * scale)
     }
     for (const device of devices) {
-      if (offline.has(device.mac)) continue
+      if (offline.has(device.mac) || initializing(device.mac)) continue
       const original = baseline.get(device.mac)!
       device.uptime = Math.max(0, Math.floor((at - boot.get(device.mac)!) / 1000))
       device.last_seen = Math.floor(at / 1000)
@@ -159,6 +198,34 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
     return devices.filter(device => !offline.has(device.mac))
   }
 
+  function setPortOverrides(id: string, entries: WireDoc[]) {
+    const device = devices.find(row => row._id === id)
+    if (!device) return
+    device.port_overrides = entries
+    for (const row of device.port_table ?? []) {
+      const idx = portIndex(row.port_idx)
+      if (idx === null || !poeCapable(row)) continue
+      const original = baseline.get(device.mac)?.port_table?.find(port => portIndex(port.port_idx) === idx)
+      const originalOverride = baseline.get(device.mac)?.port_overrides?.find(port => portIndex(port.port_idx) === idx)
+      const target = entries.find(entry => portIndex(entry.port_idx) === idx)?.poe_mode
+        ?? (originalOverride ? 'auto' : original?.poe_mode) ?? 'auto'
+      const wasOff = row.poe_mode === 'off'
+      row.poe_mode = target
+      if (wasOff === (target === 'off')) continue
+      const children = graph.descendants(device.mac, idx)
+      if (!children.length) continue
+      row.up = target !== 'off' && original?.up === true
+      row.speed = row.up ? original?.speed : 0
+      if (target === 'off') row.poe_power = '0.00'
+      for (const child of children) {
+        powered.set(child.mac, target === 'off' ? Infinity : now() + 60_000)
+        child.state = 0
+      }
+    }
+    return device
+
+  }
+
   function scenario(kind: Scenario) {
     switch (kind) {
       case 'reboot-ap':
@@ -178,6 +245,9 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
         for (const key of ['speed', 'up', 'rx_errors', 'tx_errors', 'rx_packets', 'tx_packets', 'link_down_count']) {
           clientPort[key] = baselinePort()[key]
         }
+        const spare = port(7)
+        const initial = baseline.get(SWITCH_MAC)!.port_table!.find(row => row.port_idx === 7)!
+        for (const key of ['up', 'speed', 'mac_table_count', 'last_connection']) spare[key] = initial[key]
         ap.general_temperature = baseline.get(AP1)?.general_temperature
         ap.upgradable = baseline.get(AP1)?.upgradable
         ap.upgrade_to_firmware = baseline.get(AP1)?.upgrade_to_firmware
@@ -194,6 +264,13 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
         clientPort.up = !clientPort.up
         clientPort.link_down_count = (finiteNumber(clientPort.link_down_count) ?? 0) + 5
         return { mac: SWITCH_MAC, portIdx: 9, up: clientPort.up, linkDownCount: clientPort.link_down_count }
+      case 'new-device': {
+        const row = port(7)
+        const suffix = (++newDevices % 65_536).toString(16).padStart(4, '0').match(/../g)!.join(':')
+        const mac = '02:00:00:90:' + suffix
+        Object.assign(row, { up: true, speed: 1000, mac_table_count: 1, last_connection: { connected: true, mac } })
+        return { switchMac: SWITCH_MAC, portIdx: 7, mac }
+      }
       case 'roam': {
         const from = phone.ap_mac
         phone.ap_mac = from === AP2 ? AP1 : AP2
@@ -213,5 +290,5 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
     }
   }
 
-  return { devices, activeClient, reboot, poll, scenario, graph }
+  return { devices, activeClient, reboot, poll, scenario, graph, setPortOverrides }
 }

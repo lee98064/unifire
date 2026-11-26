@@ -2,6 +2,7 @@ import { and, avg, count, desc, eq, gte, lt, lte, sql } from 'drizzle-orm'
 import { DeviceEvents, DeviceSeries, type SeriesRangeT } from '#shared/schemas/infra'
 import type { Db } from '../../db'
 import { deviceRollupsHourly, deviceSamples, deviceTransitions, firmwareHistory, infraDevices } from '../../db/schema'
+import { portEventHistory } from './port-history'
 import { DAY, HOUR, MINUTE } from '../access-time'
 
 const rollupBucket = sql<number>`cast(${deviceSamples.ts} / ${HOUR} as integer) * ${HOUR}`
@@ -86,6 +87,7 @@ export function deviceEvents(db: Db, mac: string, from?: number, to?: number, li
   const firmware = db.select().from(firmwareHistory).where(and(eq(firmwareHistory.mac, mac),
     from === undefined ? undefined : gte(firmwareHistory.ts, from), to === undefined ? undefined : lte(firmwareHistory.ts, to)))
     .orderBy(desc(firmwareHistory.ts), desc(firmwareHistory.id))
+  const scope = db.select({ scope: infraDevices.scope }).from(infraDevices).where(eq(infraDevices.mac, mac)).get()?.scope ?? ''
   return DeviceEvents.parse({ transitions: (limit ? transitions.limit(limit) : transitions).all(),
-    firmware: (limit ? firmware.limit(limit) : firmware).all(), portEvents: [] })
+    firmware: (limit ? firmware.limit(limit) : firmware).all(), portEvents: portEventHistory(db, scope, mac, undefined, from, to, limit) })
 }

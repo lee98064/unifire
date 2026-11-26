@@ -115,6 +115,9 @@ export function summary(resource: SnapshotResourceT, label: string, kind: DiffCh
       }
     }
   }
+  if (resource === 'devices' && kind === 'modified' && fields.some(field => /^port_overrides(?:$|\[)/.test(field.path))) {
+    return { summaryKey: 'diff.device.port_overrides', summaryParams: { device: label } }
+  }
   const egress = fields.find(field => field.path === 'network_id')
   const toggle = fields.find(field => field.path === 'enabled')
   const password = fields.some(field => /pass|psk/i.test(field.path) && field.secret)

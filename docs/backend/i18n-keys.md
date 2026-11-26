@@ -279,3 +279,42 @@ Rule notifications use the administrator-provided templates. The test action use
 | `rule.result.not_implemented` | A rule uses a trigger, condition, or action from a later work package. | None |
 | `notification.device_firmware.title` | Title for an available device firmware update. | `device`, `version`, `mac` |
 | `notification.device_firmware.body` | Details for an available device firmware update. | `device`, `version`, `mac` |
+
+## WP9 — port health, PoE schedules and energy
+
+| Key | Meaning | Params |
+| --- | --- | --- |
+| `port.event.downgrade` | A port negotiated below its baseline for the same peer. | `switch`, `port`, `from`, `to`, `peer`, `rate`, `flaps` |
+| `port.event.recovered` | A downgraded link returned to its baseline. | Same as downgrade |
+| `port.event.errors` | A port exceeded the hourly error threshold. | Same as downgrade |
+| `port.event.flapping` | A port exceeded the hourly link-down threshold. | Same as downgrade |
+| `port.event.new_device` | An unapproved peer appeared on this port. | Same as downgrade |
+| `port.event.peer_changed` | An approved peer appeared on this port for the first time. | Same as downgrade |
+| `infra.issue.port_issue` | A device has active port issues. | `count` |
+| `poe.reason.port_missing` | The controller did not report the target PoE port or its mode. | — |
+| `poe.reason.not_poe` | This port does not provide PoE. | — |
+| `poe.reason.uplink` | This port is an uplink. | — |
+| `poe.reason.downstream_devices` | Adopted devices depend on the port. | — |
+| `poe.reason.unifire_host` | The Unifire host depends on the port. | — |
+| `poe.reason.gateway_path` | The port is on the route to the gateway. | — |
+| `poe.reason.ack_required` | Confirm that powering down the attached AP is intended. | — |
+| `poe.reason.externally_off` | UniFi already had PoE disabled on this port. | — |
+| `poe.reason.unqualified` | PoE writes require qualification on this Network version. | — |
+| `poe.reason.drift` | The port was enabled in UniFi while Unifire held it off. | `name`, `switch`, `port` in audit and notifications |
+| `poe.reason.blocked` | A PoE schedule is blocked by a safety check. | `name`, `switch`, `port`, `reason` in audit and notifications |
+| `poe.reason.error` | A PoE operation failed. | `error` when available, `name`, `switch`, `port` in audit and notifications |
+| `notification.port_issue.title`, `notification.port_issue.body` | Port health notification. | `switch`, `port`, `kind`, `description` (localized event), plus event params |
+| `notification.poe_schedule.drift.title`, `notification.poe_schedule.drift.body` | A schedule or override yielded to a UniFi change. | `name`, `switch`, `port`, `reason` |
+| `notification.poe_schedule.blocked.title`, `notification.poe_schedule.blocked.body` | A safety condition blocks a schedule. | `name`, `switch`, `port`, `reason` |
+| `notification.poe_schedule.error.title`, `notification.poe_schedule.error.body` | PoE reconciliation failed. | `name`, `switch`, `port`, `reason`, `error` when available |
+| `diff.device.port_overrides` | The device's port override array changed. | `device` |
+| `errors.poeNotOwned` | The requested action requires a port currently held by Unifire. | — |
+| `errors.poeUnsafe` | The requested power-off failed safety checks. | — |
+| `errors.poeAckRequired` | The AP power-off acknowledgement is required. | — |
+| `errors.poeNotQualified` | The current Network version lacks PoE write qualification. | — |
+| `errors.poeHeld` | A Unifire hold or boot grace period prevents a watchdog cycle. | — |
+| `errors.poePortNotFound` | The controller did not report this port. | — |
+| `errors.poeScheduleNotFound` | This PoE schedule does not exist. | — |
+| `errors.poeScheduleExists` | The port already has a PoE schedule. | — |
+| `errors.portEventNotFound` | This port event does not exist. | — |
+| `errors.dryRun` | This operation needs live mode to complete safely. | — |

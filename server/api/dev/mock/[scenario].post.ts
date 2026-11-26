@@ -18,6 +18,6 @@ export default adminControllerHandler(async event => {
   const result = apply(parsed.data)
   await Promise.all([cache.refreshAfterCurrent('devices'), cache.refreshAfterCurrent('activeClients')])
   // Missing devices are confirmed after two successful polls.
-  if (parsed.data === 'offline-switch') await cache.refresh('devices')
+  if (parsed.data === 'offline-switch' || parsed.data === 'downgrade-port') await cache.refresh('devices')
   return { ok: true, scenario: parsed.data, result }
 })

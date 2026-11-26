@@ -12,6 +12,12 @@ import { MINUTE } from '../access-time'
 import { deviceEvents, deviceSeries } from './device-history'
 import { createDeviceSampler } from './device-sampler'
 import { infraDeviceDetail, listInfraDevices } from './device-views'
+import { energyReport, observePortEnergy } from './energy'
+import { createPortHealth } from './port-health'
+import { ackPortEvents, listPortEvents, portDetail, updatePortEvent } from './port-history'
+import { createPoe } from './poe'
+import { finiteNumber } from '../../unifi/device-shape'
+import type { EnergyQuery, PortEventQuery } from '#shared/schemas/infra'
 
 export function createInfra(db: Db, service: ControllerService, options: { now?: () => number, bus?: typeof liveBus } = {}) {
   const now = options.now ?? Date.now
@@ -46,13 +52,25 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
     }
   }
 
+  const poe = createPoe(db, service, now, bus)
+  const health = createPortHealth(db, service, bus)
   const sampler = createDeviceSampler(db, { emit: event => service.engine.emit('event', event), changed })
   let lastPoll: { at: number } | null = null
   function sample() {
     const runtime = service.runtime
     const poll = runtime?.cache.devicePoll()
     if (!runtime?.active() || !poll || poll === lastPoll) return
-    sampler.sample(runtime.cache.snapshot().devices, runtime.config.site, runtime.scope, poll.at, runtime.ledger.explainsDeviceReboot)
+    const snapshot = runtime.cache.snapshot()
+    health.sample(snapshot.devices, snapshot.activeClients, runtime.scope, poll.at, observePortEnergy)
+    sampler.sample(snapshot.devices, runtime.config.site, runtime.scope, poll.at, runtime.ledger.explainsDeviceReboot)
+    for (const device of snapshot.devices) {
+      if (device.adopted === false || device.state === 0 || device.state === 6) continue
+      const used = finiteNumber(device.total_used_power)
+      const max = finiteNumber(device.total_max_power)
+      if (used !== null && used >= 0 && max !== null && max > 0) {
+        service.engine.emit('event', { type: 'poe.reading', switchMac: device.mac, percent: 100 * used / max })
+      }
+    }
     lastPoll = poll
   }
 
@@ -136,7 +154,19 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
     if (event.type === 'controller.mode' || event.type === 'controller.reconnected') void expire().catch(() => {})
   }
 
+  const scope = () => service.runtime?.scope ?? ''
   return {
+    poe,
+    energy: ({ period, at }: z.output<typeof EnergyQuery>) => energyReport(db, service, period, at ?? now(), now()),
+    portEvents: (query: z.output<typeof PortEventQuery>) => listPortEvents(db, scope(), query),
+    ackPortEvents: (mac?: string) => ackPortEvents(db, scope(), mac),
+    updatePortEvent: (id: string, ack: boolean) => updatePortEvent(db, scope(), id, ack),
+    portDetail(mac: string, idx: number, range: SeriesRangeT) {
+      const at = now()
+      const port = infraDeviceDetail(db, service, mac, at).ports.find(port => port.idx === idx)
+      if (!port) throw new UnifiError('POE_PORT_NOT_FOUND', 404)
+      return portDetail(db, { scope: scope(), switchMac: mac, portIdx: idx }, port, range, at)
+    },
     list: () => listInfraDevices(db, service, now()),
     get(mac: string) {
       const view = listInfraDevices(db, service, now(), mac)[0]
@@ -164,13 +194,14 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
       active = hasLease
       service.engine.on('event', onEvent)
       sample()
+      const stopPoe = poe.start(hasLease)
       void expire().catch(() => {})
       return async () => {
         stop = true
         service.engine.off('event', onEvent)
         clearTimeout(pushTimer)
         clearTimeout(locateTimer)
-        await Promise.allSettled([...operations, expiry])
+        await Promise.allSettled([...operations, expiry, stopPoe()])
       }
     },
   }

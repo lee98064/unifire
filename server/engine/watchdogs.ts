@@ -1,3 +1,6 @@
+import { poeGrace } from '../db/schema'
+import { portKey } from './infra/port-history'
+import { heldPort } from './infra/poe-state'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { connect, isIP } from 'node:net'
@@ -133,11 +136,20 @@ export function createWatchdogs(db: Db, service: ControllerService, notify: (eve
     db.update(poeWatchdogs).set({ state: next }).where(eq(poeWatchdogs.id, id)).run()
   }
 
+  function poeHold(switchMac: string, portIdx: number) {
+    const scope = service.runtime?.scope
+    if (!scope) return false
+    const key = { scope, switchMac, portIdx }
+    const grace = db.select().from(poeGrace).where(portKey(poeGrace, key)).get()
+    return !!heldPort(db, key) || (grace?.until ?? 0) > now()
+  }
+
   async function command(switchMac: string, portIdx: number, ctx: WriteContext) {
-    return runtime().writes.deviceAction({ cmd: 'power-cycle', mac: switchMac, port_idx: portIdx }, ctx)
+    return runtime().writes.deviceAction({ cmd: 'power-cycle', mac: switchMac, port_idx: portIdx }, ctx, false, () => !poeHold(switchMac, portIdx))
   }
 
   async function cycle(row: ReturnType<typeof get>, ctx: WriteContext, at: number, next: State) {
+    if (poeHold(row.switchMac, row.portIdx)) throw new UnifiError('POE_HELD', 409)
     if (next.cyclesToday >= row.maxCyclesPerDay) {
       if (next.status !== 'limit') record(row.id, 'limit', at)
       state(row.id, { ...next, status: row.enabled ? 'limit' : 'disabled' })
@@ -184,7 +196,7 @@ export function createWatchdogs(db: Db, service: ControllerService, notify: (eve
     if (pending.has(id)) return Promise.resolve()
     return serialize(id, async () => {
       const row = get(id)
-      if (!row.enabled) return
+      if (!row.enabled || poeHold(row.switchMac, row.portIdx)) return
       const at = now()
       const next = dayState(row.state, at)
       let latency: number | null
@@ -195,7 +207,7 @@ export function createWatchdogs(db: Db, service: ControllerService, notify: (eve
         record(id, 'error', at)
         return
       }
-      if (leased?.() === false) return
+      if (leased?.() === false || poeHold(row.switchMac, row.portIdx)) return
       next.lastCheckAt = at
       next.lastLatencyMs = latency
       if (latency !== null) {
@@ -226,7 +238,7 @@ export function createWatchdogs(db: Db, service: ControllerService, notify: (eve
   }
 
   return {
-    ports, check,
+    ports, check, poeHold,
     list: () => db.select().from(poeWatchdogs).orderBy(poeWatchdogs.name, poeWatchdogs.id).all().map(view),
     create: (input: Input) => save(randomUUID(), input),
     update: (id: string, input: Partial<Input>) => serialize(id, () => {

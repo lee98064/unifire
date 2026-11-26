@@ -126,7 +126,7 @@ async function override(on: boolean, minutes: number | null) {
         </div>
 
         <UAlert v-for="r in blockingReasons" :key="r" color="error" variant="subtle" icon="i-lucide-shield-x" :title="t(`poe.safety.${r}`)" :description="t(`poe.safetyDesc.${r}`)" />
-        <div v-if="needsAck" class="rounded-lg ring-1 ring-warning/40 bg-warning/8 p-3 space-y-2">
+        <div v-if="needsAck && !blockingReasons.length" class="rounded-lg ring-1 ring-warning/40 bg-warning/8 p-3 space-y-2">
           <div class="flex items-start gap-2 text-[13px] text-highlighted"><UIcon name="i-lucide-wifi-off" class="size-4 text-warning mt-0.5 shrink-0" />{{ t('poe.apWarning') }}</div>
           <UCheckbox v-model="form.acknowledgedAp" :label="t('poe.apAck')" />
         </div>

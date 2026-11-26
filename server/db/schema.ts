@@ -1,3 +1,5 @@
+import type { z } from 'zod'
+import type { PoeScheduleInput, PoeScheduleStatus, PortEvent } from '#shared/schemas/infra'
 import { sql } from 'drizzle-orm'
 import { blob, check, index, integer, primaryKey, real, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { LocaleT, RoleT } from '#shared/schemas/auth'
@@ -621,3 +623,148 @@ export const firmwareHistory = sqliteTable('firmware_history', {
   from: text('from_version'),
   to: text('to_version').notNull(),
 }, t => [index('firmware_history_mac_ts').on(t.mac, t.ts)])
+
+const infraPort = () => ({
+  scope: text('scope').notNull(),
+  switchMac: text('switch_mac').notNull(),
+  portIdx: integer('port_idx').notNull(),
+})
+
+export type PortCounters = Record<'rx_errors' | 'tx_errors' | 'rx_dropped' | 'tx_dropped' | 'rx_packets' | 'tx_packets' | 'link_down_count', number | null>
+
+export const portState = sqliteTable('port_state', {
+  ...infraPort(),
+  firstSeen: integer('first_seen').notNull(),
+  at: integer('at').notNull(),
+  up: integer('up', { mode: 'boolean' }).notNull(),
+  speed: real('speed'),
+  duplex: integer('duplex', { mode: 'boolean' }),
+  peerMac: text('peer_mac'),
+  peerKind: text('peer_kind'),
+  speeds: text('speeds', { mode: 'json' }).$type<{ at: number, speed: number }[]>().notNull(),
+  baselineSpeed: real('baseline_speed'),
+  below: integer('below').notNull(),
+  downgraded: integer('downgraded', { mode: 'boolean' }).notNull(),
+  counters: text('counters', { mode: 'json' }).$type<PortCounters>().notNull(),
+  errorAt: integer('error_at'),
+  flapAt: integer('flap_at'),
+  lastDrop: integer('last_drop'),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
+
+export const portPeers = sqliteTable('port_peers', {
+  ...infraPort(),
+  mac: text('mac').notNull(),
+  name: text('name'),
+  firstSeen: integer('first_seen').notNull(),
+  lastSeen: integer('last_seen').notNull(),
+  maxSpeed: real('max_speed'),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.mac] })])
+
+export const portDeltas = sqliteTable('port_deltas', {
+  ...infraPort(),
+  ts: integer('ts').notNull(),
+  errors: real('errors'),
+  packets: real('packets'),
+  flaps: integer('flaps').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.ts] }), index('port_deltas_ts').on(t.ts)])
+
+const portBucket = () => ({
+  ...infraPort(),
+  ts: integer('ts').notNull(),
+  observed: integer('observed').notNull(),
+  up: integer('up').notNull(),
+  speed: real('speed'),
+  rx: real('rx'),
+  rxCount: integer('rx_count').notNull(),
+  tx: real('tx'),
+  txCount: integer('tx_count').notNull(),
+  errors: real('errors'),
+  drops: real('drops'),
+  poe: real('poe'),
+  poeCount: integer('poe_count').notNull(),
+  onW: real('on_w'),
+  onCount: integer('on_count').notNull(),
+})
+
+export const portSamples = sqliteTable('port_samples', portBucket(),
+  t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.ts] }), index('port_samples_ts').on(t.ts)])
+export const portRollups = sqliteTable('port_rollups_hourly', portBucket(),
+  t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.ts] }), index('port_rollups_ts').on(t.ts)])
+
+export const portEvents = sqliteTable('port_events', {
+  ...infraPort(),
+  id: text('id').primaryKey(),
+  ts: integer('ts').notNull(),
+  switchName: text('switch_name').notNull(),
+  portName: text('port_name'),
+  kind: text('kind').$type<z.output<typeof PortEvent>['kind']>().notNull(),
+  severity: text('severity').$type<z.output<typeof PortEvent>['severity']>().notNull(),
+  messageKey: text('message_key').notNull(),
+  messageParams: text('message_params', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+  data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  acknowledged: integer('acknowledged', { mode: 'boolean' }).notNull().default(false),
+}, t => [index('port_events_scope_ts').on(t.scope, t.ts, t.id), index('port_events_port_ts').on(t.scope, t.switchMac, t.portIdx, t.ts)])
+
+export const poeSchedules = sqliteTable('poe_schedules', {
+  ...infraPort(),
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  offWindows: text('off_windows', { mode: 'json' }).$type<z.output<typeof PoeScheduleInput>['offWindows']>().notNull(),
+  timezone: text('timezone').notNull(),
+  mode: text('mode').$type<'preview' | 'active'>().notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+  acknowledgedAp: integer('acknowledged_ap', { mode: 'boolean' }).notNull(),
+  status: text('status').$type<z.output<typeof PoeScheduleStatus>>().notNull(),
+  reasonKey: text('reason_key'),
+  reasonParams: text('reason_params', { mode: 'json' }).$type<Record<string, string>>().notNull(),
+  lastAppliedAt: integer('last_applied_at'),
+  createdAt: integer('created_at').notNull(),
+}, t => [unique().on(t.scope, t.switchMac, t.portIdx)])
+
+export const poeOverrides = sqliteTable('poe_overrides', {
+  ...infraPort(),
+  on: integer('is_on', { mode: 'boolean' }).notNull(),
+  endsAt: integer('ends_at'),
+  source: text('source').$type<'manual' | 'rule'>().notNull(),
+  ruleId: text('rule_id'),
+  acknowledgedAp: integer('acknowledged_ap', { mode: 'boolean' }).notNull(),
+  createdAt: integer('created_at').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
+
+export const poeApplied = sqliteTable('poe_applied', {
+  ...infraPort(),
+  previousMode: text('previous_mode').notNull(),
+  createdEntry: integer('created_entry', { mode: 'boolean' }).notNull(),
+  at: integer('at').notNull(),
+  scheduleId: text('schedule_id'),
+  source: text('source').$type<'schedule' | 'manual' | 'rule' | 'qualification' | 'snapshot'>().notNull(),
+  phase: text('phase').$type<'applying' | 'held' | 'restoring'>().notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
+
+export const poeGrace = sqliteTable('poe_grace', {
+  ...infraPort(),
+  until: integer('until').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
+
+export const poeOffLog = sqliteTable('poe_off_log', {
+  ...infraPort(),
+  start: integer('start').notNull(),
+  end: integer('end'),
+  scheduleId: text('schedule_id').notNull(),
+  scheduleName: text('schedule_name').notNull(),
+  avgW: real('avg_w'),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.start] }), index('poe_off_log_period').on(t.scope, t.start)])
+
+export const energyHourly = sqliteTable('energy_hourly', {
+  ...infraPort(),
+  hourTs: integer('hour_ts').notNull(),
+  wh: real('wh').notNull(),
+  sampledMs: integer('sampled_ms').notNull(),
+  peerName: text('peer_name'),
+  portName: text('port_name'),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx, t.hourTs] }), index('energy_hourly_period').on(t.scope, t.hourTs)])
+
+export const energyLast = sqliteTable('energy_last', {
+  ...infraPort(),
+  at: integer('at').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])

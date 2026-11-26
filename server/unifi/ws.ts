@@ -3,6 +3,7 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import WebSocket from 'ws'
 import { z } from 'zod'
+import type { PortEvent } from '#shared/schemas/infra'
 import type { SnapshotResourceT } from '#shared/schemas/insight'
 import type { UnifiTransport } from './client'
 import { Doc, MacAddress, type WireDoc } from './endpoints/schemas'
@@ -18,6 +19,10 @@ export type InfraEvent =
 
 export type ControllerEvent =
   | InfraEvent
+  | { type: 'port.issue', switchMac: string, portIdx: number, kind: z.output<typeof PortEvent>['kind'], eventId: string }
+  | { type: 'poe.reading', switchMac: string, percent: number }
+  | { type: 'notification', event: 'port_issue' | 'poe_schedule', switchMac: string, portIdx: number,
+    kind: string, [field: string]: unknown }
   | { type: 'client.connected' | 'client.disconnected' | 'client.roam', mac: string, data: WireDoc, source?: 'poll' }
   | { type: 'client.updated' | 'device.updated' | 'user.updated', mac: string | null, data: WireDoc }
   | { type: 'controller.event', key: string, data: WireDoc }
