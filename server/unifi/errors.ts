@@ -32,6 +32,7 @@ export function unifiStatusKey(code: string | null) {
     UNIFI_VERIFY_FAILED: 'controllerError.verifyFailed',
     UNIFI_ROUTE_DRIFT: 'errors.unifiRouteDrift',
     ROUTE_NOT_OWNED: 'errors.routeNotOwned',
+    UNIFI_QUALIFICATION_REQUIRED: 'errors.unifiQualificationRequired',
   }
   return keys[code] ?? 'errors.unifiRequestFailed'
 }

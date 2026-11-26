@@ -391,6 +391,8 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   }
 
   return {
+    /** False until the live scratch-route check passed for this controller (always true when not gated). */
+    qualified: () => options.qualified?.() !== false,
     restore: <T>(ctx: WriteContext, work: (mutate: (step: RestoreMutation) => Promise<WriteResult>) => Promise<T>) =>
       queue(() => {
         if (!options.active()) throw new UnifiError('UNIFI_INACTIVE')

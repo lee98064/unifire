@@ -107,6 +107,13 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
       if (!repair && (!status.connected || status.mode !== 'live')) return overview()
       const rows = exits(run)
       if (!rows.some(row => row.probeEnabled && row.enabled || row.probeRouteScope === run.scope && row.probeRouteId)) return overview()
+      // Live writes are refused until the write check passed: say so once per egress instead of
+      // attempting (and auditing a failed write) on every 30-second reconcile.
+      if (status.mode === 'live' && !run.writes.qualified()) {
+        for (const row of rows) if (row.enabled && row.probeEnabled) errors.set(row.id, 'errors.unifiQualificationRequired')
+        if (repair) throw new UnifiError('UNIFI_QUALIFICATION_REQUIRED', 409)
+        return overview()
+      }
       const docs = await run.api.routes()
       if (!run.active()) throw new UnifiError('UNIFI_INACTIVE')
       const mac = status.selfMac

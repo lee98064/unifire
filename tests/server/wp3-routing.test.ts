@@ -267,6 +267,21 @@ describe('WP3 with fake UniFi', () => {
     expect(next.items[0]!.id).not.toBe(first.items[0]!.id)
   })
 
+  it('does not attempt probe writes until the live write check passed', async () => {
+    const probes = createProbeRoutes(database.db, service)
+    await service.setMode('live', ctx)
+    const writes = service.runtime!.writes
+    vi.spyOn(writes, 'qualified').mockReturnValue(false)
+    const create = vi.spyOn(writes, 'createRoute')
+    const overview = await probes.provision(ctx, false)
+    expect(create).not.toHaveBeenCalled()
+    const pending = overview.routes.filter(row => row.state !== 'disabled')
+    expect(pending.length).toBeGreaterThan(0)
+    expect(pending.every(row => row.detail === 'errors.unifiQualificationRequired')).toBe(true)
+    await expect(probes.provision(ctx, true)).rejects.toMatchObject({ code: 'UNIFI_QUALIFICATION_REQUIRED' })
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('provisions probes with unique stable IPs, repairs drift, and stores health and incident history', async () => {
     const db = database.db
     const probes = createProbeRoutes(db, service)
