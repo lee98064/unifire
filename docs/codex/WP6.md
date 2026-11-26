@@ -85,3 +85,10 @@ hooks — implement the real notifier behind those hooks now.
   surface it (audit warning `audit.quota.routeOverlap` {person, route}); do not create a second route for a
   MAC that a managed route already targets — instead apply the quota egress as a route override on that
   managed route (reason `rule`, until the quota resets).
+
+## Hard rule for this package: no real outbound notifications
+- Never send a real HTTP request to Telegram, Discord, ntfy, any webhook URL or a Web Push endpoint while
+  developing or testing. Tests and smoke scripts must use an in-process fake HTTP server (or inject a
+  transport) and assert on the captured requests. Do not create bots, tokens or VAPID subscriptions against
+  real services; generate VAPID keys locally only.
+- Mock mode must never start Telegram long-polling against the real API.
