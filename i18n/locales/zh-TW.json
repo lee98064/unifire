@@ -654,7 +654,20 @@
       "block": "已封鎖",
       "unblock": "已解除封鎖",
       "kick": "已踢除"
-    }
+    },
+    "assign": "指派",
+    "assignTo": "指派給…",
+    "unassign": "取消指派",
+    "searchPerson": "搜尋或輸入新名字",
+    "selectedN": "已選 {n} 台",
+    "clearSelection": "清除選取",
+    "selectAll": "全選",
+    "selectRow": "選取這台裝置",
+    "assigned": "已指派給 {name}",
+    "unassigned": "已取消指派",
+    "assignedN": "已將 {n} 台裝置指派給 {name}",
+    "unassignedN": "已取消 {n} 台裝置的指派",
+    "personCreated": "已新增人員 {name}"
   },
   "people": {
     "desc": "把裝置歸給家人，就能以「人」為單位暫停上網、設定睡覺時間與配額。",

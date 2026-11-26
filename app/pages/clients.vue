@@ -3,7 +3,9 @@ import type { ClientT, ClientUsageT } from '#shared/schemas/access'
 import type { TableColumn } from '@nuxt/ui'
 import type { EChartsOption } from 'echarts'
 
+const UCheckbox = resolveComponent('UCheckbox')
 const { t } = useI18n()
+const toast = useToast()
 const fmt = useFormat()
 const api = useApi()
 const route = useRoute()
@@ -35,7 +37,27 @@ const counts = computed(() => ({
   unassigned: clients.value.filter(c => !c.personId).length,
 }))
 
+/* selection for bulk assignment (keyed by MAC; cleared when the visible set changes) */
+const rowSelection = ref<Record<string, boolean>>({})
+const selectedMacs = computed(() => rows.value.filter(c => rowSelection.value[c.mac]).map(c => c.mac))
+watch([filter, personFilter, q], () => { rowSelection.value = {} })
+const stop = (e: Event) => e.stopPropagation()
+
 const columns: TableColumn<ClientT>[] = [
+  {
+    id: 'select',
+    header: ({ table }) => h(UCheckbox, {
+      'modelValue': table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected(),
+      'onUpdate:modelValue': (v: boolean | 'indeterminate') => table.toggleAllPageRowsSelected(!!v),
+      'aria-label': t('clients.selectAll'),
+    }),
+    cell: ({ row }) => h('div', { onClick: stop }, h(UCheckbox, {
+      'modelValue': row.getIsSelected(),
+      'onUpdate:modelValue': (v: boolean | 'indeterminate') => row.toggleSelected(!!v),
+      'aria-label': t('clients.selectRow'),
+    })),
+    meta: { class: { th: 'w-10', td: 'w-10' } },
+  },
   { accessorKey: 'displayName', header: () => t('clients.name') },
   { id: 'ip', header: 'IP' },
   { id: 'net', header: () => t('clients.network') },
@@ -78,7 +100,29 @@ async function action(a: 'block' | 'unblock' | 'kick') {
   await api.post(`/api/clients/${selected.value.mac}/action`, { action: a, minutes: a === 'block' ? blockMinutes.value ?? undefined : undefined }, { success: t(`clients.done.${a}`) })
   refresh()
 }
-const personItems = computed(() => [{ label: t('clients.noPerson'), value: '' }, ...people.value.map(p => ({ label: `${p.avatar} ${p.name}`, value: p.id }))])
+
+/* assignment straight from the list: one row (cell picker) or every selected row (bulk bar) */
+const assigning = ref<string | null>(null)
+async function assign(macs: string[], personId: string | null) {
+  if (!macs.length) return
+  assigning.value = macs.length === 1 ? macs[0]! : 'bulk'
+  try {
+    for (const mac of macs) await api.patch(`/api/clients/${mac}`, { personId })
+    const name = getPerson(personId)?.name ?? ''
+    toast.add({
+      title: personId
+        ? (macs.length === 1 ? t('clients.assigned', { name }) : t('clients.assignedN', { n: macs.length, name }))
+        : (macs.length === 1 ? t('clients.unassigned') : t('clients.unassignedN', { n: macs.length })),
+      color: 'success', icon: personId ? 'i-lucide-user-check' : 'i-lucide-user-x',
+    })
+    if (assigning.value === 'bulk') rowSelection.value = {}
+  }
+  finally {
+    assigning.value = null
+    await refresh()
+    refreshNuxtData('people')
+  }
+}
 </script>
 
 <template>
@@ -105,7 +149,15 @@ const personItems = computed(() => [{ label: t('clients.noPerson'), value: '' },
         </div>
       </template>
 
-      <UTable :data="rows" :columns="columns" :loading="status === 'pending' && !clients.length" class="cursor-pointer" :ui="{ tr: 'hover:bg-(--uf-hover)' }" @select="(_e: Event, row: any) => (selectedMac = row.original.mac)">
+      <!-- bulk bar -->
+      <div v-if="selectedMacs.length" class="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-primary/6 border-b border-primary/20">
+        <span class="text-[13px] font-medium text-primary">{{ t('clients.selectedN', { n: selectedMacs.length }) }}</span>
+        <div class="w-56"><PersonAssignSelect :model-value="null" :loading="assigning === 'bulk'" @update:model-value="v => v && assign(selectedMacs, v)" /></div>
+        <UButton size="sm" color="neutral" variant="outline" icon="i-lucide-user-x" :disabled="assigning === 'bulk'" @click="assign(selectedMacs, null)">{{ t('clients.unassign') }}</UButton>
+        <UButton size="sm" color="neutral" variant="ghost" class="ml-auto" @click="rowSelection = {}">{{ t('clients.clearSelection') }}</UButton>
+      </div>
+
+      <UTable v-model:row-selection="rowSelection" :get-row-id="(r: ClientT) => r.mac" :data="rows" :columns="columns" :loading="status === 'pending' && !clients.length" class="cursor-pointer" :ui="{ tr: 'hover:bg-(--uf-hover)' }" @select="(_e: Event, row: any) => (selectedMac = row.original.mac)">
         <template #displayName-cell="{ row }">
           <div class="flex items-center gap-3 min-w-0">
             <span class="relative size-8 rounded-lg flex items-center justify-center bg-(--uf-surface-2) ring-1 ring-(--ui-border-muted) shrink-0">
@@ -130,11 +182,14 @@ const personItems = computed(() => [{ label: t('clients.noPerson'), value: '' },
           <div class="text-[11px] text-dimmed truncate max-w-[160px]">{{ row.original.wired ? `${row.original.uplinkName ?? ''}${row.original.switchPort ? ` · #${row.original.switchPort}` : ''}` : `${row.original.ssid ?? ''}${row.original.signal ? ` · ${row.original.signal} dBm` : ''}` }}</div>
         </template>
         <template #person-cell="{ row }">
-          <span v-if="getPerson(row.original.personId)" class="inline-flex items-center gap-1.5">
-            <PersonAvatar :avatar="getPerson(row.original.personId)!.avatar" :color="getPerson(row.original.personId)!.color" :size="20" />
-            <span class="text-[12.5px] text-toned">{{ getPerson(row.original.personId)!.name }}</span>
-          </span>
-          <span v-else class="text-[12px] text-dimmed">—</span>
+          <div @click.stop>
+            <PersonAssignSelect
+              compact
+              :model-value="row.original.personId"
+              :loading="assigning === row.original.mac"
+              @update:model-value="v => v !== row.original.personId && assign([row.original.mac], v)"
+            />
+          </div>
         </template>
         <template #rate-cell="{ row }">
           <div v-if="row.original.online" class="text-[12px] uf-num">
@@ -193,7 +248,7 @@ const personItems = computed(() => [{ label: t('clients.noPerson'), value: '' },
           <div class="space-y-3 pt-4 border-t border-(--ui-border-muted)">
             <h3 class="text-[13px] font-semibold text-highlighted">{{ t('clients.identity') }}</h3>
             <UFormField :label="t('clients.alias')" :hint="t('clients.aliasHint')"><UInput v-model="edit.alias" class="w-full" :placeholder="selected.unifiName ?? selected.hostname ?? ''" /></UFormField>
-            <UFormField :label="t('clients.person')"><USelectMenu v-model="edit.personId" :items="personItems" value-key="value" class="w-full" /></UFormField>
+            <UFormField :label="t('clients.person')"><PersonAssignSelect :model-value="edit.personId || null" :placeholder="t('clients.noPerson')" @update:model-value="v => (edit.personId = v ?? '')" /></UFormField>
             <UFormField :label="t('clients.note')"><UTextarea v-model="edit.note" :rows="2" class="w-full" /></UFormField>
             <div class="flex justify-end"><UButton size="sm" icon="i-lucide-save" @click="saveEdit">{{ t('common.save') }}</UButton></div>
           </div>

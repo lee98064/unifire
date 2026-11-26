@@ -654,7 +654,20 @@
       "block": "Blocked",
       "unblock": "Unblocked",
       "kick": "Kicked"
-    }
+    },
+    "assign": "Assign",
+    "assignTo": "Assign to…",
+    "unassign": "Unassign",
+    "searchPerson": "Search or type a new name",
+    "selectedN": "{n} selected",
+    "clearSelection": "Clear selection",
+    "selectAll": "Select all",
+    "selectRow": "Select this device",
+    "assigned": "Assigned to {name}",
+    "unassigned": "Unassigned",
+    "assignedN": "Assigned {n} devices to {name}",
+    "unassignedN": "Unassigned {n} devices",
+    "personCreated": "Added {name}"
   },
   "people": {
     "desc": "Group devices by person to pause, set bedtimes and quotas per person.",
