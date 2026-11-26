@@ -27,6 +27,9 @@ interface Endpoint { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: 
 const ep = (method: Endpoint['method'], path: string, auth: Auth, output: z.ZodTypeAny, input?: z.ZodTypeAny, note?: string): Endpoint => ({ method, path, auth, output, input, note })
 
 export const api = {
+  // ── ops ───────────────────────────────────────────────────────
+  health: ep('GET', '/api/health', 'public', z.object({ ok: z.boolean(), version: z.string(), uptimeSec: z.number(), db: z.string(), controller: z.enum(['connected', 'disconnected', 'unconfigured']) })),
+
   // ── setup & auth ──────────────────────────────────────────────
   setupStatus: ep('GET', '/api/setup/status', 'public', A.SetupStatus),
   setupAdmin: ep('POST', '/api/setup/admin', 'public', A.User, A.UserCreateInput.omit({ role: true, personId: true }), 'Only while no admin exists; logs the new admin in.'),
