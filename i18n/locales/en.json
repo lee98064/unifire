@@ -1429,7 +1429,8 @@
     "routesRequired": "Route listing must work for the scratch test",
     "scratchUnavailable": "No verified scratch route for this step",
     "requiresAction": "Only verifiable by running the actual command",
-    "speedtestStatusOnly": "Speed-test status can be queried"
+    "speedtestStatusOnly": "Speed-test status can be queried",
+    "qualifiedEarlier": "Passed an earlier live check"
   },
   "controllerError": {
     "authRequired": "The controller rejected the session or credentials",

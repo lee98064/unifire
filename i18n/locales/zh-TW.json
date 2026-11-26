@@ -1429,7 +1429,8 @@
     "routesRequired": "需要能讀取路由清單才能做寫入測試",
     "scratchUnavailable": "此步驟沒有可用的測試路由",
     "requiresAction": "需要實際執行該指令才能確認",
-    "speedtestStatusOnly": "可查詢測速狀態"
+    "speedtestStatusOnly": "可查詢測速狀態",
+    "qualifiedEarlier": "先前的即時檢測已通過"
   },
   "controllerError": {
     "authRequired": "控制器拒絕登入或工作階段已失效",

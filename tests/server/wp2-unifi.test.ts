@@ -259,6 +259,9 @@ describe('WP2 controller and cache', () => {
       expect(fake.mutationCount).toBe(0)
       expect((await service.probe(ctx)).capabilities.find(item => item.key === 'routes.create')?.status).toBe('ok')
       await expect(inventory.clientAction(client.mac, { action: 'block' }, ctx)).resolves.toMatchObject({ blocked: true })
+      // A restart re-runs the boot check in dry-run; the earlier live pass must still be reported.
+      await service.runtime!.qualify({ ...ctx, dryRun: true })
+      expect(service.status().capabilities.find(item => item.key === 'routes.create')?.status).toBe('ok')
       const mutationCount = fake.mutationCount
       const updated = await service.save({ ...candidate, verifyMode: 'ca', caPem: tls.cert.toString(), password: undefined }, ctx)
       expect(updated).toMatchObject({ mode: 'dry-run', verifyMode: 'ca', connected: true })

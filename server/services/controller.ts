@@ -265,7 +265,12 @@ export async function createControllerService(db: Db, options: {
           mode: mode(), selfMac: state.selfMac, context,
         })
         if (!live()) return
-        state.capabilities = capabilities
+        // The boot check runs in dry-run and cannot exercise writes. While the stored live qualification for this
+        // controller is still valid, keep reporting those write checks as passed instead of resetting them to "skipped".
+        const previous = new Map(state.capabilities.map(item => [item.key, item]))
+        state.capabilities = writes.qualified() && !options.mock ? capabilities.map(item => item.status === 'skipped' && item.detail === 'capability.dryRun'
+          ? previous.get(item.key)?.status === 'ok' ? previous.get(item.key)! : { ...item, status: 'ok' as const, detail: 'capability.qualifiedEarlier' }
+          : item) : capabilities
         if (!options.mock && capabilities.some(item => item.key === 'routes.create' && item.status === 'ok')) {
           db.insert(settings).values({ key: QUALIFIED_CONTROLLER, value: key })
             .onConflictDoUpdate({ target: settings.key, set: { value: key } }).run()
