@@ -8,7 +8,7 @@ import {
   type ControllerModeT, type ControllerStatusT,
 } from '#shared/schemas/controller'
 import type { Db } from '../db'
-import { controller, egresses, managedRoutes, quotaRoutes, settings } from '../db/schema'
+import { controller, egresses, guestWifi, managedRoutes, quotaRoutes, settings } from '../db/schema'
 import { probeCapabilities } from '../unifi/capabilities'
 import { createUnifiTransport, type UnifiConfig } from '../unifi/client'
 import { createUnifiEndpoints } from '../unifi/endpoints'
@@ -105,7 +105,10 @@ export async function createControllerService(db: Db, options: {
   const canRun = () => !stopped && options.active?.() !== false
 
   if (options.mock) {
-    mock = await startMockController({ lively: options.lively })
+    const guest = db.select().from(guestWifi).get()
+    const passphrase = guest?.encryptedPassphrase ? decrypt(guest.encryptedPassphrase) : null
+    mock = await startMockController({ lively: options.lively, guestWlan: guest?.wlanId && typeof passphrase === 'string'
+      ? { id: guest.wlanId, passphrase } : undefined })
     if (!savedController(db)) db.insert(controller).values({
       id: 1, url: MOCK_ROW, username: mock.config.username, encryptedPassword: encrypt(mock.config.password),
       verifyMode: 'insecure', mode: 'dry-run', site: mock.config.site,
@@ -203,6 +206,7 @@ export async function createControllerService(db: Db, options: {
       db, site: config.site, scope, engine, active: live, observeRoutes: observations.observe,
       onPoll(result) {
         const wasConnected = state.connected
+        const previousError = state.lastError
         if (result.error === null) {
           state.lastSyncAt = result.at
           if (result.resource === 'activeClients') {
@@ -224,6 +228,9 @@ export async function createControllerService(db: Db, options: {
           }
         }
         publish()
+        if (!state.connected && state.lastError && state.lastError !== previousError) {
+          engine.emit('event', { type: 'notification', event: 'controller_error', error: state.lastError })
+        }
         if (!wasConnected && state.connected) engine.emit('event', { type: 'controller.reconnected' })
       },
     })
@@ -513,6 +520,7 @@ export async function createControllerService(db: Db, options: {
   return {
     engine, beforeWrite, beforeRoutingChange, routingLocked: () => routingChange, status, ownership, test, save, setMode, probe,
     get mockProbe() { return mock?.probe },
+    get mockWatchdogProbe() { return mock?.watchdogProbe },
     get mockTrace() { return mock?.trace },
     get runtime() { return activeRuntime },
     async ready() { await background },
@@ -549,6 +557,7 @@ export type ControllerService = {
   probe: (context: WriteContext) => Promise<ControllerStatusT>
   mockProbe: MockController['probe'] | undefined
   mockTrace: MockController['trace'] | undefined
+  mockWatchdogProbe?: MockController['watchdogProbe']
   runtime: { config: UnifiConfig, api: Endpoints, cache: ReturnType<typeof createSyncCache>, writes: ReturnType<typeof createWriteGate>,
     scope: string, key: string, status: ControllerStatusT, ledger: ReturnType<typeof createWriteLedger>, active: () => boolean, observations: ReturnType<typeof createRouteObservations> } | undefined
   ready: () => Promise<void>

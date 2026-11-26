@@ -7,7 +7,7 @@ export const MOCK_USERNAME = 'unifire-demo'
 export const MOCK_PASSWORD = 'local-demo-only'
 export const SELF_MAC = 'b8:27:eb:10:00:01'
 const GATEWAY_MAC = '78:8a:20:90:00:01'
-const SWITCH_MAC = '78:8a:20:90:00:02'
+export const SWITCH_MAC = '78:8a:20:90:00:02'
 const AP1 = '78:8a:20:90:00:03'
 const AP2 = '78:8a:20:90:00:04'
 const egressId = (index: number) => index < 3 ? `demo-wan-${index + 1}` : `demo-vpn-${index - 2}`
@@ -65,7 +65,7 @@ export function buildFixtures(now: number, selfIp: string) {
       name: index === 0 ? 'Unifire demo host' : undefined,
       network_id: `demo-lan-${network}`, network: lanNames[network], blocked: false,
       use_fixedip: wired, fixed_ip: wired ? ip : undefined, is_wired: wired, online: index < 29,
-      ...(wired ? { sw_mac: SWITCH_MAC, sw_port: index % 22 + 1 }
+      ...(wired ? { sw_mac: SWITCH_MAC, sw_port: index === 8 ? 11 : index === 22 ? 12 : index % 22 + 1 }
         : { ap_mac: index % 2 ? AP1 : AP2, essid: network === 1 ? 'IoT' : network === 2 ? 'Guest' : 'Home', signal: -42 - index }),
       first_seen: Math.floor(now / 1000) - 86400 * (35 - index), last_seen: Math.floor(now / 1000) - (index < 29 ? 0 : 1800),
       rx_bytes: index * 45_000, tx_bytes: index * 18_000, 'rx_bytes-r': index * 125, 'tx_bytes-r': index * 42,
@@ -81,7 +81,7 @@ export function buildFixtures(now: number, selfIp: string) {
     },
     { mac: SWITCH_MAC, name: 'Studio Switch', model: 'USW-Pro-24-PoE', type: 'usw', port_table: Array.from({ length: 24 }, (_, index) => ({
       port_idx: index + 1, name: `Port ${index + 1}`, up: index < 15 || index === 23,
-      port_poe: index < 16, poe_mode: index < 16 ? 'auto' : 'off',
+      port_poe: index < 16 || index === 23, poe_mode: index < 16 ? 'auto' : 'off',
       poe_power: index < 7 ? (index * 0.7 + 2.2).toFixed(1) : '0.0', is_uplink: index === 23,
     })) },
     { mac: AP1, name: 'U7 Pro', model: 'U7-Pro', type: 'uap' },
@@ -120,8 +120,8 @@ export function buildFixtures(now: number, selfIp: string) {
     })
   }
   const wlans = ['Home', 'IoT', 'Guest'].map((name, index) => ({
-    _id: `demo-wlan-${index}`, name, enabled: true, security: index === 2 ? 'open' : 'wpapsk', is_guest: index === 2,
-    networkconf_id: `demo-lan-${index}`, ...(index < 2 && { x_passphrase: 'fixture-only' }),
+    _id: `demo-wlan-${index}`, name, enabled: true, security: 'wpapsk', is_guest: index === 2,
+    networkconf_id: `demo-lan-${index}`, x_passphrase: index === 2 ? 'maple-river42' : 'fixture-only', demo_field: { preserve: true },
   }))
   return { networks, clients, routes, devices, wlans }
 }

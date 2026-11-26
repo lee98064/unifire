@@ -135,6 +135,13 @@ export function createSyncCache(api: UnifiEndpoints, options: {
           options.engine.emit('event', { type: 'access.clientsChanged' })
         }
       }
+      if (resource === 'activeClients' && readyBefore) {
+        const previous = new Map((before as WireStation[]).map(row => [row.mac, row]))
+        const current = new Map((next as WireStation[]).map(row => [row.mac, row]))
+        for (const [from, to, type] of [[previous, current, 'client.connected'], [current, previous, 'client.disconnected']] as const) {
+          for (const [mac, data] of to) if (!from.has(mac)) options.engine.emit('event', { type, mac, data, source: 'poll' })
+        }
+      }
       if (!isDeepStrictEqual(before, next)) {
         options.engine.emit('event', { type: 'cache.changed', resource })
         if (resource === 'activeClients' || resource === 'knownClients') {

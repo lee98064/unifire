@@ -21,6 +21,8 @@ const errorKeys: Record<string, [number, string]> = {
   UNIFI_QUALIFICATION_REQUIRED: [409, 'errors.unifiQualificationRequired'],
   UNIFI_CLIENT_STATE_UNKNOWN: [409, 'errors.unifiClientStateUnknown'],
   CLIENT_NOT_FOUND: [404, 'errors.clientNotFound'],
+  WLAN_PSK_REQUIRED: [409, 'errors.wlanPskRequired'],
+  UNSAFE_POE_PORT: [409, 'errors.unsafePoePort'],
   EGRESS_NOT_FOUND: [404, 'errors.egressNotFound'],
   PERSON_NOT_FOUND: [404, 'errors.personNotFound'],
 }

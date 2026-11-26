@@ -62,9 +62,9 @@ export function createClientSync(db: Db, scope: string, engine: EngineEvents, bu
         if (matched) {
           audit.record({ actor: { type: 'system', id: null, name: null }, category: 'client', action: 'approval.hostnameMatched',
             severity: 'info', target: { type: 'client', id: station.mac, label: hostname! },
-            messageKey: 'audit.approval.hostnameMatched', messageParams: { mac: station.mac, hostname: hostname! } })
+            messageKey: 'audit.approval.hostnameMatched', messageParams: { mac: station.mac, name: hostname!, hostname: hostname! } })
         }
-        if (check) newcomers.push({ mac: station.mac, displayName: station.name || hostname || vendor || station.mac, requiresApproval })
+        if (!imported) newcomers.push({ mac: station.mac, displayName: station.name || hostname || vendor || station.mac, requiresApproval })
       }
       if (imported) tx.insert(settings).values({ key: baselineKey, value: scope }).onConflictDoUpdate({
         target: settings.key, set: { value: scope },

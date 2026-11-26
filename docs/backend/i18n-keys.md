@@ -176,11 +176,80 @@
 | `block.quota` | The person or client has reached a blocking quota. | None |
 | `block.approval` | This client is waiting for approval in strict mode. | None |
 | `block.rule` | An automation rule blocked this client. | None |
-| `audit.approval.hostnameMatched` | Unifire approved a randomized MAC that matched an approved hostname. | `mac`, `hostname` |
-| `audit.approval.approved` | An administrator approved the client. | `mac` |
-| `audit.approval.blocked` | An administrator selected a persistent block for the client. | `mac` |
-| `audit.approval.ignored` | An administrator dismissed the client's approval request. | `mac` |
-| `audit.block.applied` | Unifire applied a client block. The dry-run flag identifies previews. | `mac` |
-| `audit.block.released` | Unifire released its client block. The dry-run flag identifies previews. | `mac` |
-| `audit.extension.approved` | An administrator approved an extension request. | `requestId` |
-| `audit.extension.denied` | An administrator denied an extension request. | `requestId` |
+| `audit.approval.hostnameMatched` | Unifire approved a randomized MAC that matched an approved hostname. | `mac`, `name`, `hostname` |
+| `audit.approval.approved` | An administrator approved the client. | `mac`, `name` |
+| `audit.approval.blocked` | An administrator selected a persistent block for the client. | `mac`, `name` |
+| `audit.approval.ignored` | An administrator dismissed the client's approval request. | `mac`, `name` |
+| `audit.block.applied` | Unifire applied a client block. The dry-run flag identifies previews. | `mac`, `name` |
+| `audit.block.released` | Unifire released its client block. The dry-run flag identifies previews. | `mac`, `name` |
+| `audit.extension.approved` | An administrator approved an extension request. | `requestId`, `person`, `minutes` (request or grant amount) |
+| `audit.extension.denied` | An administrator denied an extension request. | `requestId`, `person`, `minutes` (request or grant amount) |
+
+## WP6 notification titles and bodies
+
+| Keys | English description | Params |
+|---|---|---|
+| `notification.new_device.title`, `notification.new_device.body` | A newly discovered device is waiting for approval. | `displayName`, `mac` |
+| `notification.route_switch.title`, `notification.route_switch.body` | A managed route switched egress successfully. | `route`, `from`, `to`, `reason`, `managedRouteId` |
+| `notification.route_drift.title`, `notification.route_drift.body` | A managed route changed outside its accepted baseline. | `route`, `managedRouteId` |
+| `notification.egress_down.title`, `notification.egress_down.body` | An egress became unavailable. | `egress`, `egressId` |
+| `notification.egress_up.title`, `notification.egress_up.body` | An egress recovered. | `egress`, `egressId` |
+| `notification.egress_ip_changed.title`, `notification.egress_ip_changed.body` | An egress public address changed. | `egress`, `egressId`, `previousIp`, `ip` |
+| `notification.quota_warning.title`, `notification.quota_warning.body` | Usage reached the quota warning threshold. | `quota`, `quotaId`, optional `person`, `personId` |
+| `notification.quota_exceeded.title`, `notification.quota_exceeded.body` | Usage exceeded the quota. | `quota`, `quotaId`, optional `person`, `personId` |
+| `notification.extension_request.title`, `notification.extension_request.body` | A member submitted a request for an extension. | `person`, `personId`, `requestId` |
+| `notification.extension_decided.title`, `notification.extension_decided.body` | An administrator decided the recipient's request. | `person`, `personId`, `requestId`, `minutes` (request or grant amount), `status` (approved or denied) |
+| `notification.poe_cycle.title`, `notification.poe_cycle.body` | Unifire requested a PoE port cycle. | `name`, `switchMac`, `portIdx`, optional `watchdogId` |
+| `notification.external_change.title`, `notification.external_change.body` | Unifire observed an external controller configuration change. | `resource`, `itemId`, `label` |
+| `notification.guest_wifi_rotated.title`, `notification.guest_wifi_rotated.body` | The guest Wi-Fi passphrase was rotated. | `ssid`, `wlanId` |
+| `notification.controller_error.title`, `notification.controller_error.body` | The configured controller reported a new connection error. | `error` (translated controller status) |
+| `notification.test.title`, `notification.test.body` | A channel test message. | None |
+
+Rule notifications use the administrator-provided templates. The test action uses the two test keys even when the channel is subscribed to other events.
+
+## WP6 action, status, audit, and error messages
+
+| Key | English description | Params |
+|---|---|---|
+| `notification.action.approve` | Approve the device or request. | None |
+| `notification.action.block` | Block the device. | None |
+| `notification.action.deny` | Deny the extension request. | None |
+| `notification.action.open` | Open the route in Unifire. | None |
+| `notification.action.succeeded` | The notification action succeeded. | None |
+| `notification.action.failed` | The notification action failed or expired. | None |
+| `notification.delivery.failed` | A channel failed to deliver a message. | None |
+| `notification.delivery.noSubscription` | This account has no reachable push subscription for the test. | None |
+| `rule.result.would` | Dry-run preview of this action. | None |
+| `rule.result.failed` | The action failed. | None |
+| `rule.result.webhookFailed` | The rule webhook request failed. | None |
+| `watchdog.event.fail` | The target stopped responding. | None |
+| `watchdog.event.cycle` | UniFi accepted a PoE cycle. | None |
+| `watchdog.event.recovered` | The target started responding again. | None |
+| `watchdog.event.limit` | The port reached its daily cycle limit. | None |
+| `watchdog.event.error` | The monitor or PoE command reported an error. | None |
+| `audit.push.routeOpened` | An administrator used the route-drift notification action. | None |
+| `audit.rule.run` | A rule ran and changed state. | `name`, `initiatedBy` (empty for scheduled or event-driven runs) |
+| `audit.watchdog.cycle` | A watchdog port was power-cycled. | `name` |
+| `audit.guestWifi.rotated` | UniFi confirmed the new guest passphrase. | `ssid` |
+| `audit.wol.woke` | A Wake-on-LAN packet was sent. | `name`, `mac`, `broadcast` |
+| `audit.wol.preview` | Dry-run preview of a Wake-on-LAN request. | `name`, `mac`, `broadcast` |
+| `audit.wol.failed` | A Wake-on-LAN request failed. | `name`, `mac`, `broadcast` |
+| `audit.quota.routeOverlap` | The quota egress overlaps a managed route. | `person`, `route` |
+| `errors.invalidChannelSecret` | Enter a secret when configuring a new channel. | None |
+| `errors.channelNotFound` | The notification channel could not be found. | None |
+| `errors.pushActionInvalid` | The notification action is invalid, expired, or already used. | None |
+| `errors.invalidAutomationCron` | Enter a valid cron expression. | None |
+| `errors.ruleNotFound` | The rule could not be found. | None |
+| `errors.watchdogNotFound` | The watchdog could not be found. | None |
+| `errors.watchdogDuplicatePort` | The port already has a watchdog. | None |
+| `errors.watchdogDailyLimit` | The daily power-cycle limit was reached. | None |
+| `errors.watchdogCooldown` | The watchdog's port is cooling down. | None |
+| `errors.unsafePoePort` | Select a downstream PoE-capable port. | None |
+| `errors.guestWlanRequired` | Select a WLAN to rotate. | None |
+| `errors.wlanNotFound` | The WLAN could not be found. | None |
+| `errors.wlanPskRequired` | Select a WLAN configured for a shared WPA passphrase. | None |
+| `errors.kioskNotFound` | This kiosk link is invalid or unavailable. | None |
+| `errors.kioskRateLimited` | Wait before requesting the kiosk again. | None |
+| `errors.wolNotFound` | The Wake-on-LAN target could not be found. | None |
+| `errors.wolBroadcastUnknown` | Configure a broadcast address for this target or its network. | None |
+| `errors.wolSendFailed` | The Wake-on-LAN packet could not be sent. | None |

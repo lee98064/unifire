@@ -324,6 +324,7 @@ export const rules = sqliteTable('rules', {
   trigger: text('trigger', { mode: 'json' }).$type<RuleT['trigger']>().notNull(),
   conditions: text('conditions', { mode: 'json' }).$type<RuleT['conditions']>().notNull(),
   actions: text('actions', { mode: 'json' }).$type<RuleT['actions']>().notNull(),
+  encryptedActions: text('encrypted_actions'),
   cooldownSeconds: integer('cooldown_seconds').notNull(),
   lastRunAt: integer('last_run_at'),
   lastRunOk: integer('last_run_ok', { mode: 'boolean' }),

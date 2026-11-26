@@ -30,6 +30,7 @@ const classic = (data: unknown = []) => ({ meta: { rc: 'ok' }, data })
 
 export async function startMockController(options: {
   seed?: number
+  guestWlan?: { id: string, passphrase: string }
   lively?: boolean
   sessionTtlMs?: number
   tls?: ServerOptions
@@ -44,6 +45,8 @@ export async function startMockController(options: {
   const routes = new Map(fixtures.routes.map(raw => { const route = Route.parse(raw); return [route._id, route] }))
   const clients = new Map(fixtures.clients.map(raw => [raw.mac, { ...Station.parse(raw), online: raw.online }]))
   const wlans = new Map(fixtures.wlans.map(wlan => [wlan._id, Doc.parse(wlan)]))
+  const savedWlan = options.guestWlan && wlans.get(options.guestWlan.id)
+  if (savedWlan && options.guestWlan) savedWlan.x_passphrase = options.guestWlan.passphrase
   const devices = fixtures.devices
   const portForwards = new Map<string, WireDoc>([['demo-forward', { _id: 'demo-forward', name: 'Demo port forward',
     enabled: true, src: 'any', dst_port: '8443', fwd: '10.235.0.25', fwd_port: '443', proto: 'tcp' }]])
@@ -393,6 +396,13 @@ export async function startMockController(options: {
   const simulation = options.lively ? setInterval(tick, 10_000) : undefined
   simulation?.unref()
 
+  function watchdogProbe(ip: string, at = now()) {
+    const client = [...clients.values()].find(client => client.ip === ip)
+    if (!client?.online) return null
+    if (options.lively && client.hostname === 'workbench-camera' && (at - started) % 240_000 >= 170_000) return null
+    return 3 + Math.abs(Math.floor(at / 1000) % 8)
+  }
+
   function probe(id: string, at = now()) {
     const profile = profiles.get(id)
     if (!profile) return null
@@ -424,7 +434,7 @@ export async function startMockController(options: {
       schedule.push(outage)
       outages.set(id, schedule)
     },
-    probe,
+    probe, watchdogProbe,
     trace() {
       const route = [...routes.values()].find(route => route.description === '[unifire-probe] sweep' && route.enabled)
       const answer = route?.network_id ? probe(route.network_id) : null

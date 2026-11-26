@@ -27,7 +27,7 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
   const quotas = createQuotaService(db, service.engine)
   const extensions = createExtensions(db, service.engine, people, quotas, () => config.get().timezone, now)
   const blocks = createBlockReconciler(db, service)
-  const quotaRoutes = createQuotaRoutes(db, service)
+  const quotaRoutes = createQuotaRoutes(db, service, now)
 
   function desired(at = now()) {
     const settings = config.get()
@@ -68,9 +68,10 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
       tx.update(clients).set({ approval, alias: approval === 'approved' ? input.alias : undefined }).where(eq(clients.mac, mac)).run()
       if (approval === 'blocked') setManualBlock(tx, mac, null)
     })
+    const name = (approval === 'approved' ? input.alias ?? row.alias : row.alias) || row.hostname || row.vendor || mac
     audit.record({ actor: ctx.actor, category: 'approval', action: 'approval.decided', severity: 'success',
-      target: { type: 'client', id: mac, label: row.alias || row.hostname || mac },
-      messageKey: `audit.approval.${approval}`, messageParams: { mac } })
+      target: { type: 'client', id: mac, label: name },
+      messageKey: `audit.approval.${approval}`, messageParams: { mac, name } })
     liveBus.emit({ type: 'client.changed', data: { macs: [mac] } })
     people.changed([previous, input.personId].filter((id): id is string => !!id))
     return blocks.reconcile(desired)

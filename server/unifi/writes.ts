@@ -11,6 +11,7 @@ import { parseWire, type UnifiEndpoints } from './endpoints'
 import { Doc, Route, type WireDoc, type WireRoute } from './endpoints/schemas'
 import { UnifiError, unifiErrorCode } from './errors'
 import { segment } from './paths'
+import { assertPoePort } from './poe-ports'
 import { itemIdentity, itemLabel, readCollection, resourcePath, snapshotResources } from './snapshot-resources'
 
 type ConfigWrite = (resource: SnapshotResourceT, id: string, before?: WireDoc, after?: WireDoc) => void
@@ -148,8 +149,8 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   const executeScratch: typeof run = (action, category, target, ctx, prepare) =>
     execute(action, category, target, ctx, prepare, true)
 
-  async function findRoute(id: string) {
-    const route = (await api.routes()).find(candidate => candidate._id === id)
+  async function findRoute(id: string, docs?: WireRoute[]) {
+    const route = (docs ?? await api.routes()).find(candidate => candidate._id === id)
     if (!route) throw new UnifiError('UNIFI_ROUTE_NOT_FOUND', 404)
     return route
   }
@@ -159,8 +160,8 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
     return classifyRoute(route, { ...ownership, probes: new Set([...ownership.probes, ...scratch]) })
   }
 
-  async function ownedRoute(id: string, setLabel: (label: string) => void) {
-    const route = await findRoute(id)
+  async function ownedRoute(id: string, setLabel: (label: string) => void, docs?: WireRoute[]) {
+    const route = await findRoute(id, docs)
     setLabel(route.description || id)
     const owner = routeOwner(route)
     if (owner !== 'managed' && owner !== 'probe') throw new UnifiError('ROUTE_NOT_OWNED')
@@ -168,9 +169,11 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   }
 
   function updateRoute(id: string, patch: RoutePatch, ctx: WriteContext, guardBaseline: boolean, executor = run,
-    onVerified?: (before: WireRoute, after: WireRoute) => void, probeRepair = false) {
+    onVerified?: (before: WireRoute, after: WireRoute) => void, probeRepair = false, checkExisting?: (docs: WireRoute[]) => void) {
     return executor('routes.update', 'route', { type: 'route', id }, ctx, async setLabel => {
-      const route = await ownedRoute(id, setLabel)
+      const docs = checkExisting ? await api.routes() : undefined
+      const route = await ownedRoute(id, setLabel, docs)
+      if (docs) checkExisting?.(docs)
       if (probeRepair && routeOwner(route) !== 'probe') throw new UnifiError('ROUTE_NOT_OWNED')
       const fingerprint = routeFingerprint(route)
       const expected = routeOwner(route) === 'probe'
@@ -304,6 +307,9 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
     return run(`${resource}.update`, resource === 'user' ? 'client' : 'wifi', { type: resource, id }, ctx, async () => {
       const before = (await load(id)).find(doc => doc._id === id)
       if (!before) throw new UnifiError('UNIFI_NOT_FOUND', 404)
+      if (resource === 'wlanconf' && typeof patch.x_passphrase === 'string' && before.security !== 'wpapsk') {
+        throw new UnifiError('WLAN_PSK_REQUIRED', 409)
+      }
       const after = { ...before, ...patch }
       return {
         before, after,
@@ -391,8 +397,8 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
         return work(step => restoreMutation(ctx, step))
       }),
     createRoute: (draft: WireDoc, ctx: WriteContext, observer?: RouteCreateObserver) => createRoute(draft, ctx, run, observer),
-    updateRoute: (id: string, patch: RoutePatch, ctx: WriteContext, onVerified?: (before: WireRoute, after: WireRoute) => void) =>
-      updateRoute(id, patch, ctx, true, run, onVerified),
+    updateRoute: (id: string, patch: RoutePatch, ctx: WriteContext, onVerified?: (before: WireRoute, after: WireRoute) => void,
+      checkExisting?: (docs: WireRoute[]) => void) => updateRoute(id, patch, ctx, true, run, onVerified, false, checkExisting),
     repairProbe: (id: string, patch: RoutePatch, ctx: WriteContext) => updateRoute(id, patch, ctx, false, run, undefined, true),
     deleteRoute: (id: string, ctx: WriteContext) => deleteRoute(id, ctx),
     updateRouteEgress: (routeId: string, egressId: string, ctx: WriteContext, onVerified?: (before: WireRoute, after: WireRoute) => void) =>
@@ -421,7 +427,13 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
       ctx: WriteContext) {
       const id = command.cmd === 'restart' ? command.macs.join(',') : command.cmd === 'power-cycle' ? command.mac : 'gateway'
       return run(`device.${command.cmd}`, command.cmd === 'power-cycle' ? 'poe' : 'system', { type: 'device', id }, ctx,
-        async () => ({ after: parseWire(Doc, command), apply: () => write('POST', paths.classic('cmd/devmgr'), command) }))
+        async setLabel => {
+          if (command.cmd === 'power-cycle') {
+            const device = assertPoePort(await api.devices(), command.mac, command.port_idx)
+            setLabel(device.name || device.mac)
+          }
+          return { after: parseWire(Doc, command), apply: () => write('POST', paths.classic('cmd/devmgr'), command) }
+        })
     },
   }
 }

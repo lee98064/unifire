@@ -9,7 +9,7 @@ import { Doc, MacAddress, type WireDoc } from './endpoints/schemas'
 import { UnifiError } from './errors'
 
 export type ControllerEvent =
-  | { type: 'client.connected' | 'client.disconnected' | 'client.roam', mac: string, data: WireDoc }
+  | { type: 'client.connected' | 'client.disconnected' | 'client.roam', mac: string, data: WireDoc, source?: 'poll' }
   | { type: 'client.updated' | 'device.updated' | 'user.updated', mac: string | null, data: WireDoc }
   | { type: 'controller.event', key: string, data: WireDoc }
   | { type: 'config.unifire_write' }
@@ -27,7 +27,10 @@ export type ControllerEvent =
   | { type: 'notification', event: 'route_drift', managedRouteId: string }
   | { type: 'notification', event: 'new_device', mac: string, displayName: string }
   | { type: 'notification', event: 'quota_warning' | 'quota_exceeded', quotaId: string, personId: string | null }
-  | { type: 'notification', event: 'extension_request', requestId: string, personId: string }
+  | { type: 'notification', event: 'extension_request', requestId: string, personId: string,
+    variant?: 'extension_decided', minutes?: number, status?: string }
+  | { type: 'notification', event: 'route_switch', managedRouteId: string, route: string, from: string, to: string, reason: string }
+  | { type: 'notification', event: 'controller_error', error: string }
 
 export type EngineEvents = EventEmitter<{ event: [ControllerEvent] }>
 

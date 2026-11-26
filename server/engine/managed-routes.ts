@@ -1,6 +1,6 @@
 import type { AuditEventT } from '#shared/schemas/insight'
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gt, lt, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gt, lt, lte, ne, or, sql } from 'drizzle-orm'
 import type { z } from 'zod'
 import { Paged } from '#shared/schemas/common'
 import {
@@ -26,6 +26,7 @@ type Row = typeof managedRoutes.$inferSelect
 type Runtime = NonNullable<ControllerService['runtime']>
 export const defaultFailover = FailoverPolicy.parse({ enabled: false, chain: [] })
 const HOUR = 3_600_000
+export const QUOTA_OVERRIDE_ACTOR = 'rule:quota'
 const emptyShape = { matchingTarget: 'INTERNET', targets: [], destinations: [], killSwitch: false } as const
 
 export function createManagedRoutes(db: Db, service: ControllerService, now = Date.now) {
@@ -73,7 +74,8 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
     const schedule = db.select().from(routeSchedules).where(eq(routeSchedules.managedRouteId, row.id)).get() ?? null
     const override = db.select().from(routeOverrides).where(and(eq(routeOverrides.managedRouteId, row.id),
       lte(routeOverrides.startsAt, at), gt(routeOverrides.endsAt, at)))
-      .orderBy(desc(routeOverrides.startsAt), desc(routeOverrides.id)).get() ?? null
+      .orderBy(sql`case when ${routeOverrides.createdBy} = ${QUOTA_OVERRIDE_ACTOR} then 1 else 0 end`,
+        desc(routeOverrides.startsAt), desc(routeOverrides.id)).get() ?? null
     return { defaultEgressId: row.defaultEgressId, schedule, override }
   }
 
@@ -272,7 +274,8 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
     if (input && endsAt <= at) throw apiError(400, 'OVERRIDE_INVALID_END', 'errors.overrideInvalidEnd')
     if (input) validateExits([input.egressId])
     db.transaction(tx => {
-      tx.delete(routeOverrides).where(and(eq(routeOverrides.managedRouteId, id), gt(routeOverrides.endsAt, at))).run()
+      tx.delete(routeOverrides).where(and(eq(routeOverrides.managedRouteId, id), gt(routeOverrides.endsAt, at),
+        ne(routeOverrides.createdBy, QUOTA_OVERRIDE_ACTOR))).run()
       if (input) tx.insert(routeOverrides).values({
         id: randomUUID(), managedRouteId: id, egressId: input.egressId, startsAt: at, endsAt, reason: input.reason ?? null,
         createdBy: `${ctx.actor.type}:${ctx.actor.id ?? 'system'}`,
@@ -338,6 +341,10 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
       actor: systemContext.actor, category: 'route', action: 'route.switched', severity: result.error ? 'error' : result.dryRun ? 'info' : 'success',
       target: { type: 'route', id: row.id, label: row.name }, messageKey: 'audit.route.switched', dryRun: result.dryRun, diff: result.diff,
       messageParams: { route: row.name, from: from ? labels.get(from) ?? from : '', to: labels.get(to) ?? to, reason },
+    })
+    if (entry.verified && !entry.dryRun && !entry.error) service.engine.emit('event', {
+      type: 'notification', event: 'route_switch', managedRouteId: row.id, route: row.name,
+      from: from ? labels.get(from) ?? from : '', to: labels.get(to) ?? to, reason,
     })
     liveBus.emit({ type: 'route.switched', data: entry })
     changed(row.id, false)

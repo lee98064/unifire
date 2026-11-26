@@ -40,7 +40,7 @@ describe('database and lease', () => {
     ].sort())
     expect(second.sqlite.pragma('foreign_keys', { simple: true })).toBe(1)
     expect(second.sqlite.pragma('journal_mode', { simple: true })).toBe('wal')
-    expect(second.sqlite.prepare('SELECT version FROM _migrations').pluck().all()).toEqual([1, 2, 3, 4])
+    expect(second.sqlite.prepare('SELECT version FROM _migrations').pluck().all()).toEqual([1, 2, 3, 4, 5])
     expect(() => second.db.insert(schema.personGroups).values({ personId: 'p', groupId: 'g' }).run())
       .toThrow(/FOREIGN KEY/)
   })

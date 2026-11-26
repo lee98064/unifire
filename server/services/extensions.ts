@@ -87,10 +87,14 @@ export function createExtensions(db: Db, engine: EngineEvents, people: ReturnTyp
       return tx.update(extensionRequests).set({ status: approved ? 'approved' : 'denied', decidedAt: at, decidedBy: admin.id,
         grantedAmount: approved ? amount : null }).where(eq(extensionRequests.id, id)).returning().get()
     })
+    const person = people.get(updated.personId).name
+    const minutes = updated.grantedAmount ?? updated.amount
     audit.record({ actor: userActor(admin), category: 'quota', action: `extension.${updated.status}`, severity: 'success',
       messageKey: updated.status === 'approved' ? 'audit.extension.approved' : 'audit.extension.denied',
-      messageParams: { requestId: id }, target: { type: 'extension', id, label: id } })
+      messageParams: { requestId: id, person, minutes: String(minutes) }, target: { type: 'extension', id, label: person } })
     changed(updated)
+    engine.emit('event', { type: 'notification', event: 'extension_request', variant: 'extension_decided',
+      requestId: id, personId: updated.personId, minutes, status: updated.status })
     people.changed([updated.personId])
     return toRequest(updated)
   }

@@ -1,13 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import type { Db } from '../db'
+import { createAutomation } from '../engine/automation'
 import { createAuditWatch } from '../engine/audit-watch'
 import { createSnapshots } from '../engine/snapshots'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
+import { apiError } from '../utils/api-error'
 import { createControllerService, type ControllerService } from './controller'
 import { createAccess } from './access'
+import { seedMockAutomation } from './seed-automation'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
+let automation: ReturnType<typeof createAutomation> | undefined
 let access: ReturnType<typeof createAccess> | undefined
 let current: ControllerService | undefined
 let routing: ReturnType<typeof createRouting> | undefined
@@ -26,6 +30,14 @@ export async function useAccess() {
   await service.ready()
   if (!access) throw new UnifiError('UNIFI_INACTIVE')
   return access
+}
+
+export async function useAutomation() {
+  if (!automation) await starting
+  const service = current
+  await service?.ready()
+  if (!service || service !== current || !automation) throw apiError(503, 'UNIFI_INACTIVE', 'errors.unifiInactive')
+  return automation
 }
 
 export async function useRouting() {
@@ -56,6 +68,7 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
   let maintenance: Promise<void> | undefined
   let stopInsights: (() => Promise<unknown>) | undefined
   let stopRouting: (() => Promise<void>) | undefined
+  let stopAutomation: (() => Promise<void>) | undefined
   let stopAccess: (() => Promise<void>) | undefined
 
   async function maintain() {
@@ -72,7 +85,9 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       access = undefined
       snapshots = undefined
       snapshotsReady = undefined
+      automation = undefined
       expiresAt = 0
+      await stopAutomation?.()
       await stopRouting?.()
       await stopAccess?.()
       await stopInsights?.()
@@ -90,7 +105,14 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       routing = createRouting(db, current)
       stopRouting = routing.start()
       access = createAccess(db, current)
-      stopAccess = access.start(() => Date.now() < expiresAt)
+      const hasLease = () => Date.now() < expiresAt
+      stopAccess = access.start(hasLease)
+      if (mock) {
+        await current.ready()
+        seedMockAutomation(db)
+      }
+      automation = createAutomation(db, current, access, routing.managed)
+      stopAutomation = automation.start(hasLease)
     } catch (error) {
       expiresAt = 0
       releaseLease(ENGINE_LEASE, owner, db)
@@ -110,10 +132,12 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
     await maintenance
     const service = current
     access = undefined
+    automation = undefined
     current = undefined
     routing = undefined
     snapshots = undefined
     snapshotsReady = undefined
+    await stopAutomation?.()
     await stopRouting?.()
     await stopAccess?.()
     await stopInsights?.()

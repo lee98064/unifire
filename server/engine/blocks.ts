@@ -1,4 +1,4 @@
-import { and, eq, lte } from 'drizzle-orm'
+import { and, eq, inArray, lte } from 'drizzle-orm'
 import type { BlockReasonT, PersonT } from '#shared/schemas/access'
 import type { Db } from '../db'
 import { appliedClientBlocks, blocks, clients } from '../db/schema'
@@ -100,10 +100,12 @@ export function createBlockReconciler(db: Db, service: ControllerService) {
       }
     })
     if (result.changed) {
+      const client = db.select().from(clients).where(eq(clients.mac, mac)).get()
+      const name = client?.alias || client?.hostname || client?.vendor || mac
       audit.record({ actor: ctx.actor, category: 'client', action: desired ? 'client.block' : 'client.unblock',
-        severity: result.dryRun ? 'info' : 'success', target: { type: 'client', id: mac, label: mac },
+        severity: result.dryRun ? 'info' : 'success', target: { type: 'client', id: mac, label: name },
         dryRun: result.dryRun, diff: result.diff,
-        messageKey: desired ? 'audit.block.applied' : 'audit.block.released', messageParams: { mac } })
+        messageKey: desired ? 'audit.block.applied' : 'audit.block.released', messageParams: { mac, name } })
       if (!result.dryRun) await refresh(runtime, mac)
     }
     return { physical, local, ...result }
@@ -170,5 +172,33 @@ export function createBlockReconciler(db: Db, service: ControllerService) {
     })
   }
 
-  return { reconcile, action }
+  function ruleAction(macs: string[], block: boolean, ruleId: string, until: number | null, ctx: WriteContext,
+    readDesired: () => Map<string, BlockReasonT[]>) {
+    return queue(async () => {
+      if (!macs.length || ctx.dryRun || service.status().mode !== 'live') return { changed: false, failed: false }
+      const runtime = requireRuntime()
+      const updated = db.transaction(tx => {
+        if (!block) return tx.delete(blocks).where(and(inArray(blocks.mac, macs), eq(blocks.source, 'rule'))).run().changes > 0
+        let changed = false
+        for (const mac of macs) {
+          const id = `rule:${ruleId}:${mac}`
+          const existing = tx.select({ until: blocks.until }).from(blocks).where(eq(blocks.id, id)).get()
+          if (existing && existing.until === until) continue
+          tx.insert(blocks).values({ id, mac, source: 'rule', refId: ruleId, label: 'block.rule', until })
+            .onConflictDoUpdate({ target: blocks.id, set: { until } }).run()
+          changed = true
+        }
+        return changed
+      })
+      const desired = readDesired()
+      const results = await Promise.allSettled(macs.map(mac => converge(runtime, mac, desired.has(mac), ctx)))
+      return { changed: updated || results.some(result => result.status === 'fulfilled' && result.value.changed && !result.value.dryRun),
+        failed: results.some(result => result.status === 'rejected') }
+    }).finally(() => {
+      if (macs.length) liveBus.emit({ type: 'client.changed', data: { macs } })
+      service.engine.emit('event', { type: 'access.changed' })
+    })
+  }
+
+  return { reconcile, action, ruleAction }
 }

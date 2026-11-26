@@ -1,0 +1,41 @@
+// Common words of three to six letters. Keep this bundled so generation works offline.
+export const guestWords = `
+ace acorn actor adapt adopt adult again agave ahead aisle alert algae alley alloy amuse
+angel ankle ant apron archer argue arise aroma array ash atlas audio audit avoid awake
+aware axiom badge baker ballot bamboo band bank barge bark barrel basin batch beach bean
+bear bench berry birch bird blade blank blaze blend bloom blue boat bobcat bolt bone
+book boom booth border bottle bounce box branch bread breeze bridge brisk brook broom bubble
+bucket buddy buggy bulb bulk bunny buoy bush butter buyer cabin cactus cafe cake calm
+camp canal canoe canyon cargo carrot case cedar cello chalk chart chase cheer cherry chest
+chick chime chip cider cinema citrus city clay clear clock cloud coach coast cocoa coffee
+comet comma coral core corn couch county crab crane crate creek crest crocus crowd cube
+cue cut cycle dance dash deck decor delta demo dent depth dial diary diner dingo
+dish diver doctor dodge doll dome door draft drain draw dream drift drill drop drum
+dusk dust eagle earth echo edit egret elm ember end envy epoch equal estate event
+exit expo fable fabric fairy falcon fancy farm fern ferry fiber field film fin finch
+find fish flag flame flash flat fleet float flock flour flow foam focus fold folio
+forest forge form fossil frame frank frog frost fungus fur future gadget game garden gauge
+gear gem genie gift ginger glare glass glide globe glow goat goose grain graph grass
+gravy green grill grove guard guava guild guitar gust hail hand harbor hash hatch hay
+hazel hedge heron hippo hive holly honey hook hoop horn horse hour house humid hyena
+ice idea igloo index indigo inlet iris ivory ivy jacket jade jar jazz jelly jewel
+jolly judge juice jump kayak keen key kite knee knit koala label ladder lake lamp
+lance lapel larch latch latte layer leaf leek legacy lens level lily lime link lion
+lizard llama lobby local loft log lotus lunar lynx macaw magnet maize manor maple march
+marlin mask mast meadow medal memo menu meter metro micro mill mint mixer moat mole
+moon moss moth mouse mud mural muse nacho nectar nest newt noble north novel nugget
+oasis oat ochre olive onyx opal orbit orca osprey otter oven owl oyster paint panda
+panel paper parcel parrot party patch patio peak pear pebble peel pencil penny perch petal
+pier pig pilot pin pink pipe pixel pizza plaid plain plant plate plum plume poem
+point pollen polo pony poppy potato pouch prism prop puma punch puzzle quail queen quick
+quilt quiz radio raft rally ranch ray razor reef relay resin rhino ring rinse robin
+robot rodeo roof rope rose round row ruby rugby rust sable sage sail salmon salt
+satin sauce scarf scene scoop scout script seal serif shade shark shed shell shine shrub
+silk silver skate ski slate slot snack snow soap soda solar sonar south spice spool
+sport sprout stage stamp steam steel stone stork stove straw stripe studio sun sunset sushi
+swan swirl syrup taco tag tango tank tape teal tent terra tide tiger tin toast
+token tonic tower toy track trail tray tree trout truck tulip tuna turret tusk twin
+umber union unit vale valley vault velvet vine viola viper vista voice vole wafer wagon
+wand wasp wave wax well wheat whisk white willow wind wink wire wolf word wren
+yam yarn yoga yolk zen zest zone
+`.trim().split(/\s+/)
