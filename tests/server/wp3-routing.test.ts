@@ -157,9 +157,13 @@ describe('WP3 with fake UniFi', () => {
     }
     await runtime.cache.refresh('routes')
     expect(owners()).toMatchObject({ lastExternalChangeAt: base + 2, suspectedAutomation: true })
-    await expect(managed.create({ mode: 'adopt', unifiRouteId: id }, ctx)).rejects.toMatchObject({
+    await expect(managed.create({ mode: 'adopt', unifiRouteId: id, acknowledgeAutomation: false }, ctx)).rejects.toMatchObject({
       data: { code: 'ROUTE_EXTERNALLY_AUTOMATED' },
     })
+    // Once the admin confirms the outside script is stopped, the route can be taken over.
+    const adopted = await managed.create({ mode: 'adopt', unifiRouteId: id, acknowledgeAutomation: true }, ctx)
+    expect(adopted.unifiRouteId).toBe(id)
+    await managed.release(adopted.id, false, ctx)
     const created = await newRoute()
     await runtime.cache.refresh('routes')
     await managed.update(created.id, { defaultEgressId: vpn }, ctx)

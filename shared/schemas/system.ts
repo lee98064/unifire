@@ -96,7 +96,7 @@ export const Settings = z.object({
   /** Network id → broadcast override for Wake-on-LAN. */
   broadcastOverrides: z.record(z.string(), z.string()),
   selfMacOverride: Mac.nullable(),
-  /** UniFi route ids Unifire must never write (e.g. go-gost hourly egress). */
+  /** UniFi route ids Unifire must never write. */
   excludedRouteIds: z.array(Id),
 })
 

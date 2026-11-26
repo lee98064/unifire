@@ -175,7 +175,7 @@ const stateUi: Record<string, { color: 'success' | 'warning' | 'error' | 'neutra
         <template #actions-cell="{ row }">
           <div class="flex justify-end">
             <UButton v-if="row.original.ownership === 'managed' && row.original.managedRouteId" size="xs" color="neutral" variant="ghost" trailing-icon="i-lucide-arrow-right" :to="`/routes/${row.original.managedRouteId}`">{{ t('common.open') }}</UButton>
-            <UButton v-else-if="row.original.ownership === 'external' && !row.original.suspectedAutomation" size="xs" color="neutral" variant="outline" icon="i-lucide-hand-helping" @click="adopt(row.original.id)">{{ t('routes.adopt') }}</UButton>
+            <UButton v-else-if="row.original.ownership === 'external'" size="xs" color="neutral" variant="outline" icon="i-lucide-hand-helping" @click="adopt(row.original.id)">{{ t('routes.adopt') }}</UButton>
           </div>
         </template>
       </UTable>

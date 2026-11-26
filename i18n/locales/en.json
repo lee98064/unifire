@@ -81,7 +81,7 @@
     "unifiRequestFailed": "Controller request failed",
     "managedRouteNotFound": "Managed route not found",
     "routeCreateUnsupported": "Route creation isn’t available — create it in UniFi, then adopt it",
-    "routeExternallyAutomated": "Recent outside egress changes suggest something else automates this route",
+    "routeExternallyAutomated": "This route’s egress was recently changed from outside. Stop the outside script and confirm before adopting",
     "routeShapeUnsupported": "This route uses criteria the editor can’t represent",
     "routeReservedName": "That name is reserved for probe routes",
     "routeDestinationsRequired": "Add at least one destination",
@@ -290,7 +290,7 @@
     },
     "protect": {
       "title": "Which routes must Unifire never touch?",
-      "desc": "Tick routes that another script already automates (e.g. an hourly go-gost egress switch). Unifire will only ever read them and they can’t be adopted.",
+      "desc": "Tick routes Unifire must only ever read. They can’t be adopted either; you can change this later in Settings → General.",
       "suggested": "Suggested",
       "empty": "No routes to configure",
       "hint": "You can change this later in Settings → General → Never-touch routes.",
@@ -424,7 +424,8 @@
     "adoptHint": "After adopting, Unifire may change this route’s exit; source, destination and kill switch are watched and management pauses if someone edits them in UniFi.",
     "noAdoptable": "No adoptable routes",
     "suspectedAutomation": "Externally automated?",
-    "suspectedAutomationHint": "Audit saw this route being changed periodically from outside (likely another script); adoption is blocked to avoid conflicts.",
+    "suspectedAutomationHint": "Audit saw this route’s egress being changed from outside recently (likely another script). Stop that script before adopting, or the two will keep overwriting each other.",
+    "adoptAutomationAck": "I have stopped the outside script that changes this route",
     "mode": {
       "create": "Create new",
       "adopt": "Adopt existing"
@@ -1568,7 +1569,7 @@
     },
     "general": {
       "excluded": "Never-touch routes",
-      "excludedDesc": "Unifire will only ever read these UniFi routes (e.g. one managed by another script).",
+      "excludedDesc": "Unifire only ever reads the UniFi routes listed here, and they can’t be adopted.",
       "excludedPh": "Pick routes…",
       "basics": "Basics",
       "timezone": "Time zone",

@@ -81,7 +81,7 @@
     "unifiRequestFailed": "控制器請求失敗",
     "managedRouteNotFound": "找不到這條受管路由",
     "routeCreateUnsupported": "此控制器無法經 API 建立路由，請先在 UniFi 建立再認領",
-    "routeExternallyAutomated": "這條路由近期常被外部改變出口，疑似已有其他自動化在管理",
+    "routeExternallyAutomated": "這條路由近期常被外部改變出口。請先停用外部腳本，並勾選確認後再認領",
     "routeShapeUnsupported": "這條路由的條件超出受管路由編輯器能表示的範圍",
     "routeReservedName": "此名稱保留給探測路由",
     "routeDestinationsRequired": "請至少加入一個目的地",
@@ -290,7 +290,7 @@
     },
     "protect": {
       "title": "哪些路由 Unifire 永遠不能動？",
-      "desc": "已由其他腳本自動管理的路由（例如 go-gost 每小時切換出口）請勾選。勾選後 Unifire 只讀不寫，也無法被認領。",
+      "desc": "勾選要讓 Unifire 永遠只讀不寫的路由。勾選後也無法被認領，之後可在「設定 → 一般」修改。",
       "suggested": "建議保護",
       "empty": "沒有可設定的路由",
       "hint": "之後可以在「設定 → 一般 → 永不寫入的路由」修改。",
@@ -424,7 +424,8 @@
     "adoptHint": "認領後 Unifire 才會修改這條路由的出口；其他欄位（來源、目的地、Kill Switch）會被監看，若有人在 UniFi 介面變更，管理會自動暫停。",
     "noAdoptable": "沒有可認領的路由",
     "suspectedAutomation": "疑似外部自動化",
-    "suspectedAutomationHint": "稽核偵測到這條路由會被週期性地從外部修改（可能是其他腳本），為避免互相覆蓋已禁止認領。",
+    "suspectedAutomationHint": "稽核偵測到這條路由近期常被外部修改出口（可能是其他腳本）。認領前請先停掉那個腳本，否則雙方會互相覆蓋。",
+    "adoptAutomationAck": "我已停用會修改這條路由的外部腳本",
     "mode": {
       "create": "建立新路由",
       "adopt": "認領現有路由"
@@ -1568,7 +1569,7 @@
     },
     "general": {
       "excluded": "永不寫入的路由",
-      "excludedDesc": "列在這裡的 UniFi 路由，Unifire 永遠只讀不寫（例如由其他腳本管理的 go-gost 路由）。",
+      "excludedDesc": "列在這裡的 UniFi 路由，Unifire 永遠只讀不寫，也無法被認領。",
       "excludedPh": "選擇路由…",
       "basics": "基本",
       "timezone": "時區",

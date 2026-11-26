@@ -24,7 +24,7 @@ export function cloneGrid(g: Grid): Grid {
 /**
  * Fill a grid from a rotation generator.
  * With `pinned: [{hour:0, egressId: WAN1}]`, `cycle: [A,B,C,B,D,A,E]`, `daily-reset`
- * this reproduces the go-gost `selected_exit()` exactly: hour 0 → WAN1, hour h≥1 → cycle[(h-1) % 7].
+ * this reproduces the reference script's `selected_exit()` exactly: hour 0 → WAN1, hour h≥1 → cycle[(h-1) % 7].
  */
 export function generateGrid(gen: RotationGeneratorInput, base?: Grid): Grid {
   const grid = base ? cloneGrid(base) : emptyGrid()

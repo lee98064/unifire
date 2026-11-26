@@ -21,6 +21,10 @@ const adoptId = ref<string | null>(null)
 // Only routes Unifire can model: known matching type, egress-based (not next-hop), no unfamiliar target types.
 const adoptable = computed(() => props.unifiRoutes.filter(r => r.ownership === 'external' && r.egressId && ['INTERNET', 'DOMAIN', 'IP', 'REGION'].includes(r.matchingTarget) && r.targets.every(tg => tg.type !== 'OTHER')))
 watch(() => props.preselect, (v) => { if (v) { mode.value = 'adopt'; adoptId.value = v } }, { immediate: true })
+// Routes another script keeps switching can be adopted once the admin confirms that script is stopped.
+const adoptAck = ref(false)
+const adoptSuspected = computed(() => !!adoptable.value.find(r => r.id === adoptId.value)?.suspectedAutomation)
+watch(adoptId, () => { adoptAck.value = false })
 
 /* create */
 const form = reactive({
@@ -50,7 +54,7 @@ async function submit() {
   busy.value = true
   try {
     const body = mode.value === 'adopt'
-      ? { mode: 'adopt', unifiRouteId: adoptId.value }
+      ? { mode: 'adopt', unifiRouteId: adoptId.value, acknowledgeAutomation: adoptSuspected.value && adoptAck.value }
       : {
           mode: 'create',
           name: form.name,
@@ -100,8 +104,7 @@ async function submit() {
             :key="r.id"
             type="button"
             class="w-full flex items-center gap-3 p-3 rounded-lg ring-1 text-left transition"
-            :class="[adoptId === r.id ? 'ring-2 ring-primary bg-primary/5' : 'ring-(--ui-border-muted) hover:ring-(--ui-border-accented)', r.suspectedAutomation ? 'opacity-60' : '']"
-            :disabled="r.suspectedAutomation"
+            :class="adoptId === r.id ? 'ring-2 ring-primary bg-primary/5' : 'ring-(--ui-border-muted) hover:ring-(--ui-border-accented)'"
             @click="adoptId = r.id"
           >
             <URadioGroup :model-value="adoptId ?? undefined" :items="[{ value: r.id, label: '' }]" class="pointer-events-none" />
@@ -114,6 +117,11 @@ async function submit() {
           </button>
           <EmptyState v-if="!adoptable.length" icon="i-lucide-inbox" :title="t('routes.noAdoptable')" />
         </div>
+        <UAlert v-if="adoptSuspected" color="warning" variant="subtle" icon="i-lucide-bot" :title="t('routes.suspectedAutomation')" :description="t('routes.suspectedAutomationHint')">
+          <template #actions>
+            <UCheckbox v-model="adoptAck" :label="t('routes.adoptAutomationAck')" />
+          </template>
+        </UAlert>
       </div>
 
       <!-- Create -->
@@ -153,7 +161,7 @@ async function submit() {
     <template #footer>
       <div class="flex justify-end gap-2 w-full">
         <UButton color="neutral" variant="ghost" @click="open = false">{{ t('common.cancel') }}</UButton>
-        <UButton :icon="mode === 'adopt' ? 'i-lucide-hand-helping' : 'i-lucide-plus'" :disabled="mode === 'adopt' ? !adoptId : !canCreate" :loading="busy" @click="submit">
+        <UButton :icon="mode === 'adopt' ? 'i-lucide-hand-helping' : 'i-lucide-plus'" :disabled="mode === 'adopt' ? !adoptId || (adoptSuspected && !adoptAck) : !canCreate" :loading="busy" @click="submit">
           {{ mode === 'adopt' ? t('routes.adopt') : t('routes.create') }}
         </UButton>
       </div>

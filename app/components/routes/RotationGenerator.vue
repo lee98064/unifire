@@ -36,7 +36,7 @@ function toggleDay(d: number) {
   gen.days = gen.days.includes(d) ? gen.days.filter(x => x !== d) : [...gen.days, d].sort()
 }
 
-/** Preset matching the go-gost behaviour: 00:00 on WAN1, rest rotates through VPNs. */
+/** Preset: 00:00 on WAN1, the remaining hours rotate through VPNs. */
 function presetMidnightWan() {
   const wan = props.egresses.find(e => e.kind === 'wan')
   const vpns = props.egresses.filter(e => e.kind !== 'wan').slice(0, 5).map(e => e.id)

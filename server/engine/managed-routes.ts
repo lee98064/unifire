@@ -134,7 +134,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
       if (classifyRoute(doc, service.ownership(run.config.site)) !== 'external' || [PROBE_PREFIX, QUOTA_PREFIX].some(prefix => doc.description?.startsWith(prefix))) {
         throw new UnifiError('ROUTE_NOT_OWNED')
       }
-      if (run.observations.details(doc._id, at).suspectedAutomation) {
+      if (run.observations.details(doc._id, at).suspectedAutomation && !input.acknowledgeAutomation) {
         throw apiError(409, 'ROUTE_EXTERNALLY_AUTOMATED', 'errors.routeExternallyAutomated')
       }
       const routeShape = shape(doc)

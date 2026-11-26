@@ -89,12 +89,11 @@ async function save() {
 }
 
 /* ── Step 4: never-touch routes ──
- * Routes another script already automates (e.g. a go-gost hourly egress) must never be written.
- * The "suspected automation" detector needs hours of observation, so ask up front and pre-select likely candidates. */
+ * Let the admin mark routes Unifire must only ever read. Routes the audit already flags as externally automated are pre-selected. */
 const protectRoutes = ref<UnifiRouteT[]>([])
 const protectSel = ref<string[]>([])
 const protectBusy = ref(false)
-const isSuggested = (r: UnifiRouteT) => r.suspectedAutomation || /gost|hourly|auto[- ]?(switch|egress)/i.test(r.description)
+const isSuggested = (r: UnifiRouteT) => r.suspectedAutomation
 async function loadProtect() {
   try {
     const all = await api.get<UnifiRouteT[]>('/api/routes', { silent: true })
