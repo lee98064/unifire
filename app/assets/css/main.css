@@ -1,2 +1,235 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+/* ──────────────────────────────────────────────────────────────
+   Unifire design tokens — UniFi OS Network 9–11 visual language
+   ────────────────────────────────────────────────────────────── */
+
+@theme static {
+  --font-sans: 'Inter', 'PingFang TC', 'Noto Sans TC', 'Microsoft JhengHei', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* UniFi blue */
+  --color-unifi-50: #ebf3ff;
+  --color-unifi-100: #d6e7ff;
+  --color-unifi-200: #adcfff;
+  --color-unifi-300: #7ab2ff;
+  --color-unifi-400: #4797ff;
+  --color-unifi-500: #006fff;
+  --color-unifi-600: #0059cc;
+  --color-unifi-700: #0047a3;
+  --color-unifi-800: #00377d;
+  --color-unifi-900: #002a61;
+  --color-unifi-950: #001a3d;
+
+  /* UniFi greys */
+  --color-ufgray-50: #f9f9fa;
+  --color-ufgray-100: #f4f5f6;
+  --color-ufgray-200: #eaebed;
+  --color-ufgray-300: #dee0e3;
+  --color-ufgray-400: #b4b8be;
+  --color-ufgray-500: #868b93;
+  --color-ufgray-600: #50565e;
+  --color-ufgray-700: #3b3f45;
+  --color-ufgray-800: #2a2d31;
+  --color-ufgray-900: #1c1e21;
+  --color-ufgray-950: #131416;
+
+  /* Status */
+  --color-ufgreen-50: #ebfaf0;
+  --color-ufgreen-100: #d3f4de;
+  --color-ufgreen-200: #a7e9bd;
+  --color-ufgreen-300: #73db97;
+  --color-ufgreen-400: #4fd27a;
+  --color-ufgreen-500: #38cc65;
+  --color-ufgreen-600: #24a84e;
+  --color-ufgreen-700: #1d8540;
+  --color-ufgreen-800: #186735;
+  --color-ufgreen-900: #12502a;
+  --color-ufgreen-950: #0a2e18;
+
+  --color-ufamber-50: #fef6e7;
+  --color-ufamber-100: #fdebc8;
+  --color-ufamber-200: #fbd691;
+  --color-ufamber-300: #f9c05a;
+  --color-ufamber-400: #f7b23d;
+  --color-ufamber-500: #f5a524;
+  --color-ufamber-600: #d4860c;
+  --color-ufamber-700: #a9670a;
+  --color-ufamber-800: #7e4d0b;
+  --color-ufamber-900: #5e3a0b;
+  --color-ufamber-950: #3a2205;
+
+  --color-ufred-50: #feecec;
+  --color-ufred-100: #fdd5d6;
+  --color-ufred-200: #faabad;
+  --color-ufred-300: #f67d80;
+  --color-ufred-400: #f35a5e;
+  --color-ufred-500: #f03a3e;
+  --color-ufred-600: #d41e22;
+  --color-ufred-700: #a9171a;
+  --color-ufred-800: #821417;
+  --color-ufred-900: #631215;
+  --color-ufred-950: #3d0809;
+
+  /* VPN purple */
+  --color-ufpurple-50: #f4eeff;
+  --color-ufpurple-100: #e9ddff;
+  --color-ufpurple-200: #d3bbff;
+  --color-ufpurple-300: #ba95ff;
+  --color-ufpurple-400: #a477ff;
+  --color-ufpurple-500: #8e59ff;
+  --color-ufpurple-600: #7238f0;
+  --color-ufpurple-700: #5b29c7;
+  --color-ufpurple-800: #46219b;
+  --color-ufpurple-900: #361c74;
+  --color-ufpurple-950: #200f47;
+
+  --ease-uf: cubic-bezier(0.2, 0, 0, 1);
+  --animate-flow: flow-dash 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 2.4s var(--ease-uf) infinite;
+}
+
+:root {
+  --ui-radius: 0.375rem;
+  --ui-header-height: 3.5rem;
+
+  /* Unifire surface tokens (light) */
+  --uf-page: var(--color-ufgray-100);
+  --uf-surface: #ffffff;
+  --uf-surface-2: var(--color-ufgray-50);
+  --uf-hover: color-mix(in oklab, var(--color-ufgray-900) 4%, transparent);
+  --uf-rail: #ffffff;
+  --uf-grid-line: color-mix(in oklab, var(--color-ufgray-900) 6%, transparent);
+  --uf-shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.06);
+  --uf-shadow-lg: 0 12px 32px -8px rgb(16 24 40 / 0.18), 0 4px 8px -4px rgb(16 24 40 / 0.08);
+  --uf-glow: 0 0 0 4px color-mix(in oklab, var(--ui-primary) 18%, transparent);
+
+  --ui-text: var(--color-ufgray-700);
+  --ui-text-highlighted: #212327;
+  --ui-text-toned: var(--color-ufgray-600);
+  --ui-text-muted: #6b717a;
+  --ui-text-dimmed: var(--color-ufgray-500);
+  --ui-bg: #ffffff;
+  --ui-bg-muted: var(--color-ufgray-50);
+  --ui-bg-elevated: var(--color-ufgray-100);
+  --ui-bg-accented: var(--color-ufgray-200);
+  --ui-border: var(--color-ufgray-300);
+  --ui-border-muted: var(--color-ufgray-200);
+  --ui-border-accented: var(--color-ufgray-400);
+}
+
+.dark {
+  --uf-page: var(--color-ufgray-950);
+  --uf-surface: var(--color-ufgray-900);
+  --uf-surface-2: #232529;
+  --uf-hover: color-mix(in oklab, #fff 5%, transparent);
+  --uf-rail: #17181b;
+  --uf-grid-line: color-mix(in oklab, #fff 6%, transparent);
+  --uf-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  --uf-shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.6), 0 4px 10px -4px rgb(0 0 0 / 0.5);
+
+  --ui-text: #c9ccd1;
+  --ui-text-highlighted: #f4f5f6;
+  --ui-text-toned: #aeb2b8;
+  --ui-text-muted: #8a9099;
+  --ui-text-dimmed: #6b717a;
+  --ui-bg: var(--color-ufgray-900);
+  --ui-bg-muted: #232529;
+  --ui-bg-elevated: #26292d;
+  --ui-bg-accented: #2e3135;
+  --ui-border: #2e3135;
+  --ui-border-muted: #26292d;
+  --ui-border-accented: #3b3f45;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01', 'tnum';
+    background: var(--uf-page);
+  }
+  body {
+    background: var(--uf-page);
+    color: var(--ui-text);
+    overscroll-behavior-y: none;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--ui-primary) 25%, transparent);
+  }
+  /* Thin UniFi-like scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--ui-text-dimmed) 45%, transparent) transparent;
+  }
+}
+
+@layer components {
+  .uf-card {
+    background: var(--uf-surface);
+    border: 1px solid var(--ui-border-muted);
+    border-radius: 0.625rem;
+    box-shadow: var(--uf-shadow);
+  }
+  .uf-card-hover {
+    transition: border-color 150ms var(--ease-uf), box-shadow 150ms var(--ease-uf), transform 150ms var(--ease-uf);
+  }
+  .uf-card-hover:hover {
+    border-color: var(--ui-border-accented);
+    box-shadow: var(--uf-shadow-lg);
+  }
+  .uf-section-title {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-text-dimmed);
+  }
+  .uf-mono {
+    font-family: var(--font-mono);
+    font-size: 0.8125em;
+    letter-spacing: -0.01em;
+  }
+  .uf-num {
+    font-variant-numeric: tabular-nums;
+  }
+  .uf-divider {
+    border-color: var(--ui-border-muted);
+  }
+  .uf-grid-bg {
+    background-image:
+      linear-gradient(var(--uf-grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--uf-grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .uf-glass {
+    background: color-mix(in oklab, var(--uf-surface) 82%, transparent);
+    backdrop-filter: saturate(1.6) blur(14px);
+    -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  }
+}
+
+@keyframes flow-dash {
+  to { stroke-dashoffset: -24; }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent); }
+  70% { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Print (ISP reports) */
+@media print {
+  html, body { background: #fff !important; }
+  .uf-no-print { display: none !important; }
+  .uf-card { box-shadow: none; break-inside: avoid; }
+}

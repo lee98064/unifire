@@ -10,6 +10,8 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  components: [{ path: '~/components', pathPrefix: false }],
+
   app: {
     head: {
       htmlAttrs: { lang: 'zh-Hant-TW' },
@@ -102,7 +104,8 @@ export default defineNuxtConfig({
     session: {
       name: 'unifire-session',
       maxAge: 60 * 60 * 24 * 30,
-      // password comes from NUXT_SESSION_PASSWORD (auto-generated into the data dir if missing)
+      // Backend startup uses NUXT_SESSION_PASSWORD or session.key as the Nuxt app secret.
+      cookie: { secure: true },
     },
     public: {
       appVersion: '0.1.0',
@@ -112,6 +115,24 @@ export default defineNuxtConfig({
   nitro: {
     preset: 'node-server',
     experimental: { tasks: true },
+    rollupConfig: {
+      plugins: [{
+        name: 'unifire:initialize-session-key',
+        transform(code: string, id: string) {
+          // Nitro 2 resolves and freezes the shared config during module evaluation.
+          if (!/[/\\]nitropack[/\\]dist[/\\]runtime[/\\]internal[/\\]config\.mjs$/.test(id)) return
+          const bootstrap = new URL('./server/runtime/session-key.ts', import.meta.url).pathname
+          const marker = 'const _sharedRuntimeConfig ='
+          if (!code.includes(marker)) throw new Error('Nitro runtime config initialization has changed')
+          return {
+            code: `import { initializeSessionKey } from ${JSON.stringify(bootstrap)};\n`
+              + code.replace(marker, `initializeSessionKey();\n${marker}`),
+            map: null,
+          }
+        },
+      }],
+    },
+    serverAssets: [{ baseName: 'locales', dir: './i18n/locales' }],
   },
 
   typescript: {

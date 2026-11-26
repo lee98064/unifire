@@ -116,6 +116,7 @@ export const api = {
 
   // ── automation ────────────────────────────────────────────────
   rules: ep('GET', '/api/rules', 'admin', z.array(M.Rule)),
+  rule: ep('GET', '/api/rules/:id', 'admin', M.Rule),
   ruleCreate: ep('POST', '/api/rules', 'admin', M.Rule, M.RuleInput),
   ruleUpdate: ep('PATCH', '/api/rules/:id', 'admin', M.Rule, M.RuleInput.partial()),
   ruleDelete: ep('DELETE', '/api/rules/:id', 'admin', Ok),
