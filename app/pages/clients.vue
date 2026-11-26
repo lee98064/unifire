@@ -64,11 +64,11 @@ const usageChart = computed<EChartsOption>(() => ({
   ],
 }))
 
-const edit = reactive({ alias: '' as string | null, personId: null as string | null, note: '' as string | null })
-watch(selected, (c) => { if (c) Object.assign(edit, { alias: c.unifiName === c.displayName ? '' : c.displayName, personId: c.personId, note: c.note ?? '' }) }, { immediate: true })
+const edit = reactive({ alias: '', personId: '', note: '' })
+watch(selected, (c) => { if (c) Object.assign(edit, { alias: c.unifiName === c.displayName ? '' : c.displayName, personId: c.personId ?? '', note: c.note ?? '' }) }, { immediate: true })
 async function saveEdit() {
   if (!selected.value) return
-  await api.patch(`/api/clients/${selected.value.mac}`, { alias: edit.alias || null, personId: edit.personId, note: edit.note || null }, { success: t('common.saved') })
+  await api.patch(`/api/clients/${selected.value.mac}`, { alias: edit.alias || null, personId: edit.personId || null, note: edit.note || null }, { success: t('common.saved') })
   refresh()
   refreshNuxtData('people')
 }
@@ -78,7 +78,7 @@ async function action(a: 'block' | 'unblock' | 'kick') {
   await api.post(`/api/clients/${selected.value.mac}/action`, { action: a, minutes: a === 'block' ? blockMinutes.value ?? undefined : undefined }, { success: t(`clients.done.${a}`) })
   refresh()
 }
-const personItems = computed(() => [{ label: t('clients.noPerson'), value: null }, ...people.value.map(p => ({ label: `${p.avatar} ${p.name}`, value: p.id }))])
+const personItems = computed(() => [{ label: t('clients.noPerson'), value: '' }, ...people.value.map(p => ({ label: `${p.avatar} ${p.name}`, value: p.id }))])
 </script>
 
 <template>

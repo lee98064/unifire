@@ -118,7 +118,7 @@ onKeyStroke((e) => {
 })
 
 /* now indicator */
-const now = useNow({ interval: 60_000 })
+const now = useClock(60_000)
 const nowWc = computed(() => wallClock(now.value.getTime(), props.timezone))
 
 const stats = computed(() => gridStats(grid.value, props.defaultEgressId))

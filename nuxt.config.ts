@@ -30,6 +30,10 @@ export default defineNuxtConfig({
     },
   },
 
+  auth: {
+    webAuthn: true,
+  },
+
   ui: {
     theme: { colors: ['primary', 'secondary', 'success', 'info', 'warning', 'error', 'neutral', 'vpn'] },
   },

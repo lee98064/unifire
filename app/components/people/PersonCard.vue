@@ -6,7 +6,7 @@ const emit = defineEmits<{ edit: [] }>()
 const { t } = useI18n()
 const fmt = useFormat()
 const api = useApi()
-const now = useNow({ interval: 30_000 })
+const now = useClock(30_000)
 const { data: quotas } = useFetch<QuotaStatusT[]>(() => `/api/people/${props.person.id}/quotas`, { key: `person-quotas-${props.person.id}`, default: () => [] })
 
 const pauseOpen = ref(false)

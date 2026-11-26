@@ -66,7 +66,7 @@ async function save() {
   finally { saving.value = false }
 }
 async function remove() {
-  if (!(await confirm({ title: t('rules.deleteConfirm'), color: 'error' })) return
+  if (!(await confirm({ title: t('rules.deleteConfirm'), color: 'error' }))) return
   await api.del(`/api/rules/${route.params.id}`, undefined, { success: t('common.deleted') })
   refreshNuxtData('rules')
   await navigateTo('/automation/rules')

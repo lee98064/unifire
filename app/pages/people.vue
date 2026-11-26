@@ -52,7 +52,7 @@ async function save() {
   refreshNuxtData('clients')
 }
 async function remove() {
-  if (!editing.value || !(await confirm({ title: t('people.deleteConfirm', { name: editing.value.name }), color: 'error' })) return
+  if (!editing.value || !(await confirm({ title: t('people.deleteConfirm', { name: editing.value.name }), color: 'error' }))) return
   await api.del(`/api/people/${editing.value.id}`, undefined, { success: t('common.deleted') })
   editorOpen.value = false
   refresh()

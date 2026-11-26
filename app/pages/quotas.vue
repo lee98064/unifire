@@ -24,7 +24,7 @@ function amount(q: { metric: QuotaT['metric'] }, v: number) { return q.metric ==
 const open = ref(false)
 const editingId = ref<string | null>(null)
 const form = reactive({
-  name: '', scopeType: 'person' as 'person' | 'group' | 'client', scopeId: null as string | null,
+  name: '', scopeType: 'person' as 'person' | 'group' | 'client', scopeId: undefined as string | undefined,
   metric: 'activeMinutes' as QuotaT['metric'], period: 'daily' as QuotaT['period'],
   limitValue: 120, limitUnit: 'min' as 'min' | 'h' | 'MB' | 'GB',
   useWeekday: false, weekday: [120, 120, 120, 120, 180, 240, 240] as number[],
@@ -46,7 +46,7 @@ function openEditor(q: QuotaT | null) {
     })
   }
   else {
-    Object.assign(form, { name: '', scopeType: 'person', scopeId: null, metric: 'activeMinutes', period: 'daily', limitValue: 2, limitUnit: 'h', useWeekday: false, weekday: [2, 2, 2, 2, 3, 4, 4], warnAtPct: 80, actionType: 'block', actionEgressId: null, enabled: true })
+    Object.assign(form, { name: '', scopeType: 'person', scopeId: undefined, metric: 'activeMinutes', period: 'daily', limitValue: 2, limitUnit: 'h', useWeekday: false, weekday: [2, 2, 2, 2, 3, 4, 4], warnAtPct: 80, actionType: 'block', actionEgressId: null, enabled: true })
   }
   open.value = true
 }
@@ -74,7 +74,7 @@ async function toggle(q: QuotaT, enabled: boolean) {
   refresh()
 }
 async function remove() {
-  if (!editingId.value || !(await confirm({ title: t('quotas.deleteConfirm'), color: 'error' })) return
+  if (!editingId.value || !(await confirm({ title: t('quotas.deleteConfirm'), color: 'error' }))) return
   await api.del(`/api/quotas/${editingId.value}`, undefined, { success: t('common.deleted') })
   open.value = false
   refresh()
@@ -127,7 +127,7 @@ const canSave = computed(() => form.name && form.scopeId && form.limitValue > 0 
           <UFormField :label="t('quotas.name')"><UInput v-model="form.name" class="w-full" :placeholder="t('quotas.namePh')" /></UFormField>
           <div class="grid grid-cols-[auto_1fr] gap-2 items-end">
             <UFormField :label="t('quotas.scope')">
-              <USelect v-model="form.scopeType" :items="[{ value: 'person', label: t('quotas.scopeType.person') }, { value: 'group', label: t('quotas.scopeType.group') }, { value: 'client', label: t('quotas.scopeType.client') }]" class="w-32" @update:model-value="form.scopeId = null" />
+              <USelect v-model="form.scopeType" :items="[{ value: 'person', label: t('quotas.scopeType.person') }, { value: 'group', label: t('quotas.scopeType.group') }, { value: 'client', label: t('quotas.scopeType.client') }]" class="w-32" @update:model-value="form.scopeId = undefined" />
             </UFormField>
             <USelectMenu v-model="form.scopeId" :items="scopeItems" value-key="value" class="w-full" />
           </div>

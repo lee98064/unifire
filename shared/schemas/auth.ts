@@ -31,8 +31,14 @@ export const UserCreateInput = z.object({
   locale: Locale.default('zh-TW'),
 })
 
-export const UserUpdateInput = UserCreateInput.partial().extend({
+/** No defaults here: omitted fields must stay omitted on PATCH. */
+export const UserUpdateInput = z.object({
+  username: z.string().min(2).max(64).regex(/^[a-zA-Z0-9._-]+$/).optional(),
+  displayName: z.string().min(1).max(64).optional(),
   password: z.string().min(8).max(256).optional(),
+  role: Role.optional(),
+  personId: Id.nullable().optional(),
+  locale: Locale.optional(),
 })
 
 export const PasswordChangeInput = z.object({

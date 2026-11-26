@@ -4,7 +4,7 @@ import type { UpcomingSwitchT } from '#shared/schemas/system'
 defineProps<{ items: UpcomingSwitchT[] }>()
 const { t } = useI18n()
 const fmt = useFormat()
-const now = useNow({ interval: 30_000 })
+const now = useClock(30_000)
 </script>
 
 <template>

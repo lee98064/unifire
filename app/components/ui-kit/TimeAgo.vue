@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const props = defineProps<{ ts: number | null | undefined }>()
 const fmt = useFormat()
-const now = useNow({ interval: 30_000 })
+const now = useClock(30_000)
 const label = computed(() => fmt.ago(props.ts, now.value.getTime()))
 </script>
 

@@ -7,7 +7,7 @@ const props = defineProps<{ preview: RoutePreviewT | null }>()
 const { t } = useI18n()
 const fmt = useFormat()
 const { get } = useEgresses()
-const now = useNow({ interval: 30_000 })
+const now = useClock(30_000)
 
 const range = computed(() => {
   const segs = props.preview?.segments ?? []

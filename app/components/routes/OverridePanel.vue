@@ -7,7 +7,7 @@ const { t } = useI18n()
 const api = useApi()
 const fmt = useFormat()
 const { egresses } = useEgresses()
-const now = useNow({ interval: 1000 })
+const now = useClock(1000)
 
 const egressId = ref<string | null>(null)
 const minutes = ref<number | null>(120)

@@ -22,13 +22,13 @@ async function save() {
 }
 const rotating = ref(false)
 async function rotate() {
-  if (!(await confirm({ title: t('guestWifi.rotateConfirm'), color: 'warning' })) return
+  if (!(await confirm({ title: t('guestWifi.rotateConfirm'), color: 'warning' }))) return
   rotating.value = true
   try { gw.value = await api.post<GuestWifiT>('/api/guest-wifi/rotate', undefined, { success: t('guestWifi.rotated') }) }
   finally { rotating.value = false }
 }
 async function resetToken() {
-  if (!(await confirm({ title: t('guestWifi.resetTokenConfirm'), color: 'warning' })) return
+  if (!(await confirm({ title: t('guestWifi.resetTokenConfirm'), color: 'warning' }))) return
   gw.value = await api.post<GuestWifiT>('/api/guest-wifi/kiosk-token', undefined, { success: t('guestWifi.tokenReset') })
 }
 const wifiUri = computed(() => gw.value?.ssid && gw.value.passphrase ? `WIFI:T:WPA;S:${gw.value.ssid.replace(/([\;,:"])/g, '\\$1')};P:${gw.value.passphrase.replace(/([\;,:"])/g, '\\$1')};;` : '')
@@ -43,7 +43,7 @@ const kioskHref = computed(() => gw.value?.kioskUrl ?? (gw.value?.kioskToken ? `
       <UCard>
         <div class="space-y-5">
           <UFormField :label="t('guestWifi.ssid')" :description="t('guestWifi.ssidHint')">
-            <USelectMenu v-model="form.wlanId" :items="wlans.map(w => ({ label: w.name, value: w.id, description: `${w.security}${w.isGuest ? ` · ${t('guestWifi.guestNet')}` : ''}`, icon: w.enabled ? 'i-lucide-wifi' : 'i-lucide-wifi-off' }))" value-key="value" class="w-full" />
+            <USelectMenu :model-value="form.wlanId ?? undefined" @update:model-value="form.wlanId = $event ?? null" :items="wlans.map(w => ({ label: w.name, value: w.id, description: `${w.security}${w.isGuest ? ` · ${t('guestWifi.guestNet')}` : ''}`, icon: w.enabled ? 'i-lucide-wifi' : 'i-lucide-wifi-off' }))" value-key="value" class="w-full" />
           </UFormField>
           <div class="flex items-center justify-between">
             <div>

@@ -23,9 +23,9 @@ watch(() => props.preselect, (v) => { if (v) { mode.value = 'adopt'; adoptId.val
 const form = reactive({
   name: '',
   sourceType: 'person' as 'person' | 'client' | 'network',
-  personId: null as string | null,
+  personId: undefined as string | undefined,
   macs: [] as string[],
-  networkId: null as string | null,
+  networkId: undefined as string | undefined,
   matchingTarget: 'INTERNET' as MatchingTargetT,
   destinations: '',
   killSwitch: true,
@@ -95,7 +95,7 @@ async function submit() {
             :disabled="r.suspectedAutomation"
             @click="adoptId = r.id"
           >
-            <URadioGroup :model-value="adoptId" :items="[{ value: r.id, label: '' }]" class="pointer-events-none" />
+            <URadioGroup :model-value="adoptId ?? undefined" :items="[{ value: r.id, label: '' }]" class="pointer-events-none" />
             <div class="min-w-0 flex-1">
               <div class="text-[13px] font-medium text-highlighted truncate">{{ r.description || t('routes.unnamed') }}</div>
               <div class="text-[11.5px] text-dimmed truncate">{{ t(`routes.match.${r.matchingTarget}`) }} · {{ r.targets.length }} {{ t('routes.sources') }}</div>

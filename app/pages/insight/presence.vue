@@ -17,7 +17,7 @@ const window_ = computed(() => {
   return { from, to }
 })
 const { data, status } = useFetch<PresenceTimelineT>('/api/presence/timeline', { query: window_, key: 'presence-timeline' })
-const now = useNow({ interval: 60_000 })
+const now = useClock(60_000)
 const pos = (ts: number) => Math.max(0, Math.min(100, ((ts - window_.value.from) / (window_.value.to - window_.value.from)) * 100))
 const ticks = computed(() => {
   const out: { left: number, label: string }[] = []

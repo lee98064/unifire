@@ -57,13 +57,13 @@ async function save() {
   refresh()
 }
 async function remove() {
-  if (!editingId.value || !(await confirm({ title: t('watchdogs.deleteConfirm'), color: 'error' })) return
+  if (!editingId.value || !(await confirm({ title: t('watchdogs.deleteConfirm'), color: 'error' }))) return
   await api.del(`/api/watchdogs/${editingId.value}`, undefined, { success: t('common.deleted') })
   open.value = false
   refresh()
 }
 async function cycleNow(d: PoeWatchdogT) {
-  if (!(await confirm({ title: t('watchdogs.cycleConfirm', { name: d.name }), color: 'warning' })) return
+  if (!(await confirm({ title: t('watchdogs.cycleConfirm', { name: d.name }), color: 'warning' }))) return
   await api.post(`/api/watchdogs/${d.id}/cycle`, undefined, { success: t('watchdogs.cycled') })
   refresh()
 }

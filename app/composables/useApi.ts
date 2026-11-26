@@ -34,10 +34,11 @@ export function useApi() {
         await navigateTo('/login')
       }
       if (!opts.silent) {
-        const codeKey = info.code ? `errors.${info.code}` : ''
+        // Server messages are i18n keys (e.g. "errors.invalidCredentials"); fall back to raw text.
+        const translated = te(info.message) ? t(info.message) : null
         toast.add({
-          title: codeKey && te(codeKey) ? t(codeKey) : t('errors.generic'),
-          description: info.message,
+          title: translated ?? t('errors.generic'),
+          description: translated ? undefined : info.message,
           color: 'error',
           icon: 'i-lucide-circle-alert',
         })
