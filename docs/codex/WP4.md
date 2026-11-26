@@ -64,3 +64,18 @@ Read `docs/codex/BRIEF.md` first. WP1–WP3 are in the repo.
 - diff paths/labels/secret redaction; restore plan per resource type; excluded routes unsupported;
   dry-run vs apply with verification; pre-write debounce; external change attribution vs write ledger;
   retention keeps newest 3.
+
+## 7. WP3 follow-ups (from Claude's review — do these too)
+- **Audit target labels for route writes.** `routes.update`/`routes.delete` audit rows currently use the
+  UniFi `_id` as `target.label` (e.g. `demo-route-f634…`). Let the write gate's plan supply the label
+  (route `description`, falling back to the id) so the timeline reads "更新路由 · [unifire-probe] sweep".
+- **Collapse routine probe/sweep noise.** A single sweep currently writes ~2 audit rows per egress
+  (~22 rows per hourly sweep). Record **one** summary event per sweep (`audit.egress.sweepDone`
+  {total, ok, changed, failed}) plus the existing `audit.egress.ipChanged` per changed IP; individual
+  probe/sweep route writes are audited only when they fail. Same for probe provisioning: one summary
+  (`audit.egress.probesProvisioned` {created, repaired, removed}). Keep failures and drift loud.
+  Document new keys in `docs/backend/i18n-keys.md`.
+- **Dev double-start sanity check.** In `pnpm dev` Nuxt restarts Nitro once after type generation; with
+  the in-memory mock this replays the first reconcile against a fresh fake controller. That is fine, but
+  make sure the production bundle (`node .output/server/index.mjs` with the mock) performs the initial
+  reconcile and probe provisioning **exactly once** — add an assertion to your HTTP smoke script.
