@@ -150,13 +150,27 @@ export function createBlockReconciler(db: Db, service: ControllerService) {
     })
   }
 
+  type KickDecision = { send: boolean, wasBlocked?: boolean, commit?: () => void }
+
+  async function sendKick(runtime: Runtime, mac: string, ctx: WriteContext, decide: () => Promise<KickDecision>) {
+    const result = await runtime.writes.clientAction(mac, 'kick', ctx, decide)
+    if (result.changed && !result.dryRun) await refresh(runtime, mac)
+    return result
+  }
+
+  function kick(mac: string, ctx: WriteContext, decide: (runtime: Runtime) => Promise<KickDecision>) {
+    return queue(() => {
+      const runtime = requireRuntime()
+      return sendKick(runtime, mac, ctx, () => decide(runtime))
+    })
+  }
+
   function action(mac: string, name: 'block' | 'unblock' | 'kick', ctx: WriteContext, readDesired: () => Map<string, BlockReasonT[]>,
     minutes?: number) {
     return queue(async () => {
       const runtime = requireRuntime()
       if (name === 'kick') {
-        const result = await runtime.writes.clientAction(mac, name, ctx, async () => ({ send: true }))
-        if (!result.dryRun) await refresh(runtime, mac)
+        await sendKick(runtime, mac, ctx, async () => ({ send: true }))
       } else {
         const live = service.status().mode === 'live' && !ctx.dryRun
         if (live) {
@@ -200,5 +214,5 @@ export function createBlockReconciler(db: Db, service: ControllerService) {
     })
   }
 
-  return { reconcile, action, ruleAction }
+  return { reconcile, action, ruleAction, kick }
 }

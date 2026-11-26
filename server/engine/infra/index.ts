@@ -27,6 +27,8 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
   const operations = new Set<Promise<unknown>>()
   let lastPush = -Infinity
   let pushTimer: ReturnType<typeof setTimeout> | undefined
+  let topologyTimer: ReturnType<typeof setTimeout> | undefined
+  let lastTopologyPush = -Infinity
   let locateTimer: ReturnType<typeof setTimeout> | undefined
   let expiry: Promise<void> | undefined
   let active: (() => boolean) | undefined
@@ -148,9 +150,27 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
     return expiry
   }
 
+  function topologyChanged() {
+    if (topologyTimer) return
+    const publish = () => {
+      topologyTimer = undefined
+      if (stop || !active?.()) return
+      lastTopologyPush = now()
+      bus.emit({ type: 'topology', data: { ts: lastTopologyPush } })
+    }
+    const delay = lastTopologyPush + 10_000 - now()
+    if (delay <= 0) publish()
+    else {
+      topologyTimer = setTimeout(publish, delay)
+      topologyTimer.unref()
+    }
+  }
+
   function onEvent(event: ControllerEvent) {
     if (!active?.()) return
     if (event.type === 'cache.changed' && event.resource === 'devices') sample()
+    if (event.type === 'cache.changed' && ['devices', 'activeClients', 'knownClients', 'networks'].includes(event.resource)
+      || event.type === 'egress.healthChanged' || event.type === 'controller.mode') topologyChanged()
     if (event.type === 'controller.mode' || event.type === 'controller.reconnected') void expire().catch(() => {})
   }
 
@@ -200,6 +220,7 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
         stop = true
         service.engine.off('event', onEvent)
         clearTimeout(pushTimer)
+        clearTimeout(topologyTimer)
         clearTimeout(locateTimer)
         await Promise.allSettled([...operations, expiry, stopPoe()])
       }

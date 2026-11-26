@@ -609,9 +609,10 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
       const command = { cmd: `${action}-sta`, mac }
       return run(`client.${action}`, 'client', { type: 'client', id: mac }, ctx, async () => {
         const decision = await decide()
+        const before = decision.wasBlocked === undefined ? {} : { blocked: decision.wasBlocked }
         return {
-          before: decision.wasBlocked === undefined ? {} : { blocked: decision.wasBlocked },
-          after: action === 'kick' ? command : { blocked: action === 'block' },
+          before,
+          after: action === 'kick' ? decision.send ? command : before : { blocked: action === 'block' },
           apply: decision.send ? () => write('POST', paths.classic('cmd/stamgr'), command) : undefined,
           verify: decision.verify,
           commit: decision.commit,

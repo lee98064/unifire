@@ -156,7 +156,9 @@
     "poeScheduleNotFound": "找不到這個 PoE 排程",
     "poeScheduleExists": "這個連接埠已經有排程了",
     "portEventNotFound": "找不到這個連接埠事件",
-    "dryRun": "這個操作必須在寫入模式下才能安全完成"
+    "dryRun": "這個操作必須在寫入模式下才能安全完成",
+    "roomApRequired": "只有 AP 可以指派到房間",
+    "roomNotFound": "找不到這個房間"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -1715,7 +1717,8 @@
       "would": "試算：會執行",
       "failed": "執行失敗",
       "webhookFailed": "Webhook 呼叫失敗",
-      "not_implemented": "這個功能還在建置中，暫時不會執行"
+      "not_implemented": "這個功能還在建置中，暫時不會執行",
+      "kickSkipped": "裝置不符合重新連線條件（流量大、剛推過或已被封鎖），已略過"
     }
   },
   "watchdog": {
@@ -2084,7 +2087,8 @@
       "month": "本月",
       "manage": "PoE 排程與電力帳本",
       "byPort": "各連接埠用電"
-    }
+    },
+    "plannedOff": "排程斷電"
   },
   "ports": {
     "faceplate": "交換器面板",
@@ -2385,7 +2389,12 @@
         "weak_mesh": "Mesh 訊號偏弱",
         "half_duplex": "半雙工",
         "errors": "線路錯誤"
-      }
+      },
+      "speed_below_capability": "{parent} → {child} 只跑到 {speed} Mbps（可達 {max} Mbps）",
+      "high_utilization": "{parent} → {child} 頻寬使用 {util}%",
+      "weak_mesh": "{child} 的 Mesh 上連訊號只有 {signal} dBm",
+      "half_duplex": "{parent} → {child} 是半雙工",
+      "errors": "{parent} → {child} 的連接埠錯誤率偏高"
     },
     "noBottlenecks": "目前沒有瓶頸",
     "tip": "滑過設備會標出它到閘道的路徑；拖曳可以調整位置，排列會記在這台裝置上。",
@@ -2452,7 +2461,9 @@
       "high_mem": "記憶體使用率偏高（{mem}%）",
       "firmware_available": "有新韌體 {version}",
       "unexpected_reboot": "24 小時內曾非預期重開機",
-      "port_issue": "{count} 個連接埠有異常"
+      "port_issue": "{count} 個連接埠有異常",
+      "poe_scheduled_off": "依 PoE 排程「{schedule}」斷電中",
+      "bottleneck": "上連有瓶頸"
     }
   },
   "diff": {

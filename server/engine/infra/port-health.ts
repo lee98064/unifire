@@ -12,7 +12,7 @@ import type { WireDevice, WireDoc, WireStation } from '../../unifi/endpoints/sch
 import { liveBus } from '../../utils/bus'
 import { DAY, HOUR } from '../access-time'
 import { createDeviceGraph, createPoeSafety } from './poe-safety'
-import { archivePorts, PORT_BUCKET, portKey, recentDeltas, samplePort, type PortKey } from './port-history'
+import { archivePorts, customPortName, PORT_BUCKET, portKey, portSpeedLabel, recentDeltas, samplePort, type PortKey } from './port-history'
 import { readPorts } from './ports'
 
 const fields = ['rx_errors', 'tx_errors', 'rx_dropped', 'tx_dropped', 'rx_packets', 'tx_packets', 'link_down_count'] as const
@@ -88,7 +88,9 @@ export function createPortHealth(db: Db, service: ControllerService, bus = liveB
       const owners = new Map(tx.select().from(personDevices).all().map(row => [row.mac, row.personId]))
       for (const device of graph.byMac.values()) {
         if (deviceState(device) === 'offline' || deviceState(device) === 'restarting') continue
-        for (const reading of readPorts(device, graph, stations, safety, owners)) {
+        const firstSeen = new Map(tx.select().from(portPeers).where(and(eq(portPeers.scope, scope), eq(portPeers.switchMac, device.mac)))
+          .all().map(row => [row.portIdx + '/' + row.mac, row.firstSeen]))
+        for (const reading of readPorts(device, graph, stations, safety, owners, firstSeen)) {
           const { view } = reading
           const key = { scope, switchMac: device.mac, portIdx: view.idx }
           const skip = ignored.has(device.mac + '/' + view.idx)
@@ -109,8 +111,8 @@ export function createPortHealth(db: Db, service: ControllerService, bus = liveB
             const row = {
               ...key, id: randomUUID(), ts: at, switchName, portName: view.name, kind, severity: severity[kind],
               messageKey: `port.event.${kind}`,
-              messageParams: { switch: switchName, port: view.name ?? String(view.idx), from: String(previous?.baselineSpeed ?? ''),
-                to: String(view.speedMbps ?? ''), peer: peer?.name ?? peer?.mac ?? '',
+              messageParams: { switch: switchName, port: String(view.idx), portName: customPortName(view.name),
+                from: portSpeedLabel(previous?.baselineSpeed), to: portSpeedLabel(view.speedMbps), peer: peer?.name ?? peer?.mac ?? '',
                 rate: recent.rate?.toFixed(2) ?? '', flaps: String(recent.flaps) },
               data: { fromMbps: previous?.baselineSpeed ?? null, toMbps: view.speedMbps, peerMac: peer?.mac ?? null,
                 errorRatePct: recent.rate, flaps: recent.flaps },

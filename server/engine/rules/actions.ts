@@ -77,10 +77,7 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
 
   return async (action: RuleActionT, rule: RuleT, event: RuleEvent, dryRun: boolean, explicitDryRun: boolean, signal: AbortSignal) => {
     const ctx: WriteContext = { actor: { type: 'rule', id: rule.id, name: rule.name }, dryRun }
-    if (action.type === 'client.kick') {
-      return { changed: false, ok: false, message: 'rule.result.not_implemented' }
-    }
-    const preview = explicitDryRun || dryRun && action.type !== 'notify' && action.type !== 'webhook' && action.type !== 'delay'
+    const preview = explicitDryRun || dryRun && action.type !== 'notify' && action.type !== 'webhook' && action.type !== 'delay' && action.type !== 'client.kick'
     if (preview) return { changed: false, ok: true, message: 'rule.result.would' }
     if (signal.aborted) throw signal.reason
     let changed = true
@@ -148,6 +145,11 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
         if (action.type === 'wlan.toggle' && result.changed && !result.dryRun) await run.cache.refresh('wlans').catch(() => {})
         changed = result.changed && !result.dryRun
         break
+      }
+      case 'client.kick': {
+        const result = await access.sticky.kick(action.mac, ctx)
+        return { changed: result.changed && !result.dryRun, ok: true,
+          message: result.changed ? result.dryRun ? 'rule.result.would' : null : 'rule.result.kickSkipped' }
       }
       case 'device.locate': {
         if (!effects.infra) throw new UnifiError('UNIFI_INACTIVE')

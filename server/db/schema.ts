@@ -768,3 +768,76 @@ export const energyLast = sqliteTable('energy_last', {
   ...infraPort(),
   at: integer('at').notNull(),
 }, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
+
+export const rooms = sqliteTable('rooms', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  floor: text('floor'),
+  icon: text('icon'),
+  color: text('color'),
+  order: integer('order').notNull().default(0),
+})
+
+export const apRooms = sqliteTable('ap_rooms', {
+  apMac: text('ap_mac').primaryKey().references(() => infraDevices.mac, { onDelete: 'cascade' }),
+  roomId: text('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+})
+
+export const roomSegments = sqliteTable('room_segments', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull(),
+  personId: text('person_id').notNull().references(() => people.id, { onDelete: 'cascade' }),
+  roomId: text('room_id'),
+  apMac: text('ap_mac'),
+  start: integer('start').notNull(),
+  end: integer('end'),
+}, t => [
+  uniqueIndex('room_segments_open').on(t.scope, t.personId).where(sql`${t.end} IS NULL`),
+  index('room_segments_range').on(t.scope, t.start),
+  index('room_segments_end').on(t.end),
+])
+
+export const clientRoams = sqliteTable('client_roams', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull(),
+  mac: text('mac').notNull(),
+  ts: integer('ts').notNull(),
+  fromApMac: text('from_ap_mac').notNull(),
+  toApMac: text('to_ap_mac').notNull(),
+  fromSignal: real('from_signal'),
+  toSignal: real('to_signal'),
+  band: text('band'),
+  channel: integer('channel'),
+  source: text('source').$type<'ws' | 'poll'>().notNull(),
+}, t => [
+  index('client_roams_client').on(t.scope, t.mac, t.ts),
+  index('client_roams_from_ap').on(t.scope, t.fromApMac, t.ts),
+  index('client_roams_to_ap').on(t.scope, t.toApMac, t.ts),
+  index('client_roams_ts').on(t.ts),
+])
+
+export const clientRfMinutes = sqliteTable('client_rf_minutes', {
+  scope: text('scope').notNull(),
+  mac: text('mac').notNull(),
+  ts: integer('ts').notNull(),
+  apMac: text('ap_mac').notNull(),
+  signal: real('signal'),
+}, t => [primaryKey({ columns: [t.scope, t.mac, t.ts] }), index('client_rf_minutes_ts').on(t.ts)])
+
+export const stickyFlags = sqliteTable('sticky_flags', {
+  scope: text('scope').notNull(),
+  mac: text('mac').notNull(),
+  apMac: text('ap_mac').notNull(),
+  signal: real('signal').notNull(),
+  since: integer('since').notNull(),
+  otherAps: integer('other_aps').notNull(),
+  status: text('status').$type<'sticky' | 'nudged' | 'recovered'>().notNull(),
+  recoveredAt: integer('recovered_at'),
+}, t => [primaryKey({ columns: [t.scope, t.mac] }), index('sticky_flags_recovery').on(t.recoveredAt)])
+
+export const stickyNudges = sqliteTable('sticky_nudges', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull(),
+  mac: text('mac').notNull(),
+  ts: integer('ts').notNull(),
+}, t => [index('sticky_nudges_client').on(t.scope, t.mac, t.ts), index('sticky_nudges_ts').on(t.ts)])

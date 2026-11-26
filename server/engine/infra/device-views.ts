@@ -2,10 +2,10 @@ import { and, desc, eq, gte, inArray, count } from 'drizzle-orm'
 import { InfraDevice, InfraDeviceDetail, type InfraDeviceT } from '#shared/schemas/infra'
 import type { SettingsT } from '#shared/schemas/system'
 import type { Db } from '../../db'
-import { deviceTransitions, infraDevices, personDevices, portEvents } from '../../db/schema'
+import { deviceTransitions, infraDevices, personDevices, portEvents, portPeers } from '../../db/schema'
 import type { ControllerService } from '../../services/controller'
 import { createSettingsService } from '../../services/settings'
-import { deviceName, deviceRadios, deviceType, normalizeDevice } from '../../unifi/device-shape'
+import { deviceName, deviceRadios, deviceType, finiteNumber, normalizeDevice, normalizePort } from '../../unifi/device-shape'
 import type { WireDevice } from '../../unifi/endpoints/schemas'
 import { UnifiError } from '../../unifi/errors'
 import { DAY } from '../access-time'
@@ -14,6 +14,8 @@ import { createDeviceGraph, createPoeSafety } from './poe-safety'
 import { deviceEnergy, liveWatts } from './energy'
 import { enrichPort, portIssues } from './port-health'
 import { buildPortViews } from './ports'
+import { apRoams24h } from './roaming'
+import { deviceLinks } from './topology'
 
 const rebootReasons = ['unexpected_reboot', 'unifire_restart', 'upgrade'] as const
 
@@ -63,9 +65,9 @@ function deviceView(db: Db, saved: typeof infraDevices.$inferSelect, wire: WireD
   return InfraDevice.parse({ ...device, issues })
 }
 
-export function listInfraDevices(db: Db, service: ControllerService, at: number, mac?: string) {
+export function topologyDeviceInputs(db: Db, service: ControllerService, at: number) {
   const runtime = service.runtime
-  if (!runtime) return []
+  if (!runtime) return { devices: [], ports: [], uplinkCaps: new Map<string, number>() }
   const readings = new Map(runtime.cache.snapshot().devices.filter(row => row.adopted !== false).map(row => [row.mac, row]))
   const config = createSettingsService(db).get().infra
   const availability = availabilityByDevice(db, runtime.scope, at)
@@ -75,10 +77,32 @@ export function listInfraDevices(db: Db, service: ControllerService, at: number,
     const mac = key.split('/')[0]!
     affected.set(mac, (affected.get(mac) ?? 0) + 1)
   }
-  return db.select().from(infraDevices)
-    .where(and(eq(infraDevices.scope, runtime.scope), mac === undefined ? undefined : eq(infraDevices.mac, mac)))
+  const devices = db.select().from(infraDevices)
+    .where(eq(infraDevices.scope, runtime.scope))
     .orderBy(infraDevices.type, infraDevices.name, infraDevices.mac).all()
     .map(row => deviceView(db, row, readings.get(row.mac), availability.get(row.mac) ?? null, affected.get(row.mac) ?? 0, config, at))
+  const uplinkCaps = new Map<string, number>()
+  const ports = [...readings.values()].flatMap(device => {
+    const cap = finiteNumber(device.uplink?.max_speed)
+    if (cap !== null && cap > 0) uplinkCaps.set(device.mac, cap)
+    return (device.port_table ?? []).flatMap(raw => {
+      const port = normalizePort(device, raw)
+      return port ? [{ ...port, issues: issues.get(device.mac + '/' + port.idx) ?? [] }] : []
+    })
+  })
+  return { devices, ports, uplinkCaps }
+}
+
+export function listInfraDevices(db: Db, service: ControllerService, at: number, mac?: string) {
+  const inputs = topologyDeviceInputs(db, service, at)
+  const { links } = deviceLinks(inputs)
+  const flagged = new Set(links.filter(link => link.bottlenecks.length).map(link => link.target.slice(4)))
+  return inputs.devices.filter(device => mac === undefined || device.mac === mac).map(device => {
+    if (flagged.has(device.mac)) device.issues.push({
+      kind: 'bottleneck', severity: 'warning', messageKey: 'infra.issue.bottleneck', messageParams: {},
+    })
+    return device
+  })
 }
 
 export function infraDeviceDetail(db: Db, service: ControllerService, mac: string, at: number) {
@@ -95,12 +119,14 @@ export function infraDeviceDetail(db: Db, service: ControllerService, mac: strin
   const events = deviceEvents(db, mac, undefined, undefined, 50)
   const config = createSettingsService(db).get()
   const issues = portIssues(db, scope, config.infra, at)
+  const firstSeen = new Map(db.select().from(portPeers).where(and(eq(portPeers.scope, scope), eq(portPeers.switchMac, mac)))
+    .all().map(row => [row.portIdx + '/' + row.mac, row.firstSeen]))
   return InfraDeviceDetail.parse({ ...view,
-    ports: wire ? buildPortViews(wire, graph, stations, safety, personByMac)
+    ports: wire ? buildPortViews(wire, graph, stations, safety, personByMac, firstSeen)
       .map(port => enrichPort(db, { scope, switchMac: mac, portIdx: port.idx }, port, at, issues.get(mac + '/' + port.idx) ?? [])) : [],
     radios: wire ? deviceRadios(wire) : [],
     downstream: graph.downstream(mac).map(({ device, viaPort }) => ({ mac: device.mac, name: deviceName(device), type: deviceType(device), viaPort })),
-    transitions: events.transitions, firmwareHistory: events.firmware, portEvents: events.portEvents, roams24h: null, energy: view.poe ? deviceEnergy(db, scope, mac, at, config.timezone) : null })
+    transitions: events.transitions, firmwareHistory: events.firmware, portEvents: events.portEvents, roams24h: view.type === 'ap' ? apRoams24h(db, scope, mac, at) : null, energy: view.poe ? deviceEnergy(db, scope, mac, at, config.timezone) : null })
 }
 
 export function infraDashboard(db: Db, service: ControllerService, at: number) {

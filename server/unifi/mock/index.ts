@@ -125,7 +125,7 @@ export async function startMockController(options: {
       externalRotation = rotation
       event('EVT_RouteUpdated', SELF_MAC)
     }
-    const candidates = [...clients.values()].filter(client => client.mac !== SELF_MAC && !client.blocked)
+    const candidates = [...clients.values()].filter(client => client.mac !== SELF_MAC && client.hostname !== 'alder-phone' && !client.blocked)
     const client = candidates[Math.floor(random() * candidates.length)]
     if (client && simulatedTicks % 2 === 0) setOnline(client.mac, !client.online)
     if (simulatedTicks % 18 === 0) {
@@ -445,10 +445,10 @@ export async function startMockController(options: {
   return {
     config: { url, username: MOCK_USERNAME, password: MOCK_PASSWORD, site: MOCK_SITE, verifyMode: 'insecure' as const },
     paths, emit, tick, setOnline,
-    scenario(kind: Parameters<typeof fleet.scenario>[0]) {
+    scenario(kind: Parameters<typeof fleet.scenario>[0], source: 'ws' | 'poll' = 'ws') {
       const result = fleet.scenario(kind)
       emit('device:sync', devices)
-      if (kind === 'roam') emit('sta:sync', [...clients.values()].filter(fleet.activeClient))
+      if (source === 'ws' && (kind === 'roam' || kind === 'sticky' || kind === 'recover')) emit('sta:sync', [...clients.values()].filter(fleet.activeClient))
       return result
     },
     get loginAttempts() { return logins },

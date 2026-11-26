@@ -49,7 +49,7 @@ describe('captured device shapes and PoE graph', () => {
       speedMbps: 10000, fullDuplex: true })
     expect(deviceUplink({ ...ap, last_uplink: ap.uplink, uplink: null })).toEqual(deviceUplink(ap))
     expect(deviceUplink(buildMockDevices().find(device => device.mac === MESH_MAC)!))
-      .toMatchObject({ mac: AP1, type: 'wireless', signal: -68 })
+      .toMatchObject({ mac: AP1, type: 'wireless', signal: -66 })
     const port13 = core.port_table!.find(port => port.port_idx === 13)!
     expect(normalizePort(core, port13)).toMatchObject({ maxSpeedMbps: 2500, media: 'rj45', poe: { powerW: 9.13 }, isUplink: false })
     expect(normalizePort(core, { port_idx: 17, media: 'SFP+', speeds: [100, '10000'] }))
@@ -95,7 +95,7 @@ describe('captured device shapes and PoE graph', () => {
     expect(createPoeSafety(mock, [], { mac: null, ip: null })(core, portAt(SWITCH_MAC, 13)))
       .toEqual({ allowed: false, reasons: ['downstream_devices', 'powers_ap'], requiresAck: true })
     const ports = buildPortViews(deviceAt(DESK_MAC), graph, stations, safety, new Map([[host, 'household']]))
-    expect(ports.find(port => port.idx === 3)?.peer).toMatchObject({ kind: 'client', mac: host, personId: 'household' })
+    expect(ports.find(port => port.idx === 3)?.peer).toMatchObject({ kind: 'unknown', mac: '02:00:00:00:00:28', personId: null })
     expect(ports.find(port => port.idx === 3)!.peer!.count).toBeGreaterThanOrEqual(3)
     expect(ports.find(port => port.idx === 4)?.peer).toMatchObject({ kind: 'device', mac: AP2 })
   })

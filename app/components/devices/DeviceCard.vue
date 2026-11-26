@@ -6,7 +6,9 @@ const props = defineProps<{ device: InfraDeviceT, thresholds: { temp: number, cp
 const { t, te } = useI18n()
 const fmt = useFormat()
 const d = computed(() => props.device)
-const offline = computed(() => d.value.state === 'offline')
+const planned = computed(() => d.value.issues.some(i => i.messageKey === 'infra.issue.poe_scheduled_off'))
+const plannedIssue = computed(() => d.value.issues.find(i => i.messageKey === 'infra.issue.poe_scheduled_off'))
+const offline = computed(() => d.value.state === 'offline' && !planned.value)
 const issues = computed(() => d.value.issues.filter(i => i.severity !== 'info'))
 const issueText = (k: string, p: Record<string, string>) => (te(k) ? t(k, p) : k)
 const throughput = computed(() => (d.value.rxBps ?? 0) + (d.value.txBps ?? 0))
@@ -28,8 +30,8 @@ const uplinkTier = computed(() => speedTier(d.value.uplink?.speedMbps))
         </div>
         <div class="text-[12px] text-dimmed truncate">{{ d.modelName ?? d.model ?? t(`devices.type.${d.type}`) }}<template v-if="d.ip"> · <span class="uf-mono">{{ d.ip }}</span></template></div>
       </div>
-      <UBadge :color="offline ? 'error' : d.state === 'online' ? 'success' : 'warning'" variant="subtle" size="sm" class="shrink-0">
-        {{ t(`devices.state.${d.state}`) }}
+      <UBadge :color="planned ? 'neutral' : offline ? 'error' : d.state === 'online' ? 'success' : 'warning'" variant="subtle" size="sm" class="shrink-0" :icon="planned ? 'i-lucide-moon' : undefined">
+        {{ planned ? t('devices.plannedOff') : t(`devices.state.${d.state}`) }}
       </UBadge>
     </div>
 
@@ -42,7 +44,7 @@ const uplinkTier = computed(() => speedTier(d.value.uplink?.speedMbps))
     <div class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12px]">
       <div class="flex items-center gap-1.5 text-toned min-w-0">
         <UIcon name="i-lucide-timer" class="size-3.5 text-dimmed shrink-0" />
-        <span class="uf-num truncate">{{ offline ? t('devices.offlineSince', { ago: fmt.ago(d.lastSeen) }) : uptimeShort(d.uptimeSec, t) }}</span>
+        <span class="uf-num truncate">{{ d.state === 'offline' ? t('devices.offlineSince', { ago: fmt.ago(d.lastSeen) }) : uptimeShort(d.uptimeSec, t) }}</span>
       </div>
       <div class="flex items-center gap-1.5 text-toned">
         <UIcon name="i-lucide-monitor-smartphone" class="size-3.5 text-dimmed shrink-0" />
@@ -90,6 +92,7 @@ const uplinkTier = computed(() => speedTier(d.value.uplink?.speedMbps))
       </span>
     </div>
 
+    <p v-if="plannedIssue" class="text-[12px] text-muted flex items-center gap-1.5 -mt-1"><UIcon name="i-lucide-zap-off" class="size-3.5 text-dimmed" />{{ issueText(plannedIssue.messageKey, plannedIssue.messageParams) }}</p>
     <div v-if="issues.length" class="flex flex-wrap gap-1.5 -mt-1">
       <UBadge
         v-for="(i, k) in issues.slice(0, 3)"

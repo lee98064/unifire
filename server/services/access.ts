@@ -5,6 +5,10 @@ import type { Db } from '../db'
 import { clients, personDevices } from '../db/schema'
 import { MINUTE, bedtimeWindows } from '../engine/access-time'
 import { createBlockReconciler, desiredBlocks, setManualBlock } from '../engine/blocks'
+import { clientRoamHistory, createRoamTracker } from '../engine/infra/roaming'
+import { createRooms } from '../engine/infra/rooms'
+import { createSticky } from '../engine/infra/sticky'
+import { ActiveStation } from '../unifi/endpoints/schemas'
 import { updatePresence } from '../engine/presence'
 import { createQuotaRoutes } from '../engine/quota-routes'
 import { createUsageSampler, createUsageStore } from '../engine/samplers/usage'
@@ -35,6 +39,9 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
     const evaluated = quotas.evaluate(persons, at, settings.timezone, quotas.list().filter(quota => quota.enabled && quota.action.type === 'block'))
     return desiredBlocks(db, persons, evaluated, at, settings.timezone, settings.approval.mode === 'strict')
   }
+
+  const rooms = createRooms(db, service, now)
+  const sticky = createSticky(db, service, { blocks, desired, roster: people.rows }, now)
 
   function quotaStatuses(personId?: string) {
     const at = now()
@@ -99,6 +106,7 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
     let sampleTimer: ReturnType<typeof setTimeout> | undefined
     let sampledRuntime: ControllerService['runtime']
     let sampleUsage = createUsageSampler()
+    const roamTracker = createRoamTracker(db, sticky.recover)
 
     function request() {
       if (stopped || !hasLease()) return
@@ -113,8 +121,10 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
           extensions.expire(at)
           const persons = people.rows(at)
           if (runtime?.active() && pollAt != null && at - pollAt <= 45_000) {
-            const online = new Set(runtime.cache.snapshot().activeClients.map(row => row.mac))
-            updatePresence(db, service.engine, persons, online, pollAt, settings.presence.graceMinutes)
+            const { activeClients } = runtime.cache.snapshot()
+            const online = new Set(activeClients.map(row => row.mac))
+            updatePresence(db, service.engine, persons, online, pollAt, settings.presence.graceMinutes,
+              home => rooms.observe(runtime.scope, persons, home, activeClients, pollAt, settings.rooms.dwellMinutes))
           }
           const evaluation = quotas.evaluate(persons, at, settings.timezone)
           quotas.transitions(evaluation)
@@ -129,19 +139,21 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
 
     async function sample() {
       const runtime = service.runtime
-      if (!runtime?.active()) return
+      if (!runtime?.active() || !hasLease()) return
       if (runtime !== sampledRuntime) {
         sampledRuntime = runtime
         sampleUsage = createUsageSampler()
       }
       const at = now()
       await runtime.cache.refresh('activeClients')
-      if (stopped || !runtime.active() || runtime.cache.activeClientsAt() === null) return
+      if (stopped || !hasLease() || !runtime.active() || runtime.cache.activeClientsAt() === null) return
       const settings = config.get()
       const rows = sampleUsage(runtime.cache.snapshot().activeClients, at, settings.usage.activeThresholdBytes)
       usage.record(rows, settings.timezone)
       usage.prune(at, settings.usage.retainRawDays)
+      roamTracker.sample(runtime.scope, runtime.cache.snapshot().activeClients, at)
       request()
+      await sticky.sample(runtime, at, () => !stopped && hasLease() && runtime.active())
     }
 
     function scheduleSample() {
@@ -153,6 +165,16 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
     }
 
     function onEvent(event: ControllerEvent) {
+      const runtime = service.runtime
+      if (runtime?.active() && hasLease()) {
+        if (event.type === 'cache.clientsPolled') {
+          roamTracker.poll(runtime.scope, runtime.cache.snapshot().activeClients, event.at, event.startedAt)
+        }
+        if (event.type === 'client.updated' && event.mac) {
+          const station = ActiveStation.safeParse({ ...event.data, mac: event.mac })
+          if (station.success) roamTracker.observe(runtime.scope, station.data, 'ws', now())
+        }
+      }
       if (event.type === 'access.changed' || event.type === 'routing.settings' || event.type === 'controller.mode'
         || event.type === 'controller.reconnected' || event.type === 'access.clientsChanged'
         || (event.type === 'cache.changed' && event.resource === 'networks')) request()
@@ -163,6 +185,11 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
     timer.unref()
     const ready = service.ready().then(() => {
       if (stopped) return
+      const runtime = service.runtime
+      const pollAt = runtime?.cache.activeClientsAt()
+      if (runtime?.active() && hasLease() && pollAt != null) {
+        roamTracker.poll(runtime.scope, runtime.cache.snapshot().activeClients, pollAt)
+      }
       request()
       scheduleSample()
     }).catch(() => {})
@@ -175,5 +202,13 @@ export function createAccess(db: Db, service: ControllerService, now = Date.now)
     }
   }
 
-  return { start, usage, people, quotas, quotaStatuses, extensions, blocks, approval, desired, summary }
+  return {
+    start, usage, people, quotas, quotaStatuses, extensions, blocks, approval, desired, summary, rooms, sticky,
+    roams(mac: string, from: number, to: number) {
+      if (!db.select({ mac: clients.mac }).from(clients).where(eq(clients.mac, mac)).get()) {
+        throw apiError(404, 'CLIENT_NOT_FOUND', 'errors.clientNotFound')
+      }
+      return clientRoamHistory(db, service.runtime?.scope ?? '', mac, from, to)
+    },
+  }
 }

@@ -29,6 +29,7 @@ export type ControllerEvent =
   | { type: 'config.unifire_write' }
   | { type: 'config.external_change', resource: SnapshotResourceT, itemId: string, label: string }
   | { type: 'cache.changed', resource: string }
+  | { type: 'cache.clientsPolled', at: number, startedAt: number }
   | { type: 'controller.reconnected' | 'controller.mode' | 'routing.settings' }
   | { type: 'rules.changed', ruleIds: string[] }
   | { type: 'routing.changed', managedRouteId: string }
@@ -36,6 +37,7 @@ export type ControllerEvent =
   | { type: 'egress.down' | 'egress.up', egressId: string }
   | { type: 'egress.ip_changed', egressId: string, previousIp: string, ip: string }
   | { type: 'client.new', mac: string, displayName: string }
+  | { type: 'person.room_entered' | 'person.room_left', personId: string, roomId: string, room?: string }
   | { type: 'person.arrived' | 'person.left', personId: string, mac: string }
   | { type: 'quota.warning' | 'quota.exceeded', quotaId: string, personId: string | null }
   | { type: 'access.changed' | 'access.clientsChanged' }

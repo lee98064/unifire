@@ -163,6 +163,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
           if (macs.length) bus.emit({ type: 'client.changed', data: { macs } })
         }
       }
+      if (resource === 'activeClients') options.engine.emit('event', { type: 'cache.clientsPolled', at, startedAt })
       options.onPoll({ resource, at, error: null })
       if (resource === 'devices') await refreshGateway((next as WireDevice[]).find(isGateway))
     } catch (error) {

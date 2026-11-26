@@ -284,7 +284,7 @@ Rule notifications use the administrator-provided templates. The test action use
 
 | Key | Meaning | Params |
 | --- | --- | --- |
-| `port.event.downgrade` | A port negotiated below its baseline for the same peer. | `switch`, `port`, `from`, `to`, `peer`, `rate`, `flaps` |
+| `port.event.downgrade` | A port negotiated below its baseline for the same peer. | `switch`, `port` (index), `portName` (custom name or empty), `from`, `to` (speed labels), `peer`, `rate`, `flaps` |
 | `port.event.recovered` | A downgraded link returned to its baseline. | Same as downgrade |
 | `port.event.errors` | A port exceeded the hourly error threshold. | Same as downgrade |
 | `port.event.flapping` | A port exceeded the hourly link-down threshold. | Same as downgrade |
@@ -303,7 +303,7 @@ Rule notifications use the administrator-provided templates. The test action use
 | `poe.reason.drift` | The port was enabled in UniFi while Unifire held it off. | `name`, `switch`, `port` in audit and notifications |
 | `poe.reason.blocked` | A PoE schedule is blocked by a safety check. | `name`, `switch`, `port`, `reason` in audit and notifications |
 | `poe.reason.error` | A PoE operation failed. | `error` when available, `name`, `switch`, `port` in audit and notifications |
-| `notification.port_issue.title`, `notification.port_issue.body` | Port health notification. | `switch`, `port`, `kind`, `description` (localized event), plus event params |
+| `notification.port_issue.title`, `notification.port_issue.body` | Port health notification. | `switch`, `port` (index), `portName`, `kind`, `description` (localized event), plus event params |
 | `notification.poe_schedule.drift.title`, `notification.poe_schedule.drift.body` | A schedule or override yielded to a UniFi change. | `name`, `switch`, `port`, `reason` |
 | `notification.poe_schedule.blocked.title`, `notification.poe_schedule.blocked.body` | A safety condition blocks a schedule. | `name`, `switch`, `port`, `reason` |
 | `notification.poe_schedule.error.title`, `notification.poe_schedule.error.body` | PoE reconciliation failed. | `name`, `switch`, `port`, `reason`, `error` when available |
@@ -318,3 +318,17 @@ Rule notifications use the administrator-provided templates. The test action use
 | `errors.poeScheduleExists` | The port already has a PoE schedule. | — |
 | `errors.portEventNotFound` | This port event does not exist. | — |
 | `errors.dryRun` | This operation needs live mode to complete safely. | — |
+
+## WP10 — topology, room presence and roaming
+
+| Key | Meaning | Params |
+| --- | --- | --- |
+| `topology.bottleneck.speed_below_capability` | The link negotiated below its supported speed. | `parent`, `child`, `speed`, `max` (Mbps), `util` (%), `signal` (dBm) |
+| `topology.bottleneck.high_utilization` | The link is using at least 80% of its negotiated speed. | Same as speed_below_capability |
+| `topology.bottleneck.weak_mesh` | The mesh uplink signal is below −70 dBm. | Same as speed_below_capability |
+| `topology.bottleneck.half_duplex` | The link negotiated half duplex. | Same as speed_below_capability |
+| `topology.bottleneck.errors` | The upstream port has an active error issue. | Same as speed_below_capability |
+| `infra.issue.bottleneck` | One or more bottlenecks affect this device's uplink. | — |
+| `errors.roomNotFound` | The requested room does not exist. | — |
+| `errors.roomApRequired` | A room assignment requires an access point. | — |
+| `rule.result.kickSkipped` | A client kick was skipped because the client did not meet the kick conditions. | — |

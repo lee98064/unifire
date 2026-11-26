@@ -129,7 +129,7 @@ describe('WP8 device commands and infra rules with a fake UniFi controller', () 
     expect(restored.page({ limit: 10, ruleId: delayed.id }).items).toHaveLength(2)
   })
 
-  it('uses per-rule temperature thresholds, filters expected reboots, and previews future rule blocks', async () => {
+  it('uses per-rule temperature thresholds, filters expected reboots, and previews infra rule blocks', async () => {
     const { db } = database
     const infra = createInfra(db, service, { now: () => time })
     const rules = createRules(db, service, actions(infra), { now: () => time })
@@ -152,14 +152,11 @@ describe('WP8 device commands and infra rules with a fake UniFi controller', () 
     await rules.dispatch({ type: 'infra.rebooted', mac: AP1, unexpected: true })
     expect(count(reboot.id)).toBe(1)
     expect(await rules.dispatch({ type: 'port.issue' })).toEqual([])
-    for (const implemented of [shipLater, actionLater]) {
+    for (const implemented of [shipLater, actionLater, conditionLater]) {
       expect(await rules.test(implemented.id, true)).toMatchObject({
         test: true, ok: true, results: [expect.objectContaining({ message: 'rule.result.would' })],
       })
     }
-    expect(await rules.test(conditionLater.id, true)).toMatchObject({
-      test: true, ok: false, results: [expect.objectContaining({ message: 'rule.result.not_implemented' })],
-    })
     const synthetic = await rules.test(overheat.id, true)
     expect(synthetic.event).toMatchObject({ synthetic: true, temp: 65, mac: expect.any(String), model: expect.any(String) })
   })

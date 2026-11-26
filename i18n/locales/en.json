@@ -156,7 +156,9 @@
     "poeScheduleNotFound": "PoE schedule not found",
     "poeScheduleExists": "This port already has a schedule",
     "portEventNotFound": "Port event not found",
-    "dryRun": "This operation needs live mode to complete safely"
+    "dryRun": "This operation needs live mode to complete safely",
+    "roomApRequired": "Only access points can be assigned to rooms",
+    "roomNotFound": "Room not found"
   },
   "fmt": {
     "h": "{h}h",
@@ -1715,7 +1717,8 @@
       "would": "Dry run: would run",
       "failed": "Failed",
       "webhookFailed": "Webhook request failed",
-      "not_implemented": "This feature is still being built and doesn't run yet"
+      "not_implemented": "This feature is still being built and doesn't run yet",
+      "kickSkipped": "Client didn't qualify for a reconnect (busy, nudged recently or blocked) — skipped"
     }
   },
   "watchdog": {
@@ -2084,7 +2087,8 @@
       "month": "This month",
       "manage": "PoE schedules & energy ledger",
       "byPort": "Power by port"
-    }
+    },
+    "plannedOff": "Scheduled off"
   },
   "ports": {
     "faceplate": "Switch front panel",
@@ -2385,7 +2389,12 @@
         "weak_mesh": "Weak mesh signal",
         "half_duplex": "Half duplex",
         "errors": "Line errors"
-      }
+      },
+      "speed_below_capability": "{parent} → {child} runs at only {speed} Mbps (capable of {max} Mbps)",
+      "high_utilization": "{parent} → {child} at {util}% utilization",
+      "weak_mesh": "Mesh uplink of {child} is only {signal} dBm",
+      "half_duplex": "{parent} → {child} is half duplex",
+      "errors": "High error rate on the port from {parent} to {child}"
     },
     "noBottlenecks": "No bottlenecks right now",
     "tip": "Hover a device to trace its path to the gateway. Drag to rearrange; the layout is remembered on this device.",
@@ -2452,7 +2461,9 @@
       "high_mem": "High memory ({mem}%)",
       "firmware_available": "Firmware {version} available",
       "unexpected_reboot": "Rebooted unexpectedly in the last 24 h",
-      "port_issue": "{count} ports with issues"
+      "port_issue": "{count} ports with issues",
+      "poe_scheduled_off": "Powered off by PoE schedule “{schedule}”",
+      "bottleneck": "Uplink bottleneck"
     }
   },
   "diff": {

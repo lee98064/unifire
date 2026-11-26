@@ -5,7 +5,7 @@ import {
 } from '#shared/schemas/automation'
 import { Paged } from '#shared/schemas/common'
 import type { Db } from '../../db'
-import { clients, egressHealth, egresses, infraDevices, people, personDevices, quotas, ruleRuns, rules, usageMinutes } from '../../db/schema'
+import { clients, egressHealth, egresses, infraDevices, people, personDevices, quotas, rooms, ruleRuns, rules, usageMinutes } from '../../db/schema'
 import { createAuditService, decodeCursor } from '../../services/audit'
 import { wireTime } from '../../services/client-sync'
 import type { ControllerService } from '../../services/controller'
@@ -15,6 +15,7 @@ import { apiError } from '../../utils/api-error'
 import { decrypt, encrypt } from '../../utils/crypto'
 import { isSecretKey, redactSecrets, REDACTED } from '../../utils/redact'
 import { bedtimeWindows, DAY, HOUR, MINUTE } from '../access-time'
+import { currentRoom } from '../infra/rooms'
 import { createCronJobs, validateCron } from '../automation-cron'
 import { httpUrl } from '../notifiers/channels'
 import type { HttpTransport } from '../notifiers/telegram'
@@ -23,7 +24,7 @@ import { createRuleActions, type RuleEvent } from './actions'
 
 type Effects = Parameters<typeof createRuleActions>[2]
 type Options = { now?: () => number, http?: HttpTransport }
-const futureTriggers = new Set(['person.room_entered', 'person.room_left', 'incident.opened'])
+const futureTriggers = new Set(['incident.opened'])
 const stateful = new Set(['device.offline', 'traffic.threshold'])
 const mockHttp: HttpTransport = async (_url, init) => Response.json({ echo: init?.body ?? null })
 
@@ -37,6 +38,7 @@ export function matchesTrigger(trigger: RuleTriggerT, event: RuleEvent) {
   if (trigger.type === 'port.issue' && (typeof event.kind !== 'string' || trigger.kinds.length && !trigger.kinds.some(kind => kind === event.kind))) return false
   if (trigger.type === 'poe.budget' && (typeof event.percent !== 'number' || event.percent < trigger.percent)) return false
   if ('personId' in trigger && trigger.personId !== null && trigger.personId !== event.personId) return false
+  if ('roomId' in trigger && trigger.roomId !== null && trigger.roomId !== event.roomId) return false
   if ('egressId' in trigger && trigger.egressId !== null && trigger.egressId !== event.egressId) return false
   if ('quotaId' in trigger && trigger.quotaId !== null && trigger.quotaId !== event.quotaId) return false
   return true
@@ -101,6 +103,9 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     const assigned = mac ? db.select().from(personDevices).where(eq(personDevices.mac, mac)).get() : undefined
     const personId = event.personId === undefined ? assigned?.personId : event.personId
     const person = typeof personId === 'string' ? db.select().from(people).where(eq(people.id, personId)).get()?.name : undefined
+    const room = typeof event.roomId === 'string'
+      ? event.room ?? db.select().from(rooms).where(eq(rooms.id, event.roomId)).get()?.name ?? ''
+      : event.type === 'person.room_entered' || event.type === 'person.room_left' ? '' : undefined
     const egress = typeof event.egressId === 'string' ? db.select().from(egresses).where(eq(egresses.id, event.egressId)).get()?.name : undefined
     const quota = typeof event.quotaId === 'string' ? db.select().from(quotas).where(eq(quotas.id, event.quotaId)).get()?.name : undefined
     const station = mac ? service.runtime?.cache.snapshot().activeClients.find(station => station.mac === mac) : undefined
@@ -111,7 +116,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     // The raw UniFi document is unnecessary for templates and can carry private fields.
     const { data: _raw, ...fields } = event
     return { ...fields, ...(personId !== undefined && { personId }), ...(person && { person }),
-      ...(egress && { egress }), ...(quota && { quota }), ...(name && { name }), ...(ip && { ip }) }
+      ...(room !== undefined && { room }), ...(egress && { egress }), ...(quota && { quota }), ...(name && { name }), ...(ip && { ip }) }
   }
 
   function conditionsPass(rule: Pick<RuleT, 'conditions'>, at: number, event: RuleEvent) {
@@ -122,7 +127,11 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     const online = new Set(runtime?.cache.snapshot().activeClients.map(station => station.mac))
     return rule.conditions.every(condition => {
       switch (condition.type) {
-        case 'person.room': return false
+        case 'person.room': {
+          if (!roster.some(person => person.id === condition.personId)) return false
+          const location = runtime && currentRoom(db, runtime.scope, condition.personId)
+          return (location?.roomId === condition.roomId) === condition.inRoom
+        }
         case 'time': return inRuleWindow(condition, at, config.timezone)
         case 'person.home': return roster.find(person => person.id === condition.personId)?.presence.home === condition.home
         case 'anyone.home': return roster.some(person => person.presence.home) === condition.home
@@ -170,7 +179,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         : rule.lastRunAt !== null && ts - rule.lastRunAt < rule.cooldownSeconds * 1000 ? 'cooldown'
           : !conditionsPass(rule, ts, event) ? 'conditions' : null
       let changed = false
-      const future = futureTriggers.has(rule.trigger.type) || rule.conditions.some(condition => condition.type === 'person.room')
+      const future = futureTriggers.has(rule.trigger.type)
       if (test && future) results.push({ action: rule.trigger.type, ok: false, message: 'rule.result.not_implemented' })
       else if (!skipped) {
         for (const action of rule.actions) {
@@ -488,6 +497,10 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         ...(trigger.type === 'infra.online' && { downSec: 60 }),
         ...(trigger.type === 'infra.offline' && { downSec: trigger.minutes * 60 }),
         ...(trigger.type === 'infra.firmware' && { version: device?.upgradeTo ?? device?.firmware ?? '0.0.0' }),
+        ...(trigger.type === 'person.room_entered' || trigger.type === 'person.room_left' ? {
+          roomId: trigger.roomId ?? db.select({ id: rooms.id }).from(rooms).orderBy(rooms.order, rooms.id).limit(1).get()?.id ?? null,
+          personId: trigger.personId ?? effects.access.people.rows()[0]?.id ?? null,
+        } : {}),
         ...(trigger.type === 'port.issue' && { kind: trigger.kinds[0] ?? 'downgrade', portIdx: 1 }),
         ...('macs' in trigger && { mac: trigger.macs[0] }),
         ...(trigger.type === 'traffic.threshold' && (trigger.scope.type === 'client'

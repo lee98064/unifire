@@ -69,7 +69,7 @@ export function buildMockDevices() {
     mac: MESH_MAC, _id: 'demo-infra-mesh', name: 'AP Garden', model_name: 'U6 Mesh', model: 'U6M',
     type: 'uap', adopted: true, state: 1, version: '6.7.31', ip: '192.0.2.80',
     uptime: 85_421, 'system-stats': { cpu: '12.0', mem: '42.0' }, general_temperature: 46, num_sta: 0,
-    uplink: { type: 'wireless', uplink_mac: AP1, uplink_device_name: 'AP Living Room', signal: -68,
+    uplink: { type: 'wireless', uplink_mac: AP1, uplink_device_name: 'AP Living Room', signal: -66,
       'rx_bytes-r': 12_000, 'tx_bytes-r': 4200 },
     radio_table: [{ name: 'wifi0', radio: 'ng', channel: 'auto', ht: '20' }, { name: 'wifi1', radio: 'na', channel: 44, ht: 80 }],
     radio_table_stats: [
@@ -81,7 +81,7 @@ export function buildMockDevices() {
 
 export const MockScenario = z.enum([
   'reboot-ap', 'offline-switch', 'recover', 'downgrade-port', 'port-errors',
-  'flap-port', 'new-device', 'roam', 'overheat', 'firmware-available',
+  'flap-port', 'new-device', 'roam', 'sticky', 'overheat', 'firmware-available',
 ])
 type Scenario = z.infer<typeof MockScenario>
 type MockStation = WireStation & { online: boolean }
@@ -92,7 +92,14 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
   const boot = new Map(devices.map(device => [device.mac, now() - (finiteNumber(device.uptime) ?? 0) * 1000]))
   const baseline = new Map(devices.map(device => [device.mac, structuredClone(device)]))
   const phone = [...clients.values()].find(client => client.hostname === 'alder-phone')!
-  const homeAp = phone.ap_mac
+  const home = { ap_mac: phone.ap_mac, channel: phone.channel, signal: phone.signal }
+  let stickyUntil: number | null = null
+  const restorePhone = () => { Object.assign(phone, home); stickyUntil = null }
+  for (const device of devices) {
+    if (![AP1, AP2, MESH_MAC].includes(device.mac)) continue
+    device.vap_table = ['Home', 'IoT', 'Guest'].flatMap(essid =>
+      ['ng', 'na'].map(radio => ({ essid, radio, ap_mac: device.mac, up: true, num_sta: 0 })))
+  }
   const core = graph.byMac.get(SWITCH_MAC)!
   const ap = graph.byMac.get(AP1)!
   const port = (idx: number) => core.port_table!.find(row => row.port_idx === idx)!
@@ -105,17 +112,22 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
   let hot = false
   let errors = false
 
+  const wiredPeers = new Map<WireDoc, number>()
   for (const client of clients.values()) {
     const attached = wiredAttachment(client)
     if (!client.online || !attached) continue
     const row = graph.byMac.get(attached.mac)?.port_table?.find(row => row.port_idx === attached.port)
     if (row?.up && !graph.downstream(attached.mac, attached.port ?? undefined).length) {
-      row.last_connection = { connected: true, mac: client.mac, ip: client.ip }
+      const count = wiredPeers.get(row) ?? 0
+      if (count === 0) row.last_connection = { connected: true, mac: client.mac, ip: client.ip, last_seen: client.last_seen }
+      wiredPeers.set(row, count + 1)
+      row.mac_table_count = count + 1
     }
   }
   port(14).mac_table_count = 3
 
   function activeClient(client: MockStation) {
+    if (client === phone && stickyUntil !== null && now() >= stickyUntil) restorePhone()
     const attached = client.sw_mac ?? client.ap_mac
     return client.online && (!attached || !offline.has(attached) && !initializing(attached))
   }
@@ -167,6 +179,7 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
       if (device.uplink) {
         device.uplink['rx_bytes-r'] = Math.round(jitter(original.uplink?.['rx_bytes-r'], 5000) ?? 0)
         device.uplink['tx_bytes-r'] = Math.round(jitter(original.uplink?.['tx_bytes-r'], 3000) ?? 0)
+        if (device.mac === MESH_MAC) device.uplink.signal = Math.round(-66 + (random() - 0.5) * 6)
       }
       if (isGateway(device)) {
         for (const wan of ['wan1', 'wan2', 'wan3'] as const) if (device[wan]) {
@@ -239,9 +252,7 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
       case 'recover': {
         offline.clear()
         hot = errors = false
-        phone.ap_mac = homeAp
-        phone.channel = 44
-        phone.signal = -43
+        restorePhone()
         for (const key of ['speed', 'up', 'rx_errors', 'tx_errors', 'rx_packets', 'tx_packets', 'link_down_count']) {
           clientPort[key] = baselinePort()[key]
         }
@@ -272,6 +283,8 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
         return { switchMac: SWITCH_MAC, portIdx: 7, mac }
       }
       case 'roam': {
+        stickyUntil = null
+        phone.online = true
         const from = phone.ap_mac
         phone.ap_mac = from === AP2 ? AP1 : AP2
         phone.signal = from === AP2 ? -43 : -57
@@ -279,6 +292,10 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
         phone.last_seen = Math.floor(now() / 1000)
         return { mac: phone.mac, from, to: phone.ap_mac }
       }
+      case 'sticky':
+        stickyUntil = now() + 10 * 60_000
+        Object.assign(phone, { online: true, ap_mac: MESH_MAC, signal: -80, channel: 44 })
+        return { mac: phone.mac, apMac: MESH_MAC, signal: phone.signal, until: stickyUntil }
       case 'overheat':
         hot = true
         ap.general_temperature = 97

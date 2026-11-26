@@ -16,6 +16,7 @@ import type { WriteContext } from '../unifi/writes'
 import { liveBus } from '../utils/bus'
 import { infraDashboard } from '../engine/infra/device-views'
 import { ownedBlocks } from '../engine/blocks'
+import { clientDisplayName } from './client-identity'
 import { createAccess } from './access'
 import { createSettingsService } from './settings'
 import { createAuditService } from './audit'
@@ -121,7 +122,7 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
       const station = online ?? saved
       const hostname = station?.hostname ?? row.hostname
       const unifiName = saved?.name ?? online?.name ?? null
-      const displayName = row.alias || unifiName || hostname || row.vendor || row.mac
+      const displayName = clientDisplayName(row, unifiName, hostname)
       const ip = station?.ip ?? null
       if (term && ![displayName, hostname, row.vendor, row.mac, ip].some(value => value?.toLowerCase().includes(term))) return []
       const networkId = station?.network_id || saved?.network_id || null

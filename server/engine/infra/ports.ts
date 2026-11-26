@@ -4,7 +4,8 @@ import type { WireDevice, WireDoc, WireStation } from '../../unifi/endpoints/sch
 import { createDeviceGraph, createPoeSafety, lastPortConnection, wiredAttachment } from './poe-safety'
 
 export function readPorts(device: WireDevice, graph: ReturnType<typeof createDeviceGraph>, stations: readonly WireStation[],
-  safety: ReturnType<typeof createPoeSafety>, personByMac: ReadonlyMap<string, string>) {
+  safety: ReturnType<typeof createPoeSafety>, personByMac: ReadonlyMap<string, string>,
+  firstSeen: ReadonlyMap<string, number> = new Map()) {
   const byMac = new Map(stations.map(station => [station.mac, station]))
   const clients = stations.flatMap(station => {
     const edge = wiredAttachment(station)
@@ -38,9 +39,15 @@ export function readPorts(device: WireDevice, graph: ReturnType<typeof createDev
       if (known) stationPeer(known)
       else peers.set(lastMac, { kind: 'unknown', mac: lastMac, name: null, personId: null, count: Math.max(1, count) })
     }
+    const oldest = count > 1 ? [...attached].sort((a, b) => {
+      const seen = (station: WireStation) => firstSeen.get(port.idx + '/' + station.mac)
+        ?? (station.first_seen == null ? Infinity : station.first_seen * 1000)
+      return seen(a) - seen(b) || a.mac.localeCompare(b.mac)
+    })[0]?.mac : attached[0]?.mac
     const primary = (port.isUplink ? upstream?.mac : null)
+      ?? (count > 1 && port.up ? lastMac : null)
       ?? children.find(child => child.device.mac === lastCurrent)?.device.mac ?? children[0]?.device.mac
-      ?? attached.find(client => client.mac === lastCurrent)?.mac ?? attached[0]?.mac ?? lastCurrent
+      ?? attached.find(client => client.mac === lastCurrent)?.mac ?? oldest ?? lastCurrent
     const peer = primary ? peers.get(primary) ?? null
       : count ? { kind: 'unknown' as const, mac: null, name: null, personId: null, count } : null
     const view: PortViewT = { ...port, poeSafety: safety(device, raw), peer,

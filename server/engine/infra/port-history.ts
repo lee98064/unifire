@@ -86,22 +86,39 @@ function eventRows(db: Db, scope: string, query: Omit<z.output<typeof PortEventQ
     .orderBy(desc(portEvents.ts), desc(portEvents.id))
 }
 
+export function portSpeedLabel(mbps: number | null | undefined) {
+  return mbps == null ? '' : mbps >= 1000 ? String(mbps / 1000) + 'G' : String(mbps) + 'M'
+}
+
+export function customPortName(name: string | null | undefined) {
+  return name && !/^(?:port|sfp\+?)(?:[ -]\d+)?$/i.test(name.trim()) ? name : ''
+}
+
+function eventView(row: typeof portEvents.$inferSelect) {
+  if (row.messageParams.portName !== undefined) return row
+  const speed = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? portSpeedLabel(v) : ''
+  return { ...row, messageParams: { ...row.messageParams,
+    port: String(row.portIdx), portName: customPortName(row.portName),
+    from: speed(row.data.fromMbps), to: speed(row.data.toMbps),
+  } }
+}
+
 export function listPortEvents(db: Db, scope: string, query: z.output<typeof PortEventQuery>, from?: number, to?: number) {
   const rows = eventRows(db, scope, query, from, to).limit(query.limit + 1).all()
   const last = rows[query.limit - 1]
-  return Page.parse({ items: rows.slice(0, query.limit),
+  return Page.parse({ items: rows.slice(0, query.limit).map(eventView),
     nextCursor: rows.length > query.limit && last ? Buffer.from(JSON.stringify([last.ts, last.id])).toString('base64url') : null })
 }
 
 export function portEventHistory(db: Db, scope: string, switchMac: string, portIdx?: number, from?: number, to?: number, limit?: number) {
   const rows = eventRows(db, scope, { switchMac, portIdx }, from, to)
-  return PortEvent.array().parse((limit === undefined ? rows : rows.limit(limit)).all())
+  return PortEvent.array().parse((limit === undefined ? rows : rows.limit(limit)).all().map(eventView))
 }
 
 export function updatePortEvent(db: Db, scope: string, id: string, acknowledged: boolean) {
   const row = db.update(portEvents).set({ acknowledged }).where(and(eq(portEvents.scope, scope), eq(portEvents.id, id))).returning().get()
   if (!row) throw new UnifiError('PORT_EVENT_NOT_FOUND', 404)
-  return PortEvent.parse(row)
+  return PortEvent.parse(eventView(row))
 }
 
 export function ackPortEvents(db: Db, scope: string, switchMac?: string) {

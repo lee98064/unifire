@@ -15,6 +15,12 @@ const { get: device } = useDevices()
 useIntervalFn(() => refresh(), 30_000)
 
 const overlay = useLocalStorage<Overlay>('uf-topology-overlay', 'traffic')
+const showVpn = useLocalStorage('uf-topology-vpn', false)
+/** VPN client egresses are logical tunnels — hidden by default to keep the physical tree readable. */
+const isVpn = (n: TopologyNodeT) => n.kind === 'egress' && !!n.egressId && egressById.value.get(n.egressId)?.kind !== 'wan'
+const visibleNodes = computed(() => (topo.value?.nodes ?? []).filter(n => showVpn.value || !isVpn(n)))
+const visibleIds = computed(() => new Set(visibleNodes.value.map(n => n.id)))
+const vpnCount = computed(() => (topo.value?.nodes ?? []).filter(isVpn).length)
 const saved = useLocalStorage<Record<string, { x: number, y: number }>>('uf-topology-pos', {})
 const hovered = ref<string | null>(null)
 const selectedId = ref<string | null>(null)
@@ -34,8 +40,8 @@ const lit = computed(() => {
   return ids
 })
 
-const layout = computed(() => (topo.value ? layoutTopology(topo.value) : new Map()))
-const nodes = computed<Node[]>(() => (topo.value?.nodes ?? []).map(n => ({
+const layout = computed(() => layoutTopology({ nodes: visibleNodes.value }))
+const nodes = computed<Node[]>(() => visibleNodes.value.map(n => ({
   id: n.id,
   type: 'uf',
   position: saved.value[n.id] ?? layout.value.get(n.id) ?? { x: 0, y: 0 },
@@ -49,10 +55,11 @@ const nodes = computed<Node[]>(() => (topo.value?.nodes ?? []).map(n => ({
   draggable: true,
   selectable: false,
 })))
-const edges = computed<Edge[]>(() => (topo.value?.edges ?? []).map(e => ({
+const edges = computed<Edge[]>(() => (topo.value?.edges ?? []).filter(e => visibleIds.value.has(e.source) && visibleIds.value.has(e.target)).map(e => ({
   id: e.id,
-  source: e.source,
-  target: e.target,
+  // egress nodes sit left of the gateway: draw egress → gateway so the cable doesn't loop around
+  source: e.medium === 'wan' || e.medium === 'vpn' ? e.target : e.source,
+  target: e.medium === 'wan' || e.medium === 'vpn' ? e.source : e.target,
   type: 'uf',
   data: {
     edge: e,
@@ -65,7 +72,7 @@ const edges = computed<Edge[]>(() => (topo.value?.edges ?? []).map(e => ({
 
 const { fitView, onNodeDragStop, onNodeClick, onNodeMouseEnter, onNodeMouseLeave, onPaneReady } = useVueFlow('topology')
 onPaneReady(() => setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 50))
-watch(() => topo.value?.nodes.length, (n, old) => { if (n && n !== old) setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 80) })
+watch(() => visibleNodes.value.length, (n, old) => { if (n && n !== old) setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 80) })
 onNodeDragStop(({ node }) => { saved.value = { ...saved.value, [node.id]: { x: node.position.x, y: node.position.y } } })
 onNodeClick(({ node }) => { selectedId.value = node.id })
 onNodeMouseEnter(({ node }) => { hovered.value = node.id })
@@ -105,6 +112,7 @@ const stats = computed(() => {
             </button>
           </UTooltip>
         </div>
+        <UButton v-if="vpnCount" :color="showVpn ? 'primary' : 'neutral'" :variant="showVpn ? 'soft' : 'outline'" icon="i-lucide-shield" @click="showVpn = !showVpn">VPN ×{{ vpnCount }}</UButton>
         <UButton color="neutral" variant="outline" icon="i-lucide-scan" :aria-label="t('topology.fit')" @click="fitView({ padding: 0.15, duration: 300 })" />
         <UButton color="neutral" variant="outline" icon="i-lucide-layout-panel-left" @click="resetLayout">{{ t('topology.autoLayout') }}</UButton>
       </template>

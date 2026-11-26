@@ -7,7 +7,7 @@ import { SetupStatus } from '../../shared/schemas/auth'
 import { GuestWifi, PoeWatchdog, Rule, RuleRun, WolTarget } from '../../shared/schemas/automation'
 import { ControllerStatus } from '../../shared/schemas/controller'
 import { Egress } from '../../shared/schemas/egress'
-import { InfraDevice, InfraDeviceDetail, PoeOverview, PoeQualification, PoeSchedule, PortDetail, PortEvent } from '../../shared/schemas/infra'
+import { ClientRoams, InfraDevice, InfraDeviceDetail, PoeOverview, PoeQualification, PoeSchedule, PortDetail, PortEvent, Room, RoomTimeline, StickyClient, Topology } from '../../shared/schemas/infra'
 import { IspReport, Snapshot, SpeedtestStatus, UsageReport } from '../../shared/schemas/insight'
 import { ManagedRoute, UnifiRoute } from '../../shared/schemas/routes'
 import { DashboardSummary, Settings } from '../../shared/schemas/system'
@@ -66,7 +66,7 @@ async function call(name: ApiName, options: {
   try {
     const validated = options.body === undefined ? undefined : ep.input?.parse(options.body) ?? options.body
     // Send the original patch so the server proves omitted fields keep their saved values.
-    const body = JSON.stringify(name === 'poeScheduleUpdate' ? options.body : validated)
+    const body = JSON.stringify(name === 'poeScheduleUpdate' || name === 'roomUpdate' ? options.body : validated)
     if (ep.method === 'GET' && ep.input) ep.input.parse(options.query ?? {})
     const response = await fetch(new URL(pathFor(name, options.params, options.query), origin), {
       method: ep.method,
@@ -165,6 +165,8 @@ async function run() {
     clientUsage: { params: { mac: client.mac }, query: { range: '24h' } },
     personQuotas: { params: { id: person.id } },
     extensionRequests: { query: { status: 'pending' } },
+    clientRoams: { params: { mac: client.mac }, query: { from: String(now - 86_400_000), to: String(now) } },
+    roomTimeline: { query: { from: String(now - 86_400_000), to: String(now) } },
     presence: { query: { from: String(now - 86_400_000), to: String(now) } },
     rule: { params: { id: rule.id } },
     ruleRuns: { query: { limit: '10' } },
@@ -176,10 +178,31 @@ async function run() {
     ispReport: { query: { month } },
     usageReport: { query: { range: '7d' } },
   }
-  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP(?:10|11)\b/.test(api[name].note ?? ''))
+  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP11\b/.test(api[name].note ?? ''))
   const readResults = await Promise.allSettled(allReads.map(name => get(name, options[name])))
   assert.ok(readResults.every(result => result.status === 'fulfilled'), 'One or more contract GETs failed')
   assert.equal(covered.size, allReads.length)
+  const topology = Topology.parse(values.get('topology'))
+  const topologyRoot = 'dev:' + gateway.mac
+  assert.deepEqual(topology.nodes.filter(node => node.parentId === null).map(node => node.id), [topologyRoot])
+  assert.ok(topology.nodes.some(node => node.kind === 'egress' && node.parentId === topologyRoot))
+  assert.ok(topology.nodes.some(node => node.id === 'clients:' + ap.mac && node.members.length > 0))
+  assert.ok(topology.nodes.some(node => node.kind === 'client_group' && node.members.some(member => member.wired)))
+  const room = Room.parse(await call('roomCreate', { body: { name: 'WP10 contract living room', floor: 'Ground', order: 4 } }))
+  const roomParams = { id: room.id }
+  const editedRoom = Room.parse(await call('roomUpdate', { params: roomParams, body: { name: 'WP10 living room' } }))
+  assert.equal(editedRoom.floor, 'Ground')
+  assert.equal(editedRoom.order, 4)
+  const assigned = Room.array().parse(await call('roomAssign', { body: { apMac: ap.mac, roomId: room.id } }))
+  assert.deepEqual(assigned.find(item => item.id === room.id)?.apMacs, [ap.mac])
+  const study = devices.find(device => device.model === 'UDMA69B')!
+  const studyAssigned = InfraDevice.parse(await call('deviceUpdate', { params: { mac: study.mac }, body: { roomId: room.id } }))
+  assert.equal(studyAssigned.roomId, room.id)
+  const timeline = RoomTimeline.parse(await call('roomTimeline', { query: options.roomTimeline!.query }))
+  assert.ok(timeline.people.some(item => item.personId === person.id))
+  assert.deepEqual(timeline.rooms.find(item => item.id === room.id)?.apMacs, [ap.mac, study.mac].sort())
+  await call('roomDelete', { params: roomParams })
+  assert.equal(InfraDeviceDetail.parse(await call('device', { params: deviceParams })).roomId, null)
   const dashboard = DashboardSummary.parse(values.get('dashboard'))
   assert.ok(dashboard.wans.some(wan => wan.rxBps !== null && wan.txBps !== null))
   assert.ok(dashboard.throughput.length > 0 && dashboard.throughput.length <= 60)
@@ -278,6 +301,10 @@ async function run() {
   const roam = await scenario('roam') as { mac: string, from: string, to: string }
   assert.notEqual(roam.from, roam.to)
   assert.equal(Client.parse(await call('client', { params: { mac: roam.mac } })).uplinkMac, roam.to)
+  const roamQuery = () => ({ from: String(now - 60_000), to: String(Date.now()) })
+  const roaming = ClientRoams.parse(await call('clientRoams', { params: { mac: roam.mac }, query: roamQuery() }))
+  assert.equal(roaming.events.filter(event => event.fromApMac === roam.from && event.toApMac === roam.to).length, 1)
+  assert.ok(InfraDeviceDetail.parse(await call('device', { params: { mac: roam.to } })).roams24h!.in >= 1)
   await scenario('overheat')
   assert.ok((await apDetail()).issues.some(issue => issue.kind === 'overheat'))
   await scenario('firmware-available')
@@ -291,6 +318,9 @@ async function run() {
   assert.ok(events.nextCursor, 'Expected more than one port event')
   const next = await call('portEvents', { query: { ...filtered, cursor: events.nextCursor } }) as { items: unknown[] }
   assert.notEqual(PortEvent.parse(first(next.items, 'second port event')).id, event.id)
+  assert.equal(event.messageParams.port, String(event.portIdx))
+  assert.equal(event.messageParams.portName, 'Desk')
+  assert.match(event.messageParams.from ?? '', /^(?:\d+(?:\.\d+)?[MG])?$/)
   const acked = PortEvent.parse(await call('portEventUpdate', { params: { id: event.id }, body: { acknowledged: true } }))
   assert.equal(acked.acknowledged, true)
   const ackAll = await call('portEventsAckAll', { body: { switchMac: core.mac } }) as { count: number }
@@ -344,6 +374,31 @@ async function run() {
   const report = IspReport.parse(await call('ispReport', { label: 'ISP report after speedtest', query: { month: monthAt(measured.last.ts) } }))
   assert.ok(report.speedtests.some(test => test.ts === measured.last?.ts))
   assert.equal(UsageReport.parse(await call('usageReport', { label: 'monthly usage', query: { range: 'month', month } })).daily.length > 0, true)
+
+  const originalSticky = Settings.parse(values.get('settings')).sticky
+  await call('settingsSave', { body: { sticky: { ...originalSticky, enabled: true, minutes: 1, nudge: false } } })
+  try {
+    const weak = await scenario('sticky') as { mac: string, apMac: string, signal: number }
+    const deadline = Date.now() + 70_000
+    let flag
+    while (Date.now() < deadline) {
+      const result = StickyClient.array().parse(await call('stickyClients', { label: 'sticky detection' }))
+      flag = result.find(row => row.mac === weak.mac)
+      if (flag) break
+      await delay(2_000)
+    }
+    assert.equal(flag?.status, 'sticky')
+    assert.equal(flag?.apMac, weak.apMac)
+    assert.equal(flag?.signal, weak.signal)
+    const trail = ClientRoams.parse(await call('clientRoams', { params: { mac: weak.mac }, query: roamQuery() }))
+    assert.ok(trail.apDwell.some(row => row.apMac === weak.apMac && row.minutes >= 1))
+    assert.ok(trail.signal.some(row => row.apMac === weak.apMac && row.dbm === weak.signal))
+    await scenario('recover')
+    const recovered = StickyClient.array().parse(await call('stickyClients', { label: 'sticky recovery' }))
+    assert.equal(recovered.find(row => row.mac === weak.mac)?.status, 'recovered')
+  } finally {
+    await call('settingsSave', { body: { sticky: originalSticky } })
+  }
 
   const dashboardTimes = []
   for (let index = 0; index < 20; index++) {
