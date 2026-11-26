@@ -142,7 +142,9 @@
     "kioskRateLimited": "請稍候再重新整理",
     "wolNotFound": "找不到這個喚醒目標",
     "wolBroadcastUnknown": "請為這個目標或網段設定廣播位址",
-    "wolSendFailed": "無法送出喚醒封包"
+    "wolSendFailed": "無法送出喚醒封包",
+    "speedtestUnsupported": "這台控制器不支援從 API 執行測速",
+    "databaseUnavailable": "資料庫暫時無法使用"
   },
   "fmt": {
     "h": "{h} 小時",

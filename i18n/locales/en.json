@@ -142,7 +142,9 @@
     "kioskRateLimited": "Wait a moment before refreshing",
     "wolNotFound": "Wake-on-LAN target not found",
     "wolBroadcastUnknown": "Set a broadcast address for this target or its network",
-    "wolSendFailed": "Couldn’t send the magic packet"
+    "wolSendFailed": "Couldn’t send the magic packet",
+    "speedtestUnsupported": "This controller doesn’t support speed tests via the API",
+    "databaseUnavailable": "The database is temporarily unavailable"
   },
   "fmt": {
     "h": "{h}h",

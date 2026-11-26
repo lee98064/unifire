@@ -103,6 +103,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // All overridable via NUXT_* env vars.
     dataDir: './.data',
+    logLevel: 'info',
+    trustProxy: false,
     unifireSecret: '', // NUXT_UNIFIRE_SECRET — encrypts controller credentials & snapshots
     mockController: false, // NUXT_MOCK_CONTROLLER=true → use bundled fake UniFi
     session: {
