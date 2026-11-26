@@ -2,8 +2,9 @@
 import type { DashboardSummaryT } from '#shared/schemas/system'
 import type { ManagedRouteT } from '#shared/schemas/routes'
 import type { ClientT } from '#shared/schemas/access'
+import { compareDevices } from '~/utils/devices'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const fmt = useFormat()
 const { user } = useUserSession()
 const { data: summary, status } = useFetch<DashboardSummaryT>('/api/dashboard', { key: 'dashboard' })
@@ -11,6 +12,10 @@ const { data: routes } = useFetch<ManagedRouteT[]>('/api/managed-routes', { key:
 const { data: clients } = useFetch<ClientT[]>('/api/clients', { key: 'clients', default: () => [] })
 const { egresses } = useEgresses()
 const { people } = usePeople()
+const { devices } = useDevices()
+const incidentTitle = (k: string, p: Record<string, string>) => (te(k) ? t(k, p) : k)
+const infra = computed(() => summary.value?.infra)
+const infraDots = computed(() => [...devices.value].sort(compareDevices).slice(0, 12))
 
 // keep the "next switch" countdown & dashboard fresh even without events
 useIntervalFn(() => refreshNuxtData('dashboard'), 60_000)
@@ -40,6 +45,27 @@ const lastTx = computed(() => summary.value?.throughput.at(-1)?.txBps ?? null)
       </div>
     </div>
 
+    <!-- open incidents -->
+    <div v-if="summary?.incidents?.length" class="space-y-2 mb-4">
+      <NuxtLink
+        v-for="i in summary.incidents"
+        :key="i.id"
+        :to="`/insight/incidents/${i.id}`"
+        class="flex items-center gap-3 rounded-xl px-4 py-3 ring-1 transition hover:-translate-y-px"
+        :class="i.severity === 'critical' ? 'bg-error/8 ring-error/30' : 'bg-warning/8 ring-warning/30'"
+      >
+        <span class="relative flex size-8 items-center justify-center rounded-lg shrink-0" :class="i.severity === 'critical' ? 'bg-error/15 text-error' : 'bg-warning/15 text-warning'">
+          <span class="absolute inset-0 rounded-lg animate-ping opacity-30" :class="i.severity === 'critical' ? 'bg-error' : 'bg-warning'" />
+          <UIcon name="i-lucide-siren" class="size-4 relative" />
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="text-[13.5px] font-semibold text-highlighted truncate">{{ incidentTitle(i.titleKey, i.titleParams) }}</div>
+          <div class="text-[12px] text-muted">{{ t('dashboard.incidentSince') }} <TimeAgo :ts="i.openedAt" /> · {{ t('dashboard.incidentImpact', { devices: i.impact.devices.length, clients: i.impact.clients }) }}</div>
+        </div>
+        <UIcon name="i-lucide-chevron-right" class="size-4 text-dimmed shrink-0" />
+      </NuxtLink>
+    </div>
+
     <!-- KPI row -->
     <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
       <KpiTile :label="t('dashboard.kpiWan')" :value="`${wanUp}/${summary?.wans.length ?? 0}`" icon="i-lucide-cable" :tone="wanUp === (summary?.wans.length ?? 0) ? 'success' : 'warning'" to="/egresses">
@@ -58,6 +84,25 @@ const lastTx = computed(() => summary.value?.throughput.at(-1)?.txBps ?? null)
       </KpiTile>
       <KpiTile :label="t('dashboard.kpiRoutes')" :value="summary?.routes.managed ?? 0" icon="i-lucide-waypoints" :tone="summary?.routes.drift ? 'warning' : 'primary'" :hint="t('dashboard.kpiRoutesHint', { total: summary?.routes.unifiTotal ?? 0, overrides: summary?.routes.overrides ?? 0 })" to="/routes" class="col-span-2 lg:col-span-1" />
     </div>
+
+    <!-- infrastructure strip -->
+    <NuxtLink v-if="infra && infra.total" to="/devices" class="uf-card uf-card-hover flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 mb-4">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span class="size-7 rounded-md flex items-center justify-center shrink-0" :class="infra.offline ? 'bg-error/10 text-error' : 'bg-success/10 text-success'"><UIcon name="i-lucide-server" class="size-4" /></span>
+        <span class="text-[13px] font-semibold text-highlighted">{{ t('dashboard.infra.title') }}</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <UTooltip v-for="d in infraDots" :key="d.mac" :text="`${d.name} · ${t(`devices.state.${d.state}`)}`">
+          <StatusDot :status="d.state === 'online' ? (d.issues.some(i => i.severity !== 'info') ? 'degraded' : 'healthy') : d.state === 'offline' ? 'down' : 'degraded'" :size="9" />
+        </UTooltip>
+        <span class="text-[12.5px] uf-num text-toned ml-1">{{ t('dashboard.infra.online', { online: infra.online, total: infra.total }) }}</span>
+      </div>
+      <span v-if="infra.withIssues" class="flex items-center gap-1.5 text-[12.5px] text-warning"><UIcon name="i-lucide-triangle-alert" class="size-3.5" />{{ t('dashboard.infra.issues', { n: infra.withIssues }) }}</span>
+      <span v-if="infra.portEvents" class="flex items-center gap-1.5 text-[12.5px] text-warning"><UIcon name="i-lucide-cable" class="size-3.5" />{{ t('dashboard.infra.portEvents', { n: infra.portEvents }) }}</span>
+      <span v-if="infra.openIncidents" class="flex items-center gap-1.5 text-[12.5px] text-error"><UIcon name="i-lucide-siren" class="size-3.5" />{{ t('dashboard.infra.incidents', { n: infra.openIncidents }) }}</span>
+      <span v-if="!infra.withIssues && !infra.portEvents && !infra.openIncidents && !infra.offline" class="flex items-center gap-1.5 text-[12.5px] text-success"><UIcon name="i-lucide-check-circle-2" class="size-3.5" />{{ t('dashboard.infra.allGood') }}</span>
+      <span v-if="infra.poeWatts != null" class="sm:ml-auto flex items-center gap-1.5 text-[12.5px] text-toned uf-num"><UIcon name="i-lucide-zap" class="size-3.5 text-warning" />{{ infra.poeWatts.toFixed(1) }} W</span>
+    </NuxtLink>
 
     <div class="grid xl:grid-cols-[1fr_340px] gap-4">
       <!-- Constellation -->

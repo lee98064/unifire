@@ -7,6 +7,7 @@ import type { EgressHealthT, EgressKindT, HealthStatusT } from '#shared/schemas/
 import type { GuestWifiT, PoeWatchdogT, RuleT, RuleRunT, WatchdogEventT, WolTargetT } from '#shared/schemas/automation'
 import type { AuditEventT, SnapshotResourceT, SnapshotT } from '#shared/schemas/insight'
 import type { FailoverPolicyT, ManagedRouteStateT, ManagedRouteT, RotationGeneratorT, ScheduleGridT, SwitchReasonT } from '#shared/schemas/routes'
+import type { DeviceTransitionT, InfraDeviceT } from '#shared/schemas/infra'
 import type { ChannelTypeT, NotificationEventT } from '#shared/schemas/system'
 
 export const people = sqliteTable('people', {
@@ -553,3 +554,70 @@ export const quotaRoutes = sqliteTable('quota_routes', {
   routeId: text('route_id').notNull(),
   fingerprint: text('fingerprint').notNull(),
 }, t => [primaryKey({ columns: [t.controllerScope, t.subject] }), unique().on(t.controllerScope, t.routeId)])
+
+export const infraDevices = sqliteTable('infra_devices', {
+  mac: text('mac').primaryKey(),
+  site: text('site').notNull(),
+  scope: text('scope').notNull(),
+  unifiId: text('unifi_id'),
+  name: text('name').notNull(),
+  model: text('model'),
+  modelName: text('model_name'),
+  type: text('type').$type<InfraDeviceT['type']>().notNull(),
+  firstSeen: integer('first_seen').notNull(),
+  lastSeen: integer('last_seen'),
+  lastState: text('last_state').$type<InfraDeviceT['state']>().notNull(),
+  firmware: text('firmware'),
+  upgradeTo: text('upgrade_to'),
+  lastUptime: real('last_uptime'),
+  uptimeAt: integer('uptime_at'),
+  offlineSince: integer('offline_since'),
+  upgrading: integer('upgrading', { mode: 'boolean' }).notNull().default(false),
+  roomId: text('room_id'),
+  locateUntil: integer('locate_until'),
+}, t => [index('infra_devices_scope').on(t.scope)])
+
+export const deviceSamples = sqliteTable('device_samples', {
+  mac: text('mac').notNull().references(() => infraDevices.mac, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  state: text('state').$type<InfraDeviceT['state']>().notNull(),
+  uptime: real('uptime'),
+  cpu: real('cpu'),
+  mem: real('mem'),
+  temp: real('temp'),
+  clients: integer('clients'),
+  rxBps: real('rx_bps'),
+  txBps: real('tx_bps'),
+  poeW: real('poe_w'),
+}, t => [primaryKey({ columns: [t.mac, t.ts] }), index('device_samples_ts').on(t.ts)])
+
+export const deviceRollupsHourly = sqliteTable('device_rollups_hourly', {
+  mac: text('mac').notNull().references(() => infraDevices.mac, { onDelete: 'cascade' }),
+  hourTs: integer('hour_ts').notNull(),
+  onlineFraction: real('online_fraction').notNull(),
+  cpuAvg: real('cpu_avg'), cpuMax: real('cpu_max'),
+  memAvg: real('mem_avg'), memMax: real('mem_max'),
+  tempAvg: real('temp_avg'), tempMax: real('temp_max'),
+  clientsAvg: real('clients_avg'), clientsMax: real('clients_max'),
+  rxAvg: real('rx_avg'), rxMax: real('rx_max'),
+  txAvg: real('tx_avg'), txMax: real('tx_max'),
+  poeWAvg: real('poe_w_avg'),
+}, t => [primaryKey({ columns: [t.mac, t.hourTs] }), index('device_rollups_hourly_ts').on(t.hourTs)])
+
+export const deviceTransitions = sqliteTable('device_transitions', {
+  id: integer('id').primaryKey(),
+  mac: text('mac').notNull().references(() => infraDevices.mac, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  from: text('from_state').$type<DeviceTransitionT['from']>(),
+  to: text('to_state').$type<DeviceTransitionT['to']>().notNull(),
+  reason: text('reason').$type<DeviceTransitionT['reason']>(),
+  downSec: real('down_sec'),
+}, t => [index('device_transitions_mac_ts').on(t.mac, t.ts)])
+
+export const firmwareHistory = sqliteTable('firmware_history', {
+  id: integer('id').primaryKey(),
+  mac: text('mac').notNull().references(() => infraDevices.mac, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  from: text('from_version'),
+  to: text('to_version').notNull(),
+}, t => [index('firmware_history_mac_ts').on(t.mac, t.ts)])

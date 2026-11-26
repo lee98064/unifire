@@ -1,3 +1,6 @@
+import { AP1, AP2, DESK_MAC, GATEWAY_MAC, MESH_MAC, SWITCH_MAC } from './infra'
+export { SWITCH_MAC } from './infra'
+
 const wanNames = ['Fiber Static (WAN1)', 'Cable (WAN2)', 'LTE Backup (WAN3)']
 const vpnNames = ['Tokyo WG', 'Osaka WG', 'Singapore WG', 'Frankfurt OVPN', 'Los Angeles OVPN',
   'Seoul WG', 'Taichung Home WG', 'Office WG']
@@ -6,10 +9,6 @@ export const MOCK_SITE = 'default'
 export const MOCK_USERNAME = 'unifire-demo'
 export const MOCK_PASSWORD = 'local-demo-only'
 export const SELF_MAC = 'b8:27:eb:10:00:01'
-const GATEWAY_MAC = '78:8a:20:90:00:01'
-export const SWITCH_MAC = '78:8a:20:90:00:02'
-const AP1 = '78:8a:20:90:00:03'
-const AP2 = '78:8a:20:90:00:04'
 const egressId = (index: number) => index < 3 ? `demo-wan-${index + 1}` : `demo-vpn-${index - 2}`
 const egressCountries = ['TW', 'TW', 'TW', 'JP', 'JP', 'SG', 'DE', 'US', 'KR', 'TW', 'TW']
 const latencies = [6, 12, 41, 51, 54, 76, 207, 142, 59, 15, 19]
@@ -57,6 +56,11 @@ export function buildFixtures(now: number, selfIp: string) {
   ]
   const clients = endpoints.map(([hostname, prefix], index) => {
     const wired = index % 3 === 0 || [5, 8, 13, 19, 22].includes(index)
+    const unmanaged = [13, 19, 21].includes(index)
+    const switchMac = index === 0 ? DESK_MAC : [3, 6, 15, 18, 24, 27].includes(index) ? GATEWAY_MAC : SWITCH_MAC
+    const switchPort = index === 0 ? 3 : unmanaged ? 14 : index === 8 ? 11 : index === 22 ? 16
+      : switchMac === GATEWAY_MAC ? [5, 7, 8, 9][index % 4] : 9
+    const ap = index === 1 ? AP1 : [10, 17, 26].includes(index) ? MESH_MAC : index % 2 ? AP1 : AP2
     const network = index < 2 ? 0 : index % 5
     const last = (index + 1).toString(16).padStart(2, '0')
     const ip = index === 0 ? selfIp : `10.235.${network}.${20 + index}`
@@ -65,28 +69,13 @@ export function buildFixtures(now: number, selfIp: string) {
       name: index === 0 ? 'Unifire demo host' : undefined,
       network_id: `demo-lan-${network}`, network: lanNames[network], blocked: false,
       use_fixedip: wired, fixed_ip: wired ? ip : undefined, is_wired: wired, online: index < 29,
-      ...(wired ? { sw_mac: SWITCH_MAC, sw_port: index === 8 ? 11 : index === 22 ? 12 : index % 22 + 1 }
-        : { ap_mac: index % 2 ? AP1 : AP2, essid: network === 1 ? 'IoT' : network === 2 ? 'Guest' : 'Home', signal: -42 - index }),
+      ...(wired ? { sw_mac: switchMac, sw_port: switchPort }
+        : { ap_mac: ap, essid: network === 1 ? 'IoT' : network === 2 ? 'Guest' : 'Home', signal: -42 - index,
+          radio: index % 3 === 0 ? 'ng' : 'na', channel: index % 3 === 0 ? 6 : ap === AP2 ? 40 : 44 }),
       first_seen: Math.floor(now / 1000) - 86400 * (35 - index), last_seen: Math.floor(now / 1000) - (index < 29 ? 0 : 1800),
       rx_bytes: index * 45_000, tx_bytes: index * 18_000, 'rx_bytes-r': index * 125, 'tx_bytes-r': index * 42,
     }
   })
-  const devices = [
-    {
-      mac: GATEWAY_MAC, name: 'Dream Machine Pro', model: 'UDMPRO', type: 'udm',
-      wan1: { up: true, public_ip: '198.51.100.11', 'rx_bytes-r': 105_000, 'tx_bytes-r': 30_000 },
-      wan2: { up: true, public_ip: '198.51.100.12', 'rx_bytes-r': 21_000, 'tx_bytes-r': 8_000 },
-      wan3: { up: true, public_ip: '198.51.100.13', 'rx_bytes-r': 2_000, 'tx_bytes-r': 420 },
-      'rx_bytes-r': 128_000, 'tx_bytes-r': 38_420,
-    },
-    { mac: SWITCH_MAC, name: 'Studio Switch', model: 'USW-Pro-24-PoE', type: 'usw', port_table: Array.from({ length: 24 }, (_, index) => ({
-      port_idx: index + 1, name: `Port ${index + 1}`, up: index < 15 || index === 23,
-      port_poe: index < 16 || index === 23, poe_mode: index < 16 ? 'auto' : 'off',
-      poe_power: index < 7 ? (index * 0.7 + 2.2).toFixed(1) : '0.0', is_uplink: index === 23,
-    })) },
-    { mac: AP1, name: 'U7 Pro', model: 'U7-Pro', type: 'uap' },
-    { mac: AP2, name: 'U6 Lite', model: 'U6-Lite', type: 'uap' },
-  ]
   const descriptions = ['Example hourly egress', 'Console traffic', 'Studio streaming', 'Lab updates', 'Family devices',
     'Guest streaming', 'Work VPN', 'Storage sync', 'IoT region rule', 'Research browser', 'Music services',
     'School devices', 'Demo testing', 'Maintenance window', 'Home relay', 'Test egress',
@@ -123,7 +112,7 @@ export function buildFixtures(now: number, selfIp: string) {
     _id: `demo-wlan-${index}`, name, enabled: true, security: 'wpapsk', is_guest: index === 2,
     networkconf_id: `demo-lan-${index}`, x_passphrase: index === 2 ? 'maple-river42' : 'fixture-only', demo_field: { preserve: true },
   }))
-  return { networks, clients, routes, devices, wlans }
+  return { networks, clients, routes, wlans }
 }
 
 export function probeProfiles() {

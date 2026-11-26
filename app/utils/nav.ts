@@ -4,7 +4,7 @@ export interface NavItem {
   icon: string
   /** i18n key */
   label: string
-  badge?: 'approvals' | 'requests'
+  badge?: 'approvals' | 'requests' | 'incidents'
   children?: NavItem[]
 }
 
@@ -18,6 +18,11 @@ export const adminNav: NavItem[][] = [
     { key: 'egresses', to: '/egresses', icon: 'i-lucide-globe', label: 'nav.egresses' },
   ],
   [
+    { key: 'devices', to: '/devices', icon: 'i-lucide-server', label: 'nav.devices' },
+    { key: 'topology', to: '/devices/topology', icon: 'i-lucide-network', label: 'nav.topology' },
+    { key: 'poe', to: '/devices/poe', icon: 'i-lucide-zap', label: 'nav.poe' },
+  ],
+  [
     { key: 'clients', to: '/clients', icon: 'i-lucide-monitor-smartphone', label: 'nav.clients' },
     { key: 'people', to: '/people', icon: 'i-lucide-users', label: 'nav.people', badge: 'requests' },
     { key: 'approvals', to: '/approvals', icon: 'i-lucide-shield-check', label: 'nav.approvals', badge: 'approvals' },
@@ -25,11 +30,11 @@ export const adminNav: NavItem[][] = [
   ],
   [
     { key: 'rules', to: '/automation/rules', icon: 'i-lucide-workflow', label: 'nav.rules' },
-    { key: 'watchdogs', to: '/automation/watchdogs', icon: 'i-lucide-plug-zap', label: 'nav.watchdogs' },
     { key: 'guest-wifi', to: '/automation/guest-wifi', icon: 'i-lucide-qr-code', label: 'nav.guestWifi' },
     { key: 'wol', to: '/automation/wol', icon: 'i-lucide-power', label: 'nav.wol' },
   ],
   [
+    { key: 'incidents', to: '/insight/incidents', icon: 'i-lucide-siren', label: 'nav.incidents', badge: 'incidents' },
     { key: 'snapshots', to: '/insight/snapshots', icon: 'i-lucide-history', label: 'nav.snapshots' },
     { key: 'audit', to: '/insight/audit', icon: 'i-lucide-scroll-text', label: 'nav.audit' },
     { key: 'reports', to: '/insight/reports', icon: 'i-lucide-chart-line', label: 'nav.reports' },
@@ -47,4 +52,11 @@ export const mobileTabs: NavItem[] = [
   { key: 'approvals', to: '/approvals', icon: 'i-lucide-shield-check', label: 'nav.approvalsShort', badge: 'approvals' },
 ]
 
-export const navGroupLabels = ['', 'nav.group.routing', 'nav.group.access', 'nav.group.automation', 'nav.group.insight']
+/** The nav target that best matches a path (longest prefix wins, so /devices/poe doesn't light up /devices). */
+export function activeNavTo(path: string): string | null {
+  const all = [...adminNav.flat(), settingsNav].map(i => i.to)
+  const hits = all.filter(to => (to === '/' ? path === '/' : path === to || path.startsWith(`${to}/`)))
+  return hits.sort((a, b) => b.length - a.length)[0] ?? null
+}
+
+export const navGroupLabels = ['', 'nav.group.routing', 'nav.group.infra', 'nav.group.access', 'nav.group.automation', 'nav.group.insight']

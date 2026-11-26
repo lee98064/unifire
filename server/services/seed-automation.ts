@@ -39,7 +39,7 @@ export function seedMockAutomation(db: Db, at = Date.now()) {
         tx.insert(poeWatchdogs).values({ id: `demo-watchdog-${index + 1}`, name: index ? 'Workbench camera' : 'Porch camera',
           targetMac: target.mac, targetIp: target.ip, intervalSec: 10, failThreshold: 2, cooldownMin: 2,
           method: index ? 'tcp' : 'icmp', tcpPort: index ? 554 : null, maxCyclesPerDay: 6, enabled: true,
-          switchMac: SWITCH_MAC, switchName: 'Studio Switch', portIdx: target.sw_port!, state: initialWatchdogState(true) }).run()
+          switchMac: SWITCH_MAC, switchName: 'Core Switch', portIdx: target.sw_port!, state: initialWatchdogState(true) }).run()
       }
     }
     if (!tx.select().from(guestWifi).limit(1).get()) {

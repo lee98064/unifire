@@ -144,7 +144,11 @@
     "wolBroadcastUnknown": "Set a broadcast address for this target or its network",
     "wolSendFailed": "Couldn’t send the magic packet",
     "speedtestUnsupported": "This controller doesn’t support speed tests via the API",
-    "databaseUnavailable": "The database is temporarily unavailable"
+    "databaseUnavailable": "The database is temporarily unavailable",
+    "poeNotOwned": "PoE on this port was turned off in UniFi; Unifire won't turn it on for you",
+    "poeUnsafe": "Safety rules don't allow Unifire to cut power on this port",
+    "poeAckRequired": "This port powers an AP — confirm that first",
+    "poeNotQualified": "PoE writes aren't verified yet"
   },
   "fmt": {
     "h": "{h}h",
@@ -179,8 +183,13 @@
       "routing": "Routing",
       "access": "Access",
       "automation": "Automation",
-      "insight": "Insight"
-    }
+      "insight": "Insight",
+      "infra": "Devices"
+    },
+    "devices": "Devices",
+    "topology": "Topology",
+    "poe": "PoE & power",
+    "incidents": "Incidents"
   },
   "topbar": {
     "search": "Search clients, people or run an action…",
@@ -211,7 +220,8 @@
     "overrideDone": "“{route}” now egresses via {egress}",
     "pausePerson": "Pause someone…",
     "sweep": "Sweep all egress IPs now",
-    "snapshot": "Take a configuration snapshot"
+    "snapshot": "Take a configuration snapshot",
+    "locate": "Blink a device to locate it"
   },
   "login": {
     "title": "Welcome back",
@@ -392,7 +402,17 @@
     "recentSwitches": "Recent switches",
     "noSwitches": "No switches yet",
     "activity": "Activity",
-    "noActivity": "No activity yet"
+    "noActivity": "No activity yet",
+    "incidentSince": "Started",
+    "incidentImpact": "{devices} devices and {clients} clients affected",
+    "infra": {
+      "title": "Device health",
+      "online": "{online}/{total} online",
+      "issues": "{n} need attention",
+      "portEvents": "{n} port events",
+      "incidents": "{n} open incidents",
+      "allGood": "All good"
+    }
   },
   "routes": {
     "desc": "Switch a device’s WAN / VPN exit by schedule, health or on demand — something UniFi can’t do natively.",
@@ -798,7 +818,9 @@
       },
       "person": {
         "arrived": "Person arrives home",
-        "left": "Person leaves"
+        "left": "Person leaves",
+        "room_entered": "Someone enters a room",
+        "room_left": "Someone leaves a room"
       },
       "schedule": "On a schedule",
       "egress": {
@@ -815,12 +837,29 @@
       },
       "traffic": {
         "threshold": "Traffic over threshold"
+      },
+      "infra": {
+        "offline": "UniFi device goes offline",
+        "online": "UniFi device back online",
+        "rebooted": "UniFi device reboots",
+        "overheat": "UniFi device overheats",
+        "firmware": "New firmware available"
+      },
+      "port": {
+        "issue": "Port issue (downgrade, errors, flapping)"
+      },
+      "poe": {
+        "budget": "PoE draw near the budget"
+      },
+      "incident": {
+        "opened": "Incident opens"
       }
     },
     "condition": {
       "time": "Within a time window",
       "person": {
-        "home": "Person home / away"
+        "home": "Person home / away",
+        "room": "Someone is / isn't in a room"
       },
       "anyone": {
         "home": "Anyone home"
@@ -844,19 +883,24 @@
       "notify": "Send notification",
       "webhook": "Call webhook",
       "poe": {
-        "cycle": "PoE power cycle"
+        "cycle": "PoE power cycle",
+        "set": "Switch PoE power"
       },
       "wlan": {
         "toggle": "Toggle SSID"
       },
       "wol": "Wake-on-LAN",
       "device": {
-        "restart": "Restart device"
+        "restart": "Restart device",
+        "locate": "Blink device LED"
       },
       "delay": "Wait",
       "group": {
         "pause": "Pause group",
         "resume": "Resume group"
+      },
+      "client": {
+        "kick": "Make a client reconnect"
       }
     },
     "desc": "Chain UniFi events into automations: switch exits on arrival, alert when a VPN drops, push on new devices…",
@@ -901,7 +945,8 @@
       "devices": "Devices",
       "people": "People",
       "network": "Network",
-      "time": "Time & quotas"
+      "time": "Time & quotas",
+      "infra": "Devices & incidents"
     },
     "noParams": "No settings needed",
     "ifTitle": "Conditions",
@@ -968,7 +1013,17 @@
       "enabled": "Action",
       "targetId": "Target",
       "seconds": "Seconds",
-      "groupId": "Group"
+      "groupId": "Group",
+      "unexpectedOnly": "Reboot type",
+      "celsius": "Temperature",
+      "switchMac": "Switch",
+      "kinds": "Issue types",
+      "percent": "Threshold",
+      "roomId": "Room",
+      "minSeverity": "Minimum severity",
+      "inRoom": "State",
+      "on": "PoE power",
+      "acknowledgedAp": "If it powers an AP"
     },
     "bool": {
       "condition": {
@@ -983,15 +1038,36 @@
         "online": {
           "true": "Online",
           "false": "Offline"
+        },
+        "inRoom": {
+          "true": "In the room",
+          "false": "Not in the room"
         }
       },
       "action": {
         "enabled": {
           "true": "Enable",
           "false": "Disable"
+        },
+        "on": {
+          "true": "Power on",
+          "false": "Power off"
+        },
+        "acknowledgedAp": {
+          "true": "Allow powering off the AP",
+          "false": "Never power off an AP"
+        }
+      },
+      "trigger": {
+        "unexpectedOnly": {
+          "true": "Unexpected reboots only",
+          "false": "Any reboot"
         }
       }
-    }
+    },
+    "anyDevice": "Any device",
+    "anySwitch": "Any switch",
+    "anyRoom": "Any room"
   },
   "watchdogs": {
     "desc": "Ping PoE devices (cameras, APs…) and power-cycle their switch port after repeated failures.",
@@ -1138,7 +1214,8 @@
       "static-dns": "Static DNS",
       "qos-rules": "QoS rules",
       "users": "Client records",
-      "portconf": "Port profiles"
+      "portconf": "Port profiles",
+      "devices": "Device settings (ports, radios, LED)"
     },
     "planTitle": "Review restore",
     "planDesc": "These requests will be sent to UniFi (secrets masked). A snapshot is taken first.",
@@ -1188,7 +1265,8 @@
       "static-dns": "static DNS",
       "qos-rules": "QoS rule",
       "users": "client setting",
-      "portconf": "port profile"
+      "portconf": "port profile",
+      "devices": "Devices"
     }
   },
   "audit": {
@@ -1218,7 +1296,8 @@
       "wifi": "Wi-Fi",
       "wol": "WoL",
       "snapshot": "Snapshots",
-      "system": "System"
+      "system": "System",
+      "device": "Device"
     },
     "auth": {
       "login": "{username} signed in ({method})",
@@ -1714,7 +1793,12 @@
         "external_change": "External change",
         "guest_wifi_rotated": "Guest password rotated",
         "controller_error": "Controller error",
-        "rule": "Rule notification"
+        "rule": "Rule notification",
+        "device_firmware": "New firmware",
+        "port_issue": "Port issue",
+        "poe_schedule": "PoE schedule problem",
+        "incident_opened": "Incident opened",
+        "incident_resolved": "Incident resolved"
       }
     },
     "users": {
@@ -1747,5 +1831,430 @@
       "newPw": "New password",
       "pwChanged": "Password changed"
     }
+  },
+  "devices": {
+    "desc": "Live state of your gateway, switches and APs, plus the long-term health history UniFi doesn't keep",
+    "type": {
+      "gateway": "Gateway",
+      "switch": "Switch",
+      "ap": "Access point",
+      "other": "Other device"
+    },
+    "group": {
+      "gateway": "Gateway",
+      "switch": "Switches",
+      "ap": "Access points",
+      "other": "Other"
+    },
+    "state": {
+      "online": "Online",
+      "offline": "Offline",
+      "restarting": "Restarting",
+      "upgrading": "Upgrading",
+      "provisioning": "Provisioning",
+      "adopting": "Adopting",
+      "unknown": "Unknown"
+    },
+    "filter": {
+      "all": "All",
+      "offline": "Offline",
+      "issues": "Needs attention",
+      "firmware": "Update available"
+    },
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "kpi": {
+      "online": "Devices online",
+      "offlineN": "{n} offline",
+      "allOnline": "All online",
+      "clients": "Connected clients",
+      "clientsHint": "On switches and APs",
+      "poe": "PoE draw",
+      "poeHint": "{budget} W total budget",
+      "issues": "Need attention",
+      "firmwareN": "{n} with new firmware",
+      "firmwareNone": "Firmware up to date"
+    },
+    "col": {
+      "device": "Device",
+      "state": "State",
+      "load": "Load"
+    },
+    "uplink": "Uplink",
+    "clients": "Clients",
+    "uptime": "Uptime",
+    "uptimeDH": "{d}d {h}h",
+    "uptimeHM": "{h}h {m}m",
+    "uptimeM": "{m} min",
+    "firmware": "Firmware",
+    "cpu": "CPU",
+    "mem": "Memory",
+    "temp": "Temp",
+    "offlineSince": "Offline {ago}",
+    "unknownUplink": "Uplink unknown",
+    "mesh": "Wireless mesh",
+    "wired": "Wired",
+    "availability": "24 h availability",
+    "last24h": "Last 24 hours",
+    "noData": "Collecting data",
+    "empty": "No UniFi devices yet",
+    "emptyDesc": "Once the controller is connected, your gateway, switches and APs show up within a minute",
+    "noMatch": "No devices match",
+    "noMatchDesc": "Try a different filter",
+    "notFound": "Device not found",
+    "notFoundDesc": "It may have been removed from UniFi, or the MAC address is wrong",
+    "tab": {
+      "overview": "Overview",
+      "ports": "Ports",
+      "wireless": "Wireless",
+      "events": "Events",
+      "energy": "Power"
+    },
+    "locate": "Locate",
+    "locating": "Blinking",
+    "stopLocate": "Stop blinking",
+    "locateStarted": "{name} is blinking for {n} minutes",
+    "locateStopped": "Stopped blinking",
+    "restart": "Restart",
+    "restartTitle": "Restart {name}?",
+    "restartDesc": "{n} connected clients and {down} downstream devices lose connectivity briefly, usually for 1–3 minutes.",
+    "restartGatewayDesc": "This is the gateway. The whole home goes offline while it restarts, and VPNs and scheduled routes pause. It takes about 3–5 minutes.",
+    "restartGatewayAgain": "Really restart the gateway?",
+    "restartGatewayAgainDesc": "Unifire also loses the controller for a while and reconnects on its own.",
+    "restartGatewayConfirm": "I understand, restart",
+    "restartSent": "Restart command sent",
+    "lastSeen": "Last seen",
+    "lastReboot": "Last reboot",
+    "unexpectedReboot": "Unexpected reboot",
+    "tempWarnAt": "Warns at {n} °C",
+    "upgradeTo": "Update to {v} available",
+    "upToDate": "Up to date",
+    "internet": "Internet (WAN)",
+    "seeEgresses": "See egress health",
+    "linkSpeed": "Link speed",
+    "linkTraffic": "Uplink traffic",
+    "downstream": "Downstream devices",
+    "roams": "Roaming (24 h)",
+    "roamsIn": "Roamed in",
+    "roamsOut": "Roamed out",
+    "chart": {
+      "load": "Load & temperature",
+      "traffic": "Traffic & clients",
+      "down": "Download",
+      "up": "Upload"
+    },
+    "radio": {
+      "band": "{band} GHz band",
+      "channel": "Channel {ch}",
+      "utilization": "Channel utilization",
+      "interference": "Interference",
+      "retries": "Retries"
+    },
+    "noEvents": "No events in the last 30 days",
+    "noEventsDesc": "State changes, reboots, firmware updates and port events are recorded here",
+    "reason": {
+      "unexpected_reboot": "Unexpected reboot",
+      "unifire_restart": "Restarted by Unifire",
+      "upgrade": "Firmware update",
+      "offline": "Went offline",
+      "online": "Back online",
+      "state": "State change",
+      "adopted": "Adopted"
+    },
+    "downFor": "down for {d}",
+    "firmwareChange": "Firmware updated",
+    "energy": {
+      "now": "PoE draw now",
+      "budget": "{w} W budget",
+      "today": "Today",
+      "month": "This month",
+      "manage": "PoE schedules & energy ledger",
+      "byPort": "Power by port"
+    }
+  },
+  "ports": {
+    "faceplate": "Switch front panel",
+    "port": "Port {n}",
+    "disabled": "Disabled",
+    "down": "No link",
+    "halfDuplex": "half duplex",
+    "poeOn": "PoE {w} W",
+    "poeOff": "PoE off",
+    "poeOffShort": "Off",
+    "uplink": "Uplink",
+    "unknownPeer": "Unknown device",
+    "wasSpeed": "was {s}",
+    "healthy": "Healthy",
+    "flapsN": "{n} link drops / h",
+    "issue": {
+      "downgrade": "Speed downgrade",
+      "errors": "High error rate",
+      "flapping": "Link flapping",
+      "new_device": "New device plugged in",
+      "peer_changed": "Different device"
+    },
+    "legend": {
+      "slow": "10/100M",
+      "gig": "1G",
+      "multi": "2.5G / 5G",
+      "ten": "10G+",
+      "down": "No link"
+    },
+    "col": {
+      "peer": "Connected device",
+      "speed": "Speed",
+      "traffic": "Traffic",
+      "health": "Health"
+    }
+  },
+  "incidents": {
+    "severity": {
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "desc": "Unifire strings related problems from the same window into one incident and works out what most likely broke first, so you don't have to piece it together from a pile of alerts",
+    "filter": {
+      "all": "All",
+      "open": "Ongoing",
+      "resolved": "Resolved"
+    },
+    "unavailable": "Can't load incidents",
+    "unavailableDesc": "Please try again shortly",
+    "empty": "No incidents",
+    "emptyDesc": "All quiet. Outages, reboots and mass disconnects show up here.",
+    "ongoing": "Ongoing",
+    "ongoingShort": "Ongoing",
+    "history": "Past incidents",
+    "resolved": "Resolved",
+    "acked": "Acknowledged",
+    "ack": "I'm on it",
+    "startedAgo": "Started",
+    "impact": "{devices} devices, {clients} clients affected",
+    "suspectsN": "{n} possible causes",
+    "notFound": "Incident not found",
+    "rootIs": "Likely root cause:",
+    "kind": {
+      "egress_down": "Egress down",
+      "egress_up": "Egress back",
+      "wan_down": "WAN down",
+      "wan_up": "WAN back",
+      "device_offline": "Device offline",
+      "device_online": "Device back",
+      "device_rebooted": "Device rebooted",
+      "uplink_down": "Uplink lost",
+      "uplink_up": "Uplink back",
+      "port_issue": "Port issue",
+      "mass_disconnect": "Mass disconnect",
+      "clients_returned": "Clients returning",
+      "config_change": "Config change"
+    },
+    "clientsN": "{n} clients",
+    "timeline": "Timeline",
+    "suspect": "Possible cause",
+    "root": "Root cause",
+    "affected": "Affected",
+    "before": "Changes before the incident",
+    "viewDiff": "View config diff",
+    "noSuspects": "No config changes in the 15 minutes before",
+    "note": "Note",
+    "notePh": "e.g. power cable unplugged, typhoon power cut…"
+  },
+  "poe": {
+    "desc": "Switch PoE by schedule, watchdogs that power-cycle hung devices, and a per-port energy ledger",
+    "tab": {
+      "schedules": "Schedules",
+      "watchdogs": "Watchdogs",
+      "energy": "Energy ledger"
+    },
+    "newSchedule": "New schedule",
+    "editSchedule": "Edit schedule",
+    "editorDesc": "Turn PoE off on this port during the windows below; it comes back on automatically",
+    "port": "Port",
+    "notAllowed": "Can't schedule",
+    "now": "Now",
+    "nowShort": "Now",
+    "safety": {
+      "not_poe": "This port has no PoE",
+      "uplink": "This is an uplink port; cutting power takes the device offline",
+      "downstream_devices": "Other UniFi devices sit behind this port",
+      "unifire_host": "The Unifire host is behind this port",
+      "gateway_path": "This port is on the path from Unifire to the gateway",
+      "powers_ap": "This port powers an AP",
+      "already_off": "PoE is already off in UniFi"
+    },
+    "safetyDesc": {
+      "not_poe": "Pick a port with a lightning bolt.",
+      "uplink": "Unifire never cuts power to uplink ports.",
+      "downstream_devices": "Downstream switches or mesh APs would go down with it, so this isn't allowed.",
+      "unifire_host": "Unifire couldn't turn it back on, so this isn't allowed.",
+      "gateway_path": "Unifire would lose the controller, so this isn't allowed."
+    },
+    "apWarning": "The AP goes offline; its clients move to other APs. Areas no other AP covers lose Wi-Fi.",
+    "apAck": "I understand — allow cutting power to this AP",
+    "name": "Name",
+    "offWindows": "Power-off windows",
+    "offWindowsHint": "Windows may cross midnight, e.g. 23:00 → 07:00.",
+    "preview48": "Next 48 hours",
+    "offPerWeek": "{h} h off per week",
+    "savesMonth": "Saves about",
+    "savesCost": "Saves on the bill",
+    "setRate": "Set electricity price",
+    "mode": "Mode",
+    "modes": {
+      "preview": "Preview",
+      "active": "Active"
+    },
+    "modesDesc": {
+      "preview": "Shows what would happen — never cuts power",
+      "active": "Actually turns PoE off during the windows"
+    },
+    "notQualifiedShort": "PoE writes not verified yet",
+    "notQualifiedEditor": "The schedule stays “not verified” until the PoE write check has passed.",
+    "quick": "Quick actions",
+    "offFor": "Off for {m}",
+    "powerOnHour": "Power on for 1 hour",
+    "quickHint": "Quick actions override the schedule and hand back to it when they expire.",
+    "deleteConfirm": "Delete schedule “{name}”?",
+    "deleteRestores": "Unifire is holding this port off right now; it is powered back on first.",
+    "overrideOnDone": "Power restored",
+    "overrideOffDone": "Power off for {m}",
+    "unavailable": "Can't read PoE information right now",
+    "unavailableDesc": "Check the controller connection",
+    "notQualified": "PoE writes aren't verified yet — schedules can only preview",
+    "notQualifiedDesc": "Pick an unimportant PoE port and let Unifire switch it off and on once to confirm this controller accepts PoE writes.",
+    "qualifiedAt": "PoE writes verified",
+    "pickPort": "Pick a port",
+    "noSwitch": "No PoE switch",
+    "noSwitchDesc": "PoE schedules need a UniFi switch with PoE",
+    "pickHint": "Click a port with a lightning bolt to create or edit its schedule; ports that can't be scheduled are dimmed.",
+    "overrideOn": "Temporarily on",
+    "overrideOff": "Temporarily off",
+    "byRule": "Rule",
+    "clearOverride": "Cancel quick action",
+    "schedules": "Schedules",
+    "savingTotal": "Active schedules save about {kwh} kWh a month",
+    "status": {
+      "ok": "OK",
+      "pending": "Applying",
+      "preview": "Preview",
+      "dry_run": "Dry run",
+      "drift": "Changed manually",
+      "blocked": "Blocked",
+      "unqualified": "Not verified",
+      "error": "Error",
+      "disabled": "Disabled"
+    },
+    "isOff": "Powered off now",
+    "isOn": "Powered on now",
+    "isUnknown": "State unknown",
+    "nextOff": "off at {at} ({in})",
+    "nextOn": "on at {at} ({in})",
+    "savesShort": "saves {kwh} kWh / mo",
+    "savesUnknown": "Calculating savings",
+    "resume": "Resume",
+    "empty": "No PoE schedules yet",
+    "emptyDesc": "For example, cut power to the kids' room AP at bedtime, or let rarely used devices sleep overnight.",
+    "activated": "“{name}” is active",
+    "previewed": "“{name}” set to preview",
+    "resumed": "Schedule resumed",
+    "overrideCleared": "Quick action cancelled",
+    "qualify": {
+      "open": "Verify now",
+      "title": "PoE write check",
+      "desc": "Pick a port that can lose power for a few seconds. Unifire turns it off, confirms, turns it on and confirms again.",
+      "ok": "Verified",
+      "okDesc": "This controller accepts PoE writes. You can switch schedules to Active now.",
+      "dryRun": "Dry-run mode is on. Switch the controller to live mode in Settings first.",
+      "step": {
+        "pick": "Pick a port",
+        "off": "Turn off and read back",
+        "on": "Turn on and read back",
+        "done": "Done"
+      },
+      "pickHint": "Click a port with a lightning bolt in the panel above.",
+      "understand": "I understand “{name}” loses power for about 10–30 seconds",
+      "failed": "Check failed",
+      "running": "Checking…",
+      "start": "Start check"
+    }
+  },
+  "energy": {
+    "period": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "year": "Year"
+    },
+    "prev": "Previous",
+    "next": "Next",
+    "rate": "{currency} {rate} / kWh",
+    "setRate": "Set electricity price",
+    "ratePerKwh": "Price per kWh",
+    "rateHint": "Your utility's average rate",
+    "currency": "Currency",
+    "total": "PoE energy",
+    "cost": "Cost",
+    "noRate": "No electricity price set",
+    "saved": "Saved by schedules",
+    "savedHint": "Energy not used while schedules held ports off",
+    "live": "Power now",
+    "coverage": "Only {pct}% of this period has data",
+    "byTime": "Energy over time",
+    "top": "Top consumers (ports)",
+    "empty": "No energy data yet",
+    "emptyDesc": "Unifire records every port's PoE draw once a minute",
+    "savings": "Savings by schedule",
+    "noSavings": "No savings in this period",
+    "noSavingsDesc": "Energy saved while PoE schedules hold ports off shows up here"
+  },
+  "topology": {
+    "desc": "From egresses and the gateway through switches and APs to everyone's devices — live speed and traffic on every link, with bottlenecks found for you",
+    "overlay": {
+      "traffic": "Traffic",
+      "poe": "PoE",
+      "health": "Health",
+      "people": "People"
+    },
+    "overlayHint": {
+      "traffic": "Colour links by utilization; more dots = more traffic",
+      "poe": "PoE power delivered over each link",
+      "health": "Highlight links with bottlenecks",
+      "people": "Show who is connected where"
+    },
+    "fit": "Fit to view",
+    "autoLayout": "Auto layout",
+    "unavailable": "Topology unavailable",
+    "unavailableDesc": "Check the controller connection",
+    "legend": {
+      "low": "Low utilization",
+      "poe": "PoE (thicker = more power)",
+      "wireless": "Wireless / VPN"
+    },
+    "bottlenecks": "Bottlenecks",
+    "bottleneck": {
+      "kind": {
+        "speed_below_capability": "Below link capability",
+        "high_utilization": "Nearly saturated",
+        "weak_mesh": "Weak mesh signal",
+        "half_duplex": "Half duplex",
+        "errors": "Line errors"
+      }
+    },
+    "noBottlenecks": "No bottlenecks right now",
+    "tip": "Hover a device to trace its path to the gateway. Drag to rearrange; the layout is remembered on this device.",
+    "kind": {
+      "internet": "Internet",
+      "egress": "Egress",
+      "gateway": "Gateway",
+      "switch": "Switch",
+      "ap": "Access point",
+      "other": "Other device",
+      "client_group": "Connected clients"
+    },
+    "openDevice": "Open device page",
+    "openEgresses": "View egresses",
+    "clientsN": "{n} clients"
   }
 }

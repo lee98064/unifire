@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from 'node:util'
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db'
 import { egresses } from '../db/schema'
+import { isGateway } from '../unifi/device-shape'
 import type { UnifiEndpoints } from '../unifi/endpoints'
 import type { WireDevice, WireStation } from '../unifi/endpoints/schemas'
 import { gatewayRates, wanRates, wanTelemetry } from '../unifi/wan'
@@ -62,9 +63,7 @@ function changedClients(before: WireStation[], after: WireStation[]) {
   return [...new Set([...old.keys(), ...current.keys()])].filter(mac => !isDeepStrictEqual(old.get(mac), current.get(mac)))
 }
 
-export function isGateway(device: WireDevice) {
-  return device.type === 'udm' || device.type === 'ugw' || device.type === 'uxg'
-}
+export { isGateway } from '../unifi/device-shape'
 
 export function rate(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value * 8 : null
@@ -90,6 +89,9 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   let wsTimer: ReturnType<typeof setTimeout> | undefined
   let gateway: WireDevice | null = null
   let gatewayAt = -Infinity
+  let devicePoll: { at: number } | null = null
+  let deviceReadStartedAt = -Infinity
+  let deviceWsTimer: ReturnType<typeof setTimeout> | undefined
   let stopped = false
   let started = false
   const throughput: Throughput[] = []
@@ -108,7 +110,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
       return rates.rxBps === null || rates.txBps === null
     })
     if (!direct || direct.rxBps === null || direct.txBps === null || missingWan) {
-      const extra = await api.gateway().then(devices => devices.find(isGateway) ?? devices[0]).catch(() => undefined)
+      const extra = await api.gateway().then(devices => devices.find(isGateway)).catch(() => undefined)
       if (extra) current = { ...current, ...extra,
         wan1: { ...current?.wan1, ...extra.wan1 }, wan2: { ...current?.wan2, ...extra.wan2 },
         wan3: { ...current?.wan3, ...extra.wan3 } }
@@ -153,7 +155,8 @@ export function createSyncCache(api: UnifiEndpoints, options: {
           for (const [mac, data] of to) if (!from.has(mac)) options.engine.emit('event', { type, mac, data, source: 'poll' })
         }
       }
-      if (!isDeepStrictEqual(before, next)) {
+      if (resource === 'devices') devicePoll = { at }
+      if (resource === 'devices' || !isDeepStrictEqual(before, next)) {
         options.engine.emit('event', { type: 'cache.changed', resource })
         if (resource === 'activeClients' || resource === 'knownClients') {
           const macs = changedClients(before as WireStation[], next as WireStation[])
@@ -183,9 +186,25 @@ export function createSyncCache(api: UnifiEndpoints, options: {
     if (stopped || !options.active()) return Promise.resolve()
     const queued = inFlight.get(resource)
     if (queued) return queued
+    if (resource === 'devices') deviceReadStartedAt = now()
     const work = load(resource).finally(() => inFlight.delete(resource))
     inFlight.set(resource, work)
     return work
+  }
+
+  function refreshDevicesFromWs() {
+    if (deviceWsTimer || stopped || !options.active()) return
+    deviceWsTimer = setTimeout(() => {
+      deviceWsTimer = undefined
+      if (now() - deviceReadStartedAt < 10_000) return refreshDevicesFromWs()
+      void refresh('devices').catch(() => {})
+    }, Math.max(250, deviceReadStartedAt + 10_000 - now()))
+    deviceWsTimer.unref()
+  }
+
+  async function refreshAfterCurrent(resource: Resource) {
+    await inFlight.get(resource)?.catch(() => {})
+    return refresh(resource)
   }
 
   function onEvent(event: ControllerEvent) {
@@ -194,10 +213,11 @@ export function createSyncCache(api: UnifiEndpoints, options: {
       case 'client.disconnected':
       case 'client.roam':
       case 'client.updated': wsRefreshes.add('activeClients'); break
-      case 'device.updated': wsRefreshes.add('devices'); break
+      case 'device.updated': refreshDevicesFromWs(); return
       case 'user.updated': wsRefreshes.add('knownClients'); break
       case 'controller.reconnected':
-        for (const resource of ['activeClients', 'knownClients', 'devices', 'routes', 'networks'] as const) wsRefreshes.add(resource)
+        refreshDevicesFromWs()
+        for (const resource of ['activeClients', 'knownClients', 'routes', 'networks'] as const) wsRefreshes.add(resource)
         break
       case 'controller.event':
         if (/Route|Policy/.test(event.key)) wsRefreshes.add('routes')
@@ -211,7 +231,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
         wsTimer = undefined
         for (const resource of wsRefreshes) {
           // If a poll started before the event, follow it with a fresh read.
-          void Promise.resolve(inFlight.get(resource)).catch(() => {}).then(() => refresh(resource)).catch(() => {})
+          void refreshAfterCurrent(resource).catch(() => {})
         }
         wsRefreshes.clear()
       }, 250)
@@ -222,9 +242,10 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   return {
     snapshot: () => snapshot as Readonly<Snapshot>,
     gateway: () => now() - gatewayAt < 2 * POLL_MS.devices ? gateway : null,
+    devicePoll: () => devicePoll,
     activeClientsAt: () => clientBaselineReady ? activeClientsAt : null,
     throughput: () => throughput.filter(point => point.ts >= Math.floor(now() / 60_000) * 60_000 - 59 * 60_000),
-    refresh,
+    refresh, refreshAfterCurrent,
     async sync() {
       return Promise.allSettled(resources.map(refresh))
     },
@@ -242,6 +263,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
       stopped = true
       options.engine.off('event', onEvent)
       clearTimeout(wsTimer)
+      clearTimeout(deviceWsTimer)
       for (const timer of pollTimers) clearInterval(timer)
     },
   }

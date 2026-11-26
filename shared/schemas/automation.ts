@@ -81,7 +81,7 @@ export const RuleAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('device.restart'), mac: Mac }),
   z.object({ type: z.literal('delay'), seconds: z.number().int().min(1).max(3600) }),
   /** Temporary PoE override; expires back to the PoE schedule (or "leave alone"). null minutes = until cleared. WP9. */
-  z.object({ type: z.literal('poe.set'), switchMac: Mac, portIdx: z.number().int().min(1), on: z.boolean(), minutes: z.number().int().min(1).max(10080).nullable().default(60) }),
+  z.object({ type: z.literal('poe.set'), switchMac: Mac, portIdx: z.number().int().min(1), on: z.boolean(), minutes: z.number().int().min(1).max(10080).nullable().default(60), acknowledgedAp: z.boolean().default(false) }),
   /** Blink the device's locate LED. WP8. */
   z.object({ type: z.literal('device.locate'), mac: Mac, minutes: z.number().int().min(1).max(60).default(5) }),
   /** Disconnect a wireless client so it re-associates (kick-sta). WP10. */

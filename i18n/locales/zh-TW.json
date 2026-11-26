@@ -144,7 +144,11 @@
     "wolBroadcastUnknown": "請為這個目標或網段設定廣播位址",
     "wolSendFailed": "無法送出喚醒封包",
     "speedtestUnsupported": "這台控制器不支援從 API 執行測速",
-    "databaseUnavailable": "資料庫暫時無法使用"
+    "databaseUnavailable": "資料庫暫時無法使用",
+    "poeNotOwned": "這個連接埠的 PoE 是在 UniFi 中被關閉的，Unifire 不會替你打開",
+    "poeUnsafe": "基於安全規則，這個連接埠不能由 Unifire 斷電",
+    "poeAckRequired": "這個連接埠供電給 AP，需要先勾選確認",
+    "poeNotQualified": "PoE 寫入尚未驗證"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -179,8 +183,13 @@
       "routing": "路由",
       "access": "存取管控",
       "automation": "自動化",
-      "insight": "維運洞察"
-    }
+      "insight": "維運洞察",
+      "infra": "設備"
+    },
+    "devices": "設備",
+    "topology": "網路拓撲",
+    "poe": "PoE 與電力",
+    "incidents": "事故"
   },
   "topbar": {
     "search": "搜尋裝置、人員、或執行動作…",
@@ -211,7 +220,8 @@
     "overrideDone": "「{route}」已改走 {egress}",
     "pausePerson": "暫停某人上網…",
     "sweep": "立即掃描所有出口 IP",
-    "snapshot": "立即建立設定快照"
+    "snapshot": "立即建立設定快照",
+    "locate": "讓設備閃燈定位"
   },
   "login": {
     "title": "歡迎回來",
@@ -392,7 +402,17 @@
     "recentSwitches": "最近切換",
     "noSwitches": "還沒有切換紀錄",
     "activity": "活動",
-    "noActivity": "目前沒有活動"
+    "noActivity": "目前沒有活動",
+    "incidentSince": "開始於",
+    "incidentImpact": "影響 {devices} 台設備、{clients} 台裝置",
+    "infra": {
+      "title": "設備健康",
+      "online": "{online}/{total} 在線",
+      "issues": "{n} 台需要注意",
+      "portEvents": "{n} 個連接埠事件",
+      "incidents": "{n} 個事故進行中",
+      "allGood": "一切正常"
+    }
   },
   "routes": {
     "desc": "依時段、健康狀態或臨時需求，自動切換裝置的 WAN / VPN 出口——UniFi 原生做不到的事。",
@@ -798,7 +818,9 @@
       },
       "person": {
         "arrived": "有人到家",
-        "left": "有人出門"
+        "left": "有人出門",
+        "room_entered": "有人進入房間",
+        "room_left": "有人離開房間"
       },
       "schedule": "排程時間",
       "egress": {
@@ -815,12 +837,29 @@
       },
       "traffic": {
         "threshold": "流量超過門檻"
+      },
+      "infra": {
+        "offline": "UniFi 設備離線",
+        "online": "UniFi 設備恢復上線",
+        "rebooted": "UniFi 設備重開機",
+        "overheat": "UniFi 設備過熱",
+        "firmware": "有新韌體可更新"
+      },
+      "port": {
+        "issue": "連接埠異常（降速、錯誤、斷線）"
+      },
+      "poe": {
+        "budget": "PoE 用電接近上限"
+      },
+      "incident": {
+        "opened": "發生事故"
       }
     },
     "condition": {
       "time": "在某個時段",
       "person": {
-        "home": "某人在家／不在家"
+        "home": "某人在家／不在家",
+        "room": "某人在／不在某房間"
       },
       "anyone": {
         "home": "有人／沒人在家"
@@ -844,19 +883,24 @@
       "notify": "發送通知",
       "webhook": "呼叫 Webhook",
       "poe": {
-        "cycle": "PoE 斷電重啟"
+        "cycle": "PoE 斷電重啟",
+        "set": "開關 PoE 供電"
       },
       "wlan": {
         "toggle": "開關 SSID"
       },
       "wol": "網路喚醒",
       "device": {
-        "restart": "重啟 UniFi 設備"
+        "restart": "重啟 UniFi 設備",
+        "locate": "設備閃燈定位"
       },
       "delay": "等待",
       "group": {
         "pause": "暫停群組上網",
         "resume": "恢復群組上網"
+      },
+      "client": {
+        "kick": "讓裝置重新連線"
       }
     },
     "desc": "用「當…如果…就…」把 UniFi 事件串成自動化：到家切換出口、VPN 斷線通知、新裝置推播…",
@@ -901,7 +945,8 @@
       "devices": "裝置",
       "people": "人員",
       "network": "網路",
-      "time": "時間與配額"
+      "time": "時間與配額",
+      "infra": "設備與事故"
     },
     "noParams": "這個觸發不需要額外設定",
     "ifTitle": "附加條件",
@@ -968,7 +1013,17 @@
       "enabled": "動作",
       "targetId": "喚醒目標",
       "seconds": "秒數",
-      "groupId": "群組"
+      "groupId": "群組",
+      "unexpectedOnly": "重開機類型",
+      "celsius": "溫度門檻",
+      "switchMac": "交換器",
+      "kinds": "異常種類",
+      "percent": "用電門檻",
+      "roomId": "房間",
+      "minSeverity": "最低嚴重度",
+      "inRoom": "狀態",
+      "on": "PoE 供電",
+      "acknowledgedAp": "若接的是 AP"
     },
     "bool": {
       "condition": {
@@ -983,15 +1038,36 @@
         "online": {
           "true": "在線",
           "false": "離線"
+        },
+        "inRoom": {
+          "true": "在房間內",
+          "false": "不在房間內"
         }
       },
       "action": {
         "enabled": {
           "true": "開啟",
           "false": "關閉"
+        },
+        "on": {
+          "true": "開啟供電",
+          "false": "關閉供電"
+        },
+        "acknowledgedAp": {
+          "true": "允許關閉 AP 供電",
+          "false": "AP 一律不關"
+        }
+      },
+      "trigger": {
+        "unexpectedOnly": {
+          "true": "只限非預期重開機",
+          "false": "任何重開機"
         }
       }
-    }
+    },
+    "anyDevice": "任何設備",
+    "anySwitch": "任何交換器",
+    "anyRoom": "任何房間"
   },
   "watchdogs": {
     "desc": "定時 ping 攝影機、AP 等 PoE 裝置，連續失敗就自動對交換器連接埠斷電重啟。",
@@ -1138,7 +1214,8 @@
       "static-dns": "靜態 DNS",
       "qos-rules": "QoS 規則",
       "users": "裝置設定（名稱 / 固定 IP）",
-      "portconf": "連接埠設定檔"
+      "portconf": "連接埠設定檔",
+      "devices": "設備設定（連接埠、無線、LED）"
     },
     "planTitle": "確認還原內容",
     "planDesc": "以下是將送往 UniFi 的請求（機密欄位已遮蔽）。還原前會自動建立一個快照。",
@@ -1188,7 +1265,8 @@
       "static-dns": "靜態 DNS",
       "qos-rules": "QoS 規則",
       "users": "裝置設定",
-      "portconf": "連接埠設定檔"
+      "portconf": "連接埠設定檔",
+      "devices": "設備設定"
     }
   },
   "audit": {
@@ -1218,7 +1296,8 @@
       "wifi": "Wi-Fi",
       "wol": "喚醒",
       "snapshot": "快照",
-      "system": "系統"
+      "system": "系統",
+      "device": "設備"
     },
     "auth": {
       "login": "{username} 已登入（{method}）",
@@ -1714,7 +1793,12 @@
         "external_change": "UniFi 設定被修改",
         "guest_wifi_rotated": "訪客密碼更換",
         "controller_error": "控制器連線錯誤",
-        "rule": "規則通知"
+        "rule": "規則通知",
+        "device_firmware": "有新韌體",
+        "port_issue": "連接埠異常",
+        "poe_schedule": "PoE 排程異常",
+        "incident_opened": "發生事故",
+        "incident_resolved": "事故解除"
       }
     },
     "users": {
@@ -1747,5 +1831,430 @@
       "newPw": "新密碼",
       "pwChanged": "密碼已變更"
     }
+  },
+  "devices": {
+    "desc": "UDM、交換器與 AP 的即時狀態，以及 UniFi 不保留的長期健康紀錄",
+    "type": {
+      "gateway": "閘道",
+      "switch": "交換器",
+      "ap": "無線基地台",
+      "other": "其他設備"
+    },
+    "group": {
+      "gateway": "閘道",
+      "switch": "交換器",
+      "ap": "無線基地台（AP）",
+      "other": "其他"
+    },
+    "state": {
+      "online": "在線",
+      "offline": "離線",
+      "restarting": "重新啟動中",
+      "upgrading": "更新韌體中",
+      "provisioning": "套用設定中",
+      "adopting": "採用中",
+      "unknown": "未知"
+    },
+    "filter": {
+      "all": "全部",
+      "offline": "離線",
+      "issues": "需要注意",
+      "firmware": "有新韌體"
+    },
+    "view": {
+      "cards": "卡片",
+      "table": "表格"
+    },
+    "kpi": {
+      "online": "在線設備",
+      "offlineN": "{n} 台離線",
+      "allOnline": "全部在線",
+      "clients": "連線裝置",
+      "clientsHint": "連在交換器與 AP 上",
+      "poe": "PoE 用電",
+      "poeHint": "總預算 {budget} W",
+      "issues": "需要注意",
+      "firmwareN": "{n} 台有新韌體",
+      "firmwareNone": "韌體都是最新"
+    },
+    "col": {
+      "device": "設備",
+      "state": "狀態",
+      "load": "負載"
+    },
+    "uplink": "上連",
+    "clients": "連線數",
+    "uptime": "運作時間",
+    "uptimeDH": "{d} 天 {h} 小時",
+    "uptimeHM": "{h} 小時 {m} 分",
+    "uptimeM": "{m} 分鐘",
+    "firmware": "韌體",
+    "cpu": "CPU",
+    "mem": "記憶體",
+    "temp": "溫度",
+    "offlineSince": "{ago}離線",
+    "unknownUplink": "上連資訊不明",
+    "mesh": "無線 Mesh",
+    "wired": "有線",
+    "availability": "24 小時可用率",
+    "last24h": "最近 24 小時",
+    "noData": "資料累積中",
+    "empty": "還沒有 UniFi 設備資料",
+    "emptyDesc": "連上控制器後，閘道、交換器與 AP 會在一分鐘內出現",
+    "noMatch": "沒有符合條件的設備",
+    "noMatchDesc": "換個篩選條件看看",
+    "notFound": "找不到這台設備",
+    "notFoundDesc": "它可能已從 UniFi 移除，或 MAC 位址有誤",
+    "tab": {
+      "overview": "概覽",
+      "ports": "連接埠",
+      "wireless": "無線",
+      "events": "事件",
+      "energy": "電力"
+    },
+    "locate": "閃燈定位",
+    "locating": "閃燈中",
+    "stopLocate": "停止閃燈",
+    "locateStarted": "{name} 正在閃燈，持續 {n} 分鐘",
+    "locateStopped": "已停止閃燈",
+    "restart": "重新啟動",
+    "restartTitle": "重新啟動 {name}？",
+    "restartDesc": "{n} 台連線中的裝置與 {down} 台下游設備會短暫斷線，通常 1–3 分鐘內恢復。",
+    "restartGatewayDesc": "這是閘道。重新啟動期間全家都會斷網，VPN 與排程路由也會暫停，大約需要 3–5 分鐘。",
+    "restartGatewayAgain": "真的要重新啟動閘道嗎？",
+    "restartGatewayAgainDesc": "Unifire 本身也會暫時連不上控制器，恢復後會自動重新連線。",
+    "restartGatewayConfirm": "我了解，重新啟動",
+    "restartSent": "已送出重新啟動指令",
+    "lastSeen": "最後上線",
+    "lastReboot": "上次重開機",
+    "unexpectedReboot": "非預期重開機",
+    "tempWarnAt": "{n} °C 以上會警示",
+    "upgradeTo": "可更新至 {v}",
+    "upToDate": "已是最新版本",
+    "internet": "網際網路（WAN）",
+    "seeEgresses": "查看各出口狀態",
+    "linkSpeed": "連線速率",
+    "linkTraffic": "上連流量",
+    "downstream": "下游設備",
+    "roams": "漫遊（24 小時）",
+    "roamsIn": "漫遊進來",
+    "roamsOut": "漫遊出去",
+    "chart": {
+      "load": "負載與溫度",
+      "traffic": "流量與連線數",
+      "down": "下載",
+      "up": "上傳"
+    },
+    "radio": {
+      "band": "{band} GHz 頻段",
+      "channel": "頻道 {ch}",
+      "utilization": "頻道使用率",
+      "interference": "外部干擾",
+      "retries": "重傳率"
+    },
+    "noEvents": "最近 30 天沒有事件",
+    "noEventsDesc": "狀態變化、重開機、韌體更新與連接埠事件都會記錄在這裡",
+    "reason": {
+      "unexpected_reboot": "非預期重開機",
+      "unifire_restart": "由 Unifire 重新啟動",
+      "upgrade": "韌體更新",
+      "offline": "離線",
+      "online": "恢復上線",
+      "state": "狀態變更",
+      "adopted": "已採用"
+    },
+    "downFor": "離線了 {d}",
+    "firmwareChange": "韌體更新",
+    "energy": {
+      "now": "目前 PoE 用電",
+      "budget": "預算 {w} W",
+      "today": "今天",
+      "month": "本月",
+      "manage": "PoE 排程與電力帳本",
+      "byPort": "各連接埠用電"
+    }
+  },
+  "ports": {
+    "faceplate": "交換器面板",
+    "port": "第 {n} 埠",
+    "disabled": "已停用",
+    "down": "未連線",
+    "halfDuplex": "半雙工",
+    "poeOn": "PoE 供電 {w} W",
+    "poeOff": "PoE 已關閉",
+    "poeOffShort": "關閉",
+    "uplink": "上連埠",
+    "unknownPeer": "未知裝置",
+    "wasSpeed": "原本 {s}",
+    "healthy": "正常",
+    "flapsN": "1 小時斷線 {n} 次",
+    "issue": {
+      "downgrade": "降速",
+      "errors": "錯誤率偏高",
+      "flapping": "反覆斷線",
+      "new_device": "接了新裝置",
+      "peer_changed": "對端裝置換了"
+    },
+    "legend": {
+      "slow": "10/100M",
+      "gig": "1G",
+      "multi": "2.5G／5G",
+      "ten": "10G 以上",
+      "down": "未連線"
+    },
+    "col": {
+      "peer": "連接的裝置",
+      "speed": "速率",
+      "traffic": "流量",
+      "health": "健康"
+    }
+  },
+  "incidents": {
+    "severity": {
+      "warning": "警告",
+      "critical": "嚴重"
+    },
+    "desc": "Unifire 會把同一段時間內彼此相關的異常串成一起「事故」，並推測最先出問題的是哪裡，不必再從一堆通知裡自己拼湊",
+    "filter": {
+      "all": "全部",
+      "open": "進行中",
+      "resolved": "已解除"
+    },
+    "unavailable": "暫時無法讀取事故",
+    "unavailableDesc": "請稍後再試",
+    "empty": "沒有任何事故",
+    "emptyDesc": "網路一切正常。發生斷線、重開機或大量裝置掉線時會出現在這裡。",
+    "ongoing": "進行中",
+    "ongoingShort": "進行中",
+    "history": "過去的事故",
+    "resolved": "已解除",
+    "acked": "已確認",
+    "ack": "我在處理",
+    "startedAgo": "開始於",
+    "impact": "影響 {devices} 台設備、{clients} 台裝置",
+    "suspectsN": "{n} 個可能原因",
+    "notFound": "找不到這個事故",
+    "rootIs": "推測根因：",
+    "kind": {
+      "egress_down": "出口斷線",
+      "egress_up": "出口恢復",
+      "wan_down": "WAN 斷線",
+      "wan_up": "WAN 恢復",
+      "device_offline": "設備離線",
+      "device_online": "設備恢復",
+      "device_rebooted": "設備重開機",
+      "uplink_down": "上連中斷",
+      "uplink_up": "上連恢復",
+      "port_issue": "連接埠異常",
+      "mass_disconnect": "大量裝置斷線",
+      "clients_returned": "裝置陸續回來",
+      "config_change": "設定變更"
+    },
+    "clientsN": "{n} 台裝置",
+    "timeline": "事件時間軸",
+    "suspect": "可能原因",
+    "root": "根因",
+    "affected": "受影響範圍",
+    "before": "事故前的變更",
+    "viewDiff": "查看設定差異",
+    "noSuspects": "事故前 15 分鐘內沒有任何設定變更",
+    "note": "備註",
+    "notePh": "例如：電源被拔掉、颱風停電…"
+  },
+  "poe": {
+    "desc": "依時段開關 PoE 供電、看門狗自動重啟，以及每個連接埠的用電帳本",
+    "tab": {
+      "schedules": "供電排程",
+      "watchdogs": "看門狗",
+      "energy": "電力帳本"
+    },
+    "newSchedule": "新增排程",
+    "editSchedule": "編輯排程",
+    "editorDesc": "在設定的時段關閉這個連接埠的 PoE 供電，時段結束自動恢復",
+    "port": "連接埠",
+    "notAllowed": "不能排程",
+    "now": "目前",
+    "nowShort": "現在",
+    "safety": {
+      "not_poe": "這個連接埠不支援 PoE",
+      "uplink": "這是上連埠，斷電會讓整台設備離線",
+      "downstream_devices": "後面還接了其他 UniFi 設備",
+      "unifire_host": "Unifire 主機就在這個連接埠後面",
+      "gateway_path": "這個連接埠在 Unifire 通往閘道的路徑上",
+      "powers_ap": "這個連接埠供電給一台 AP",
+      "already_off": "PoE 已在 UniFi 中被關閉"
+    },
+    "safetyDesc": {
+      "not_poe": "請選擇有閃電標示的連接埠。",
+      "uplink": "Unifire 一律不會關閉上連埠的供電。",
+      "downstream_devices": "斷電會讓下游的交換器或 Mesh AP 一起離線，所以不允許。",
+      "unifire_host": "斷電後 Unifire 就無法再把它打開，所以不允許。",
+      "gateway_path": "斷電會讓 Unifire 與控制器失聯，所以不允許。"
+    },
+    "apWarning": "關閉後這台 AP 會離線，連在它上面的裝置會改連其他 AP；如果沒有其他 AP 涵蓋，該區域就會沒有 Wi-Fi。",
+    "apAck": "我了解，允許關閉這台 AP 的供電",
+    "name": "名稱",
+    "offWindows": "斷電時段",
+    "offWindowsHint": "可以跨過午夜，例如 23:00 → 07:00。",
+    "preview48": "未來 48 小時",
+    "offPerWeek": "每週斷電 {h} 小時",
+    "savesMonth": "每月約省",
+    "savesCost": "約可省電費",
+    "setRate": "設定電價",
+    "mode": "模式",
+    "modes": {
+      "preview": "預覽",
+      "active": "啟用"
+    },
+    "modesDesc": {
+      "preview": "只顯示會發生什麼，不會真的斷電",
+      "active": "到了時段就實際關閉供電"
+    },
+    "notQualifiedShort": "PoE 寫入尚未驗證",
+    "notQualifiedEditor": "儲存後排程會先維持「尚未驗證」狀態，完成 PoE 寫入驗證才會真的執行。",
+    "quick": "臨時操作",
+    "offFor": "關閉 {m}",
+    "powerOnHour": "恢復供電 1 小時",
+    "quickHint": "臨時操作的優先權高於排程，到期後自動回到排程。",
+    "deleteConfirm": "刪除排程「{name}」？",
+    "deleteRestores": "這個連接埠目前被 Unifire 斷電，刪除時會先恢復供電。",
+    "overrideOnDone": "已恢復供電",
+    "overrideOffDone": "已關閉供電 {m}",
+    "unavailable": "暫時無法讀取 PoE 資訊",
+    "unavailableDesc": "請確認控制器連線狀態",
+    "notQualified": "PoE 寫入尚未驗證，排程目前只能預覽",
+    "notQualifiedDesc": "選一個不重要的 PoE 連接埠，讓 Unifire 實際關閉再打開一次，確認這台控制器接受寫入。",
+    "qualifiedAt": "PoE 寫入已驗證",
+    "pickPort": "選擇連接埠",
+    "noSwitch": "沒有可供電的交換器",
+    "noSwitchDesc": "PoE 排程需要支援 PoE 的 UniFi 交換器",
+    "pickHint": "點選有閃電標示的連接埠來建立或編輯排程；不能排程的連接埠會變淡。",
+    "overrideOn": "臨時供電",
+    "overrideOff": "臨時斷電",
+    "byRule": "規則",
+    "clearOverride": "取消臨時操作",
+    "schedules": "供電排程",
+    "savingTotal": "啟用中的排程每月約省 {kwh} kWh",
+    "status": {
+      "ok": "正常",
+      "pending": "套用中",
+      "preview": "預覽",
+      "dry_run": "演練模式",
+      "drift": "被手動更改",
+      "blocked": "已阻擋",
+      "unqualified": "尚未驗證",
+      "error": "錯誤",
+      "disabled": "已停用"
+    },
+    "isOff": "目前斷電中",
+    "isOn": "目前供電中",
+    "isUnknown": "狀態不明",
+    "nextOff": "{at} 斷電（{in}）",
+    "nextOn": "{at} 恢復（{in}）",
+    "savesShort": "每月省 {kwh} kWh",
+    "savesUnknown": "省電量計算中",
+    "resume": "恢復排程",
+    "empty": "還沒有供電排程",
+    "emptyDesc": "例如讓小孩房的 AP 在睡覺時間斷電，或讓不常用的設備在半夜省電。",
+    "activated": "「{name}」已啟用",
+    "previewed": "「{name}」改為預覽",
+    "resumed": "排程已恢復",
+    "overrideCleared": "已取消臨時操作",
+    "qualify": {
+      "open": "開始驗證",
+      "title": "PoE 寫入驗證",
+      "desc": "選一個斷電幾十秒也沒關係的連接埠。Unifire 會把它關閉、確認、再打開、再確認。",
+      "ok": "驗證成功",
+      "okDesc": "這台控制器接受 PoE 寫入，現在可以把排程改成「啟用」了。",
+      "dryRun": "目前是演練模式，請先到設定把控制器切換為寫入模式才能驗證。",
+      "step": {
+        "pick": "選擇連接埠",
+        "off": "關閉並讀回確認",
+        "on": "打開並讀回確認",
+        "done": "完成驗證"
+      },
+      "pickHint": "在上方面板點選一個有閃電標示的連接埠。",
+      "understand": "我了解「{name}」會斷電大約 10–30 秒",
+      "failed": "驗證失敗",
+      "running": "驗證中…",
+      "start": "開始驗證"
+    }
+  },
+  "energy": {
+    "period": {
+      "day": "日",
+      "week": "週",
+      "month": "月",
+      "year": "年"
+    },
+    "prev": "上一期",
+    "next": "下一期",
+    "rate": "{currency} {rate} / 度",
+    "setRate": "設定電價",
+    "ratePerKwh": "每度電價",
+    "rateHint": "例如台電夏月平均約 4–5 元",
+    "currency": "幣別",
+    "total": "PoE 用電",
+    "cost": "電費",
+    "noRate": "尚未設定電價",
+    "saved": "排程省下",
+    "savedHint": "PoE 排程斷電期間省下的電",
+    "live": "目前功率",
+    "coverage": "這段期間只有 {pct}% 時間有資料",
+    "byTime": "用電走勢",
+    "top": "耗電排行（連接埠）",
+    "empty": "還沒有用電資料",
+    "emptyDesc": "Unifire 每分鐘記錄一次各連接埠的 PoE 功率",
+    "savings": "排程省電",
+    "noSavings": "這段期間沒有省電紀錄",
+    "noSavingsDesc": "啟用 PoE 排程後，斷電期間省下的電會記在這裡"
+  },
+  "topology": {
+    "desc": "從出口、閘道、交換器到 AP 與每個人的裝置，即時顯示每條線的速率與流量，並自動找出瓶頸",
+    "overlay": {
+      "traffic": "流量",
+      "poe": "PoE",
+      "health": "健康",
+      "people": "人員"
+    },
+    "overlayHint": {
+      "traffic": "依使用率為連線上色，光點越多流量越大",
+      "poe": "顯示每條線送出的 PoE 功率",
+      "health": "標出有瓶頸的連線",
+      "people": "在設備上顯示目前連著的人"
+    },
+    "fit": "縮放到全部",
+    "autoLayout": "自動排列",
+    "unavailable": "暫時無法產生拓撲",
+    "unavailableDesc": "請確認控制器連線狀態",
+    "legend": {
+      "low": "使用率低",
+      "poe": "PoE 供電（越粗越耗電）",
+      "wireless": "無線／VPN"
+    },
+    "bottlenecks": "瓶頸",
+    "bottleneck": {
+      "kind": {
+        "speed_below_capability": "沒跑到應有速率",
+        "high_utilization": "頻寬快滿了",
+        "weak_mesh": "Mesh 訊號偏弱",
+        "half_duplex": "半雙工",
+        "errors": "線路錯誤"
+      }
+    },
+    "noBottlenecks": "目前沒有瓶頸",
+    "tip": "滑過設備會標出它到閘道的路徑；拖曳可以調整位置，排列會記在這台裝置上。",
+    "kind": {
+      "internet": "網際網路",
+      "egress": "出口",
+      "gateway": "閘道",
+      "switch": "交換器",
+      "ap": "無線基地台",
+      "other": "其他設備",
+      "client_group": "連線中的裝置"
+    },
+    "openDevice": "開啟設備頁",
+    "openEgresses": "查看出口",
+    "clientsN": "{n} 台裝置"
   }
 }

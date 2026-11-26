@@ -29,8 +29,9 @@ export function createProbeRunner(db: Db, service: ControllerService, routes: Re
     if (!run.active()) return
     const at = now()
     const wans = rows.some(row => row.kind === 'wan' && row.enabled)
+    const cachedGateway = () => run.cache.gateway()
     const [gateway, health, capable, docs] = await Promise.all([
-      wans ? run.api.gateway().then(devices => devices.find(isGateway) ?? devices[0] ?? null).catch(() => run.cache.gateway()) : null,
+      wans ? run.api.gateway().then(devices => devices.find(isGateway) ?? cachedGateway()).catch(cachedGateway) : null,
       wans ? run.api.health().catch(() => []) : [],
       transport.supports(probe.method),
       rows.some(row => row.probeEnabled) ? run.api.routes().catch(() => []) : [],

@@ -44,7 +44,8 @@ function moveAction(i: number, dir: -1 | 1) {
 
 const triggerGroups: { key: string, types: RuleTriggerT['type'][] }[] = [
   { key: 'devices', types: ['client.connected', 'client.disconnected', 'client.new', 'device.offline'] },
-  { key: 'people', types: ['person.arrived', 'person.left'] },
+  { key: 'people', types: ['person.arrived', 'person.left', 'person.room_entered', 'person.room_left'] },
+  { key: 'infra', types: ['infra.offline', 'infra.online', 'infra.rebooted', 'infra.overheat', 'infra.firmware', 'port.issue', 'poe.budget', 'incident.opened'] },
   { key: 'network', types: ['egress.down', 'egress.up', 'egress.ip_changed', 'traffic.threshold'] },
   { key: 'time', types: ['schedule', 'quota.warning', 'quota.exceeded'] },
 ]

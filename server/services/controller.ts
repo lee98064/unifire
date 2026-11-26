@@ -251,6 +251,7 @@ export async function createControllerService(db: Db, options: {
         ledger.record(resource, id, before ? digest(before) : undefined, after ? digest(after) : undefined)
         engine.emit('event', { type: 'config.unifire_write' })
       },
+      onDevicePower: ledger.recordDevicePower,
       onRoutesChanged() {
         // A poll started before the mutation may still be in flight.
         void cache.refresh('routes').catch(() => {}).then(() => cache.refresh('routes')).catch(() => {})
@@ -530,6 +531,7 @@ export async function createControllerService(db: Db, options: {
     engine, beforeWrite, beforeRoutingChange, routingLocked: () => routingChange, status, ownership, test, save, setMode, probe,
     get mockProbe() { return mock?.probe },
     get mockWatchdogProbe() { return mock?.watchdogProbe },
+    get mockScenario() { return mock?.scenario },
     get mockTrace() { return mock?.trace },
     get runtime() { return activeRuntime },
     async ready() { await background },
@@ -567,6 +569,7 @@ export type ControllerService = {
   setMode: (value: ControllerModeT, context: WriteContext) => Promise<ControllerStatusT>
   probe: (context: WriteContext) => Promise<ControllerStatusT>
   mockProbe: MockController['probe'] | undefined
+  mockScenario?: MockController['scenario']
   mockTrace: MockController['trace'] | undefined
   mockWatchdogProbe?: MockController['watchdogProbe']
   runtime: { config: UnifiConfig, api: Endpoints, cache: ReturnType<typeof createSyncCache>, writes: ReturnType<typeof createWriteGate>,

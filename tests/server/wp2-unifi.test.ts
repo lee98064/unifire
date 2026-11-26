@@ -63,7 +63,7 @@ describe('WP2 UniFi adapter', () => {
     await Promise.all([api.sysinfo(), api.networks(), api.routes()])
     expect(mock.loginAttempts).toBe(2)
     mock.injectFailure('GET', mock.paths.classic('stat/sysinfo'), 'loginRequired')
-    expect((await api.sysinfo())[0]?.version).toBe('11.0.99')
+    expect((await api.sysinfo())[0]?.version).toBe('11.0.104')
     expect(mock.loginAttempts).toBe(3)
 
     mock.injectFailure('GET', mock.paths.classic('stat/sysinfo'), '401')
@@ -166,9 +166,9 @@ describe('WP2 UniFi adapter', () => {
     await expect(writes.updateWlan('demo-wlan-0', { enabled: false }, ctx)).resolves.toMatchObject({ verified: true })
     expect((await api.wlan('demo-wlan-0'))[0]).toMatchObject({ enabled: false, x_passphrase: 'fixture-only' })
     const switchDevice = (await api.devices()).find(device => device.type === 'usw')!
-    await writes.deviceAction({ cmd: 'power-cycle', mac: switchDevice.mac, port_idx: 3 }, ctx)
+    await writes.deviceAction({ cmd: 'power-cycle', mac: switchDevice.mac, port_idx: 11 }, ctx)
     const entry = () => api.devices().then(devices => devices.find(device => device.mac === switchDevice.mac)
-      ?.port_table?.find(port => port.port_idx === 3))
+      ?.port_table?.find(port => port.port_idx === 11))
     expect(await entry()).toMatchObject({ up: false })
     await vi.waitFor(async () => expect(await entry()).toMatchObject({ up: true }), { timeout: 3000 })
     await writes.deviceAction({ cmd: 'speedtest' }, ctx)

@@ -202,6 +202,7 @@ export const api = {
   incidents: ep('GET', '/api/incidents', 'admin', Paged(N.Incident), N.IncidentQuery, 'WP11'),
   incident: ep('GET', '/api/incidents/:id', 'admin', N.IncidentDetail, undefined, 'WP11'),
   incidentUpdate: ep('PATCH', '/api/incidents/:id', 'admin', N.Incident, N.IncidentUpdateInput, 'WP11'),
+  infraReport: ep('GET', '/api/reports/infra', 'admin', N.InfraReport, z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }), 'WP11'),
 
   networks: ep('GET', '/api/networks', 'admin', z.array(z.object({ id: z.string(), name: z.string(), purpose: z.string(), subnet: z.string().nullable(), vlan: z.number().nullable() }))),
 } as const satisfies Record<string, Endpoint>

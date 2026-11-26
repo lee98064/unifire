@@ -4,6 +4,7 @@ import { createAutomation } from '../engine/automation'
 import { createAuditWatch } from '../engine/audit-watch'
 import { createSpeedtests } from '../engine/reports/speedtest'
 import { createSnapshots } from '../engine/snapshots'
+import { createInfra } from '../engine/infra'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
 import { apiError } from '../utils/api-error'
@@ -13,6 +14,7 @@ import { createAccess } from './access'
 import { seedMockAutomation } from './seed-automation'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
+let infra: ReturnType<typeof createInfra> | undefined
 let speedtests: ReturnType<typeof createSpeedtests> | undefined
 let automation: ReturnType<typeof createAutomation> | undefined
 let access: ReturnType<typeof createAccess> | undefined
@@ -29,6 +31,14 @@ export async function useController() {
 }
 
 export const cachedControllerStatus = () => current?.connectivity()
+
+export async function useInfra() {
+  if (!infra) await starting
+  const service = await useController()
+  await service.ready()
+  if (!infra || service !== current) throw new UnifiError('UNIFI_INACTIVE')
+  return infra
+}
 
 export async function useSpeedtests() {
   await useController()
@@ -85,11 +95,13 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
   let stopInsights: (() => Promise<unknown>) | undefined
   let stopRouting: (() => Promise<void>) | undefined
   let stopAutomation: (() => Promise<void>) | undefined
+  let stopInfra: (() => Promise<void>) | undefined
   let stopAccess: (() => Promise<void>) | undefined
 
   async function stopServices() {
     const service = current
     const reportWorker = speedtests
+    infra = undefined
     current = undefined
     routing = undefined
     access = undefined
@@ -97,7 +109,8 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
     snapshotsReady = undefined
     automation = undefined
     speedtests = undefined
-    await Promise.allSettled([stopAutomation?.(), stopRouting?.(), stopAccess?.(), stopInsights?.(), reportWorker?.stop()])
+    await Promise.allSettled([stopInfra?.(), stopAutomation?.(), stopRouting?.(), stopAccess?.(), stopInsights?.(), reportWorker?.stop()])
+    stopInfra = undefined
     stopAutomation = stopRouting = stopAccess = stopInsights = undefined
     await service?.stop()
   }
@@ -132,8 +145,10 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
         await current.ready()
         seedMockAutomation(db)
       }
-      automation = createAutomation(db, current, access, routing.managed)
+      infra = createInfra(db, current)
+      automation = createAutomation(db, current, access, routing.managed, infra)
       stopAutomation = automation.start(hasLease)
+      stopInfra = infra.start(hasLease)
     } catch (error) {
       expiresAt = 0
       try { await stopServices() } finally { releaseLease(ENGINE_LEASE, owner, db) }

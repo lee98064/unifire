@@ -5,7 +5,7 @@ import {
 } from '#shared/schemas/automation'
 import { Paged } from '#shared/schemas/common'
 import type { Db } from '../../db'
-import { clients, egressHealth, egresses, people, personDevices, quotas, ruleRuns, rules, usageMinutes } from '../../db/schema'
+import { clients, egressHealth, egresses, infraDevices, people, personDevices, quotas, ruleRuns, rules, usageMinutes } from '../../db/schema'
 import { createAuditService, decodeCursor } from '../../services/audit'
 import { wireTime } from '../../services/client-sync'
 import type { ControllerService } from '../../services/controller'
@@ -23,13 +23,16 @@ import { createRuleActions, type RuleEvent } from './actions'
 
 type Effects = Parameters<typeof createRuleActions>[2]
 type Options = { now?: () => number, http?: HttpTransport }
+const futureTriggers = new Set(['port.issue', 'poe.budget', 'person.room_entered', 'person.room_left', 'incident.opened'])
 const stateful = new Set(['device.offline', 'traffic.threshold'])
 const mockHttp: HttpTransport = async (_url, init) => Response.json({ echo: init?.body ?? null })
 
 export function matchesTrigger(trigger: RuleTriggerT, event: RuleEvent) {
   if (trigger.type !== event.type) return false
   if ('macs' in trigger && trigger.macs.length && !trigger.macs.some(mac => mac === event.mac)) return false
-  if ('mac' in trigger && trigger.mac !== event.mac) return false
+  if ('mac' in trigger && trigger.mac !== null && trigger.mac !== event.mac) return false
+  if (trigger.type === 'infra.rebooted' && trigger.unexpectedOnly && event.unexpected !== true) return false
+  if (trigger.type === 'infra.overheat' && (typeof event.tempC !== 'number' || event.tempC < trigger.celsius)) return false
   if ('personId' in trigger && trigger.personId !== null && trigger.personId !== event.personId) return false
   if ('egressId' in trigger && trigger.egressId !== null && trigger.egressId !== event.egressId) return false
   if ('quotaId' in trigger && trigger.quotaId !== null && trigger.quotaId !== event.quotaId) return false
@@ -48,10 +51,14 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
   const jobs = createCronJobs()
   const operations = new Map<string, Promise<unknown>>()
   const latched = new Map<string, { skipped?: NonNullable<RuleRunT['skipped']> }>()
+  const outages = new Map<string, number>()
+  const heat = new Set<string>()
+  let infraScope = service.runtime?.scope
   const connections = new Map<string, { type: string, at: number, source?: 'poll' }>()
   let connectionScope = service.runtime
   let leased: (() => boolean) | undefined
   let timer: ReturnType<typeof setInterval> | undefined
+  let outageTimer: ReturnType<typeof setTimeout> | undefined
   let pruneAt = 0
   let lifecycle = new AbortController()
   const all = () => db.select().from(rules).orderBy(rules.createdAt, rules.id).all()
@@ -78,6 +85,14 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
 
   function enrich(event: RuleEvent) {
     const mac = typeof event.mac === 'string' ? event.mac : undefined
+    if (event.type.startsWith('infra.')) {
+      const { scope: _scope, ...fields } = event
+      const scope = service.runtime?.scope
+      const device = mac && scope ? db.select().from(infraDevices)
+        .where(and(eq(infraDevices.mac, mac), eq(infraDevices.scope, scope))).get() : undefined
+      return { ...fields, device: device?.name ?? event.device ?? mac ?? '', model: device?.model ?? event.model ?? '',
+        temp: event.tempC ?? '', version: event.version ?? device?.firmware ?? '', downtime: event.downSec ?? '' }
+    }
     const client = mac ? db.select().from(clients).where(eq(clients.mac, mac)).get() : undefined
     const assigned = mac ? db.select().from(personDevices).where(eq(personDevices.mac, mac)).get() : undefined
     const personId = event.personId === undefined ? assigned?.personId : event.personId
@@ -103,6 +118,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     const online = new Set(runtime?.cache.snapshot().activeClients.map(station => station.mac))
     return rule.conditions.every(condition => {
       switch (condition.type) {
+        case 'person.room': return false
         case 'time': return inRuleWindow(condition, at, config.timezone)
         case 'person.home': return roster.find(person => person.id === condition.personId)?.presence.home === condition.home
         case 'anyone.home': return roster.some(person => person.presence.home) === condition.home
@@ -139,13 +155,20 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
       const ts = now()
       const event = enrich(input)
       if (!test && !matchesTrigger(rule.trigger, event)) return
+      if (!test && rule.trigger.type === 'infra.offline') {
+        const match = offlineDevice(input.mac, input.scope)
+        if (!match || match.offlineSince !== input.offlineSince || match.offlineSince === null
+          || ts - match.offlineSince < rule.trigger.minutes * MINUTE) return
+      }
       const dryRun = requestedDryRun || service.status().mode === 'dry-run'
       const results: RuleRunT['results'] = []
       const skipped = test ? null
         : rule.lastRunAt !== null && ts - rule.lastRunAt < rule.cooldownSeconds * 1000 ? 'cooldown'
           : !conditionsPass(rule, ts, event) ? 'conditions' : null
       let changed = false
-      if (!skipped) {
+      const future = futureTriggers.has(rule.trigger.type) || rule.conditions.some(condition => condition.type === 'person.room')
+      if (test && future) results.push({ action: rule.trigger.type, ok: false, message: 'rule.result.not_implemented' })
+      else if (!skipped) {
         for (const action of rule.actions) {
           if (lifecycle.signal.aborted || leased?.() === false) break
           try {
@@ -175,7 +198,91 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     })
   }
 
+  function offlineDevice(mac: unknown, scope: unknown) {
+    const runtime = service.runtime
+    if (typeof mac !== 'string' || typeof scope !== 'string' || scope !== runtime?.scope || !runtime.active()) return
+    return db.select().from(infraDevices).where(and(eq(infraDevices.mac, mac), eq(infraDevices.scope, scope),
+      eq(infraDevices.lastState, 'offline'))).get()
+  }
+
+  function refreshInfraScope() {
+    if (infraScope !== service.runtime?.scope) {
+      infraScope = service.runtime?.scope
+      outages.clear()
+      heat.clear()
+    }
+    return infraScope
+  }
+
+  function evaluateOutages() {
+    clearTimeout(outageTimer)
+    if (leased?.() === false) return Promise.resolve([])
+    const scope = refreshInfraScope()
+    if (!scope || !service.runtime?.cache.devicePoll()) return Promise.resolve([])
+    const candidates = enabled().filter(row => row.trigger.type === 'infra.offline')
+    if (!candidates.length) {
+      outages.clear()
+      return Promise.resolve([])
+    }
+    const offline = db.select().from(infraDevices).where(and(eq(infraDevices.scope, scope),
+      eq(infraDevices.lastState, 'offline'))).all()
+    const pending: ReturnType<typeof run>[] = []
+    const seen = new Set<string>()
+    const at = now()
+    let nextDue = Infinity
+    for (const { id, trigger } of candidates) {
+      if (trigger.type !== 'infra.offline') continue
+      for (const { mac, offlineSince } of offline) {
+        if (offlineSince === null || trigger.mac !== null && trigger.mac !== mac) continue
+        const key = JSON.stringify([id, mac])
+        seen.add(key)
+        const due = offlineSince + trigger.minutes * MINUTE
+        if (due > at) nextDue = Math.min(nextDue, due)
+        if (due > at || outages.get(key) === offlineSince) continue
+        outages.set(key, offlineSince)
+        const prior = db.select({ id: ruleRuns.id }).from(ruleRuns).where(and(eq(ruleRuns.ruleId, id), eq(ruleRuns.test, false),
+          gte(ruleRuns.ts, offlineSince), sql`json_extract(${ruleRuns.event}, '$.type') = 'infra.offline'`,
+          sql`json_extract(${ruleRuns.event}, '$.mac') = ${mac}`,
+          sql`json_extract(${ruleRuns.event}, '$.offlineSince') = ${offlineSince}`)).limit(1).get()
+        if (!prior) pending.push(run(id, { type: trigger.type, mac, scope, offlineSince, downSec: (at - offlineSince) / 1000 })
+          .then(result => {
+            if (!result && outages.get(key) === offlineSince) outages.delete(key)
+            return result
+          }).catch(error => {
+            if (outages.get(key) === offlineSince) outages.delete(key)
+            throw error
+          }))
+      }
+    }
+    for (const key of outages.keys()) if (!seen.has(key)) outages.delete(key)
+    if (leased && Number.isFinite(nextDue)) {
+      outageTimer = setTimeout(() => { void evaluateOutages().catch(() => {}) }, nextDue - at)
+      outageTimer.unref()
+    }
+    return Promise.all(pending)
+  }
+
+  function evaluateHeat(mac: string, tempC: number) {
+    refreshInfraScope()
+    for (const { id, trigger } of enabled()) {
+      if (trigger.type !== 'infra.overheat' || trigger.mac !== null && trigger.mac !== mac) continue
+      const key = JSON.stringify([id, mac])
+      if (tempC <= trigger.celsius - 3) heat.delete(key)
+      if (tempC < trigger.celsius || heat.has(key)) continue
+      heat.add(key)
+      void run(id, { type: 'infra.overheat', mac, tempC }).catch(() => { heat.delete(key) })
+    }
+  }
+
+  function resetInfraRule(id: string) {
+    const prefix = JSON.stringify(id)
+    for (const key of heat) if (key.startsWith(`[${prefix},`)) heat.delete(key)
+    for (const key of outages.keys()) if (key.startsWith(`[${prefix},`)) outages.delete(key)
+  }
+
   const dispatch = async (event: RuleEvent) => {
+    if (futureTriggers.has(event.type)) return []
+    if (event.type === 'infra.offline') return evaluateOutages()
     const interested = enabled().filter(row => row.trigger.type === event.type)
     if (!interested.length) return []
     const enriched = enrich(event)
@@ -188,11 +295,17 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     if (event.type === 'rules.changed') {
       for (const id of event.ruleIds) {
         latched.delete(id)
+        resetInfraRule(id)
         const saved = row(id)
         if (saved) sync(internal(saved))
         else jobs.set(id, null, async () => {})
       }
       return
+    }
+    if (event.type === 'infra.temperature') return evaluateHeat(event.mac, event.tempC)
+    if (event.type === 'infra.overheat') return // The rule uses its own threshold and hysteresis.
+    if (event.type === 'infra.online' || event.type === 'cache.changed' && event.resource === 'devices') {
+      void evaluateOutages().catch(() => {})
     }
     if (event.type === 'client.connected' || event.type === 'client.disconnected') {
       if (connectionScope !== service.runtime) {
@@ -239,10 +352,18 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     if (leased?.() === false) return
     const at = now()
     if (at >= pruneAt) {
-      db.delete(ruleRuns).where(lt(ruleRuns.ts, at - 30 * DAY)).run()
+      // Keep the run that deduplicates an outage until that device recovers.
+      db.delete(ruleRuns).where(and(lt(ruleRuns.ts, at - 30 * DAY), sql`not exists (
+        select 1 from ${infraDevices}
+        where ${infraDevices.lastState} = 'offline'
+          and json_extract(${ruleRuns.event}, '$.type') = 'infra.offline'
+          and json_extract(${ruleRuns.event}, '$.mac') = ${infraDevices.mac}
+          and json_extract(${ruleRuns.event}, '$.offlineSince') = ${infraDevices.offlineSince}
+      )`)).run()
       for (const [mac, event] of connections) if (at - event.at >= 30_000) connections.delete(mac)
       pruneAt = at + HOUR
     }
+    void evaluateOutages().catch(() => {})
     for (const row of enabled().filter(row => stateful.has(row.trigger.type))) {
       const event = level(row.trigger, at)
       if (!event) {
@@ -295,6 +416,8 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     const saved = current ? db.update(rules).set(values).where(eq(rules.id, id)).returning().get()
       : db.insert(rules).values({ id, ...values, createdAt: now() }).returning().get()
     latched.delete(id)
+    resetInfraRule(id)
+    if (leased) void evaluateOutages().catch(() => {})
     const rule = internal(saved)
     sync(rule)
     return publicRule(rule)
@@ -322,11 +445,24 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
       db.delete(rules).where(eq(rules.id, id)).run()
       jobs.set(id, null, async () => {})
       latched.delete(id)
+      resetInfraRule(id)
       return { ok: true as const }
     },
     async test(id: string, dryRun: boolean, actor?: { id: string, username: string }) {
       const { trigger, name } = requireRule(id)
+      const scope = service.runtime?.scope
+      const device = trigger.type.startsWith('infra.') && 'mac' in trigger && scope
+        ? db.select().from(infraDevices).where(and(eq(infraDevices.scope, scope),
+          trigger.mac ? eq(infraDevices.mac, trigger.mac) : undefined)).orderBy(infraDevices.mac).limit(1).get()
+        : undefined
       const event: RuleEvent = { name, ...trigger, synthetic: true,
+        ...(trigger.type.startsWith('infra.') && { mac: device?.mac ?? ('mac' in trigger ? trigger.mac : null) ?? '02:00:00:00:00:00',
+          device: device?.name ?? name, model: device?.model ?? '' }),
+        ...(trigger.type === 'infra.overheat' && { tempC: trigger.celsius }),
+        ...(trigger.type === 'infra.rebooted' && { unexpected: trigger.unexpectedOnly }),
+        ...(trigger.type === 'infra.online' && { downSec: 60 }),
+        ...(trigger.type === 'infra.offline' && { downSec: trigger.minutes * 60 }),
+        ...(trigger.type === 'infra.firmware' && { version: device?.upgradeTo ?? device?.firmware ?? '0.0.0' }),
         ...('macs' in trigger && { mac: trigger.macs[0] }),
         ...(trigger.type === 'traffic.threshold' && (trigger.scope.type === 'client'
           ? { mac: trigger.scope.id } : { personId: trigger.scope.id })) }
@@ -346,6 +482,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
       return async () => {
         lifecycle.abort()
         clearInterval(timer)
+        clearTimeout(outageTimer)
         service.engine.off('event', onEvent)
         jobs.stop()
         await Promise.allSettled(operations.values())

@@ -89,7 +89,32 @@ export function fieldDiff(before: unknown, after: unknown, beforeLabel?: Labels,
   return fields
 }
 
-export function summary(resource: SnapshotResourceT, label: string, kind: DiffChangeT['kind'], fields: FieldChangeT[]) {
+export function summary(resource: SnapshotResourceT, label: string, kind: DiffChangeT['kind'], fields: FieldChangeT[],
+  before?: WireDoc, after?: WireDoc) {
+  if (resource === 'devices' && kind === 'modified') {
+    const value = (field: FieldChangeT) => ({
+      from: field.beforeLabel ?? String(field.before ?? ''), to: field.afterLabel ?? String(field.after ?? ''),
+    })
+    const name = fields.find(field => field.path === 'name')
+    if (name) return { summaryKey: 'diff.device.name', summaryParams: { device: label, ...value(name) } }
+    for (const field of fields) {
+      const match = /^(port_overrides|radio_table)\[(\d+)\]\.(.+)$/.exec(field.path)
+      if (!match || field.secret) continue
+      const [, collection, index, leaf] = match
+      const right = after?.[collection!]
+      const left = before?.[collection!]
+      const oldRow = Array.isArray(left) ? left[Number(index)] : undefined
+      const newRow = Array.isArray(right) ? right[Number(index)] : undefined
+      const port = collection === 'port_overrides'
+      const identify = (row: unknown) => isDocument(row) ? row[port ? 'port_idx' : 'radio'] ?? row.name : undefined
+      const identity = identify(newRow) ?? identify(oldRow)
+      if (identity !== undefined && (!oldRow || !newRow || identify(oldRow) === identify(newRow))) {
+        const key = port ? 'port' : 'radio'
+        return { summaryKey: `diff.device.${port ? 'port_override' : 'radio'}`,
+          summaryParams: { device: label, [key]: String(identity), field: leaf!, ...value(field) } }
+      }
+    }
+  }
   const egress = fields.find(field => field.path === 'network_id')
   const toggle = fields.find(field => field.path === 'enabled')
   const password = fields.some(field => /pass|psk/i.test(field.path) && field.secret)

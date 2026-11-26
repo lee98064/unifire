@@ -3,6 +3,8 @@ import type { ClientT } from '#shared/schemas/access'
 import type { ManagedRouteT } from '#shared/schemas/routes'
 import { adminNav, settingsNav } from '~/utils/nav'
 import { egressKindIcon } from '~/utils/egress'
+import { compareDevices, deviceTypeIcon } from '~/utils/devices'
+import type { InfraDeviceT } from '#shared/schemas/infra'
 
 const open = useState('cmdk-open', () => false)
 const { t } = useI18n()
@@ -13,12 +15,15 @@ const fmt = useFormat()
 
 const clients = useFetch<ClientT[]>('/api/clients', { key: 'clients', default: () => [], immediate: false, dedupe: 'defer' })
 const routes = useFetch<ManagedRouteT[]>('/api/managed-routes', { key: 'managed-routes', default: () => [], immediate: false, dedupe: 'defer' })
+const devices = useFetch<InfraDeviceT[]>('/api/devices', { key: 'devices', default: () => [], immediate: false, dedupe: 'defer' })
 watch(open, (v) => {
   if (v) {
     if (!clients.data.value.length) clients.execute()
     if (!routes.data.value.length) routes.execute()
+    if (!devices.data.value.length) devices.execute()
   }
 })
+const sortedDevices = computed(() => [...devices.data.value].sort(compareDevices))
 
 defineShortcuts({
   meta_k: { usingInput: true, handler: () => (open.value = !open.value) },
@@ -70,6 +75,20 @@ const groups = computed(() => [
           })),
         })),
       },
+      {
+        label: t('cmdk.locate'),
+        icon: 'i-lucide-locate-fixed',
+        children: sortedDevices.value.filter(d => d.state !== 'offline').map(d => ({
+          label: d.name,
+          suffix: d.modelName ?? d.model ?? undefined,
+          icon: deviceTypeIcon[d.type],
+          onSelect: async () => {
+            open.value = false
+            await api.post(`/api/devices/${encodeURIComponent(d.mac)}/locate`, { on: true, minutes: 5 }, { success: t('devices.locateStarted', { name: d.name, n: 5 }) })
+            refreshNuxtData(['devices', 'device-detail'])
+          },
+        })),
+      },
       { label: t('cmdk.sweep'), icon: 'i-lucide-radar', onSelect: async () => { open.value = false; await api.post('/api/egresses/sweep', {}, { success: t('egresses.sweepStarted') }) } },
       { label: t('cmdk.snapshot'), icon: 'i-lucide-camera', onSelect: async () => { open.value = false; await api.post('/api/snapshots', {}, { success: t('snapshots.created') }) } },
     ],
@@ -78,6 +97,17 @@ const groups = computed(() => [
     id: 'nav',
     label: t('cmdk.navigate'),
     items: [...adminNav.flat(), settingsNav].map(i => ({ label: t(i.label), icon: i.icon, to: i.to, onSelect: () => (open.value = false) })),
+  },
+  {
+    id: 'devices',
+    label: t('nav.devices'),
+    items: sortedDevices.value.map(d => ({
+      label: d.name,
+      suffix: `${d.modelName ?? d.model ?? ''} ${d.ip ?? ''} ${d.mac}`,
+      icon: deviceTypeIcon[d.type],
+      to: `/devices/${encodeURIComponent(d.mac)}`,
+      onSelect: () => (open.value = false),
+    })),
   },
   {
     id: 'people',

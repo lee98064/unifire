@@ -2,6 +2,7 @@ import type { EgressT } from '#shared/schemas/egress'
 import type { ControllerStatusT } from '#shared/schemas/controller'
 import type { PersonT, ApprovalItemT, ExtensionRequestT } from '#shared/schemas/access'
 import type { NetworkT } from '~/utils/types'
+import type { InfraDeviceT, IncidentT } from '#shared/schemas/infra'
 
 /** Shared egress list (WAN + VPN clients) — used by chips, pickers and the schedule editor. */
 export function useEgresses() {
@@ -38,12 +39,22 @@ export function useNetworks() {
   return { ...res, networks: res.data, byId }
 }
 
+/** Adopted UniFi devices (gateway, switches, APs). Refreshed by `device` live events. */
+export function useDevices() {
+  const res = useFetch<InfraDeviceT[]>('/api/devices', { key: 'devices', default: () => [], dedupe: 'defer' })
+  const byMac = computed(() => new Map(res.data.value.map(d => [d.mac, d])))
+  return { ...res, devices: res.data, byMac, get: (mac: string | null | undefined) => (mac ? byMac.value.get(mac) : undefined) }
+}
+
 /** Counts shown as nav badges. */
 export function useBadges() {
   const approvals = useFetch<ApprovalItemT[]>('/api/approvals', { key: 'approvals', default: () => [], dedupe: 'defer' })
   const requests = useFetch<ExtensionRequestT[]>('/api/extension-requests', { key: 'extension-requests', query: { status: 'pending' }, default: () => [], dedupe: 'defer' })
+  // Before WP11 the endpoint 404s; the default keeps the badge at 0.
+  const incidents = useFetch<{ items: IncidentT[], nextCursor: string | null }>('/api/incidents', { key: 'incidents-open', query: { status: 'open', limit: 50 }, default: () => ({ items: [], nextCursor: null }), dedupe: 'defer' })
   return {
     approvals: computed(() => approvals.data.value.length),
     requests: computed(() => requests.data.value.filter(r => r.status === 'pending').length),
+    incidents: computed(() => incidents.data.value?.items.filter(i => i.status === 'open').length ?? 0),
   }
 }

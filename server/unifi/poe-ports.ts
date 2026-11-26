@@ -17,7 +17,7 @@ export function poeCapable(port: WireDoc) {
 
 export function isUplink(device: WireDevice, port: WireDoc) {
   const index = portIndex(port.port_idx)
-  const uplink = device.uplink
+  const uplink = device.uplink ?? device.last_uplink
   const uplinkIndex = uplink && typeof uplink === 'object' && 'port_idx' in uplink ? portIndex(uplink.port_idx) : null
   return truthy(port.is_uplink) || truthy(port.uplink) || truthy(port.is_wan)
     || /^(uplink|wan)/i.test(String(port.port_type ?? ''))

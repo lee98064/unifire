@@ -689,6 +689,40 @@ export const IncidentUpdateInput = z.object({
   note: z.string().max(2000).nullable().optional(),
 })
 
+/** GET /api/reports/infra?month=YYYY-MM — monthly device availability & incident report. WP11. */
+export const InfraReport = z.object({
+  month: z.string(),
+  from: Ts,
+  to: Ts,
+  /** Fraction of the month with device samples (Unifire up). */
+  coverage: z.number().min(0).max(1),
+  devices: z.array(z.object({
+    mac: Mac,
+    name: z.string(),
+    type: DeviceType,
+    model: z.string().nullable(),
+    availability: z.number().min(0).max(1).nullable(),
+    downtimeSec: z.number(),
+    outages: z.number().int(),
+    unexpectedReboots: z.number().int(),
+    firmwareChanges: z.number().int(),
+    cpuAvg: z.number().nullable(),
+    memAvg: z.number().nullable(),
+    tempMax: z.number().nullable(),
+    portEvents: z.number().int(),
+  })),
+  incidents: z.object({
+    count: z.number().int(),
+    critical: z.number().int(),
+    totalSec: z.number(),
+    /** Mean time to recovery of resolved incidents. */
+    mttrSec: z.number().nullable(),
+    byRoot: z.array(z.object({ kind: IncidentSignalKind, count: z.number().int() })),
+    longest: z.array(Incident).max(5),
+  }),
+  energyWh: z.number().nullable(),
+})
+
 /* ───────────────────────────── Types ───────────────────────────── */
 
 export type DeviceTypeT = z.infer<typeof DeviceType>
@@ -739,3 +773,14 @@ export type IncidentRefT = z.infer<typeof IncidentRef>
 export type IncidentSignalT = z.infer<typeof IncidentSignal>
 export type IncidentT = z.infer<typeof Incident>
 export type IncidentDetailT = z.infer<typeof IncidentDetail>
+export type LocateInputT = z.infer<typeof LocateInput>
+export type DeviceUpdateInputT = z.infer<typeof DeviceUpdateInput>
+export type PortEventQueryT = z.infer<typeof PortEventQuery>
+export type PortEventUpdateInputT = z.infer<typeof PortEventUpdateInput>
+export type PortEventAckAllInputT = z.infer<typeof PortEventAckAllInput>
+export type PoeQualifyInputT = z.infer<typeof PoeQualifyInput>
+export type EnergyQueryT = z.infer<typeof EnergyQuery>
+export type RoomAssignInputT = z.infer<typeof RoomAssignInput>
+export type IncidentQueryT = z.infer<typeof IncidentQuery>
+export type IncidentUpdateInputT = z.infer<typeof IncidentUpdateInput>
+export type InfraReportT = z.infer<typeof InfraReport>

@@ -103,14 +103,15 @@ describe('wire collector', () => {
     }, 40)
     try {
       const result = await captureWire(transport, { site: mock.config.site, networkVersion: null, seconds: 1, maxClients: 2 })
-      expect(result).toMatchObject({ networkVersion: '11.0.99', site: expect.stringMatching(/^site-\d+$/), summary: [
-        { type: 'udm', model: 'UDMPRO' }, { type: 'usw', portCount: 24, poePorts: 17 },
-        { type: 'uap', model: 'U7-Pro' }, { type: 'uap', model: 'U6-Lite' },
+      expect(result).toMatchObject({ networkVersion: '11.0.104', site: expect.stringMatching(/^site-\d+$/), summary: [
+        { type: 'udm', model: 'UDMPRO' }, { type: 'usw', model: 'USPM16P', portCount: 18, poePorts: 16 },
+        { type: 'usw', model: 'USWED35' }, { type: 'uap', model: 'U7PRO' },
+        { type: 'udm', model: 'UDMA69B' }, { type: 'uap', model: 'U6M' },
       ] })
       expect(result.resources['stat/health']).toEqual({ ok: false, status: 403, error: 'UNIFI_FORBIDDEN' })
       for (const key of ['v2/device', 'v2/devices']) expect(result.resources[key]).toMatchObject({ ok: false, status: 404 })
       expect(Object.keys(result.resources).filter(key => key.startsWith('stat/device/'))).toHaveLength(3)
-      const switchMac = result.summary.find(device => device.type === 'usw')?.pseudoMac
+      const switchMac = result.summary.find(device => device.model === 'USWED35')?.pseudoMac
       const stations = result.resources['stat/sta']
       expect(stations).toMatchObject({ ok: true, data: expect.arrayContaining([expect.objectContaining({ sw_mac: switchMac })]) })
       for (const key of ['stat/sta', 'v2/clients/active?includeTrafficUsage=true&includeUnifiDevices=true']) {
@@ -131,7 +132,7 @@ describe('wire collector', () => {
       expect(events?.EVT_WU_Roam?.samples[0]).toEqual({
         key: '<redacted>', user: expect.stringMatching(/^02:00:00:00:/),
       })
-      expect(events?.EVT_WU_RoamRadio?.samples[0]).toEqual({ key: '<redacted>', detail: 'host-1.example' })
+      expect(events?.EVT_WU_RoamRadio?.samples[0]).toEqual({ key: '<redacted>', detail: expect.stringMatching(/^host-\d+\.example$/) })
       expect(JSON.stringify(result)).not.toContain(SELF_MAC)
       expect(mock.loginAttempts).toBe(1)
       expect(mock.mutationCount).toBe(0)

@@ -260,3 +260,22 @@ Rule notifications use the administrator-provided templates. The test action use
 | --- | --- | --- |
 | `errors.speedtestUnsupported` | Gateway speed testing is unavailable on the configured controller. | None |
 | `errors.databaseUnavailable` | The local database health check failed. | None |
+
+## WP8 device fleet and health
+
+| Key | Description | Params |
+| --- | --- | --- |
+| `infra.issue.offline` | The device is offline. | None |
+| `infra.issue.overheat` | The device temperature is at or above the configured warning threshold. | `temp` (°C) |
+| `infra.issue.high_cpu` | CPU utilization is at or above the configured warning threshold. | `cpu` (%) |
+| `infra.issue.high_mem` | Memory utilization is at or above the configured warning threshold. | `mem` (%) |
+| `infra.issue.firmware_available` | The controller offers a firmware update. | `version` |
+| `infra.issue.unexpected_reboot` | An unexpected reboot occurred in the last 24 hours. | None |
+| `diff.device.port_override` | A device port override field changed. | `device`, `port`, `field`, `from`, `to` |
+| `diff.device.name` | The device name changed. | `device`, `from`, `to` |
+| `diff.device.radio` | A device radio setting changed. | `device`, `radio`, `field`, `from`, `to` |
+| `errors.deviceNotFound` | The infrastructure device could not be found. | None |
+| `errors.gatewayConfirmationRequired` | Restarting the gateway requires explicit confirmation. | None |
+| `rule.result.not_implemented` | A rule uses a trigger, condition, or action from a later work package. | None |
+| `notification.device_firmware.title` | Title for an available device firmware update. | `device`, `version`, `mac` |
+| `notification.device_firmware.body` | Details for an available device firmware update. | `device`, `version`, `mac` |

@@ -1,3 +1,6 @@
+import { eq } from 'drizzle-orm'
+import { infraDevices } from '../db/schema'
+import type { createInfra } from './infra'
 import type { Db } from '../db'
 import type { createAccess } from '../services/access'
 import type { ControllerService } from '../services/controller'
@@ -29,19 +32,22 @@ function notification(input: ControllerEvent): Notification | undefined {
 }
 
 export function createAutomation(db: Db, service: ControllerService, access: ReturnType<typeof createAccess>,
-  managed: ReturnType<typeof createManagedRoutes>) {
+  managed: ReturnType<typeof createManagedRoutes>, infra?: ReturnType<typeof createInfra>) {
   const notifications = createNotifier(db, access, { mock: service.status().mock })
   const watchdogs = createWatchdogs(db, service, notifications.notify)
   const guestWifi = createGuestWifi(db, service, notifications.notify)
   const wol = createWol(db, service)
-  const rules = createRules(db, service, { access, managed, notifications, watchdogs, wol })
+  const rules = createRules(db, service, { access, managed, notifications, watchdogs, wol, infra })
   return {
     notifications, watchdogs, guestWifi, rules, wol,
     start(hasLease: () => boolean) {
       const pending = new Set<Promise<void>>()
       const onEvent = (input: ControllerEvent) => {
         if (!hasLease()) return
-        const event = notification(input)
+        const event: Notification | undefined = input.type === 'infra.firmware'
+          ? { event: 'device_firmware', data: { mac: input.mac, version: input.version,
+              device: db.select({ name: infraDevices.name }).from(infraDevices).where(eq(infraDevices.mac, input.mac)).get()?.name ?? input.mac } }
+          : notification(input)
         if (!event) return
         const task = notifications.notify(event).catch(() => {}).finally(() => { pending.delete(task) })
         pending.add(task)

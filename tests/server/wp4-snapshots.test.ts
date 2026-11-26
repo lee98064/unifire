@@ -89,7 +89,7 @@ describe('WP4 snapshots and audit with fake UniFi', () => {
 
   it('captures all collections, encrypts full documents, diffs live state in memory and paginates stored state', async () => {
     const original = await snapshots.create('baseline', ctx)
-    expect(original).toMatchObject({ complete: true, failed: [], networkVersion: '11.0.99', trigger: 'manual', changeCount: null })
+    expect(original).toMatchObject({ complete: true, failed: [], networkVersion: '11.0.104', trigger: 'manual', changeCount: null })
     expect(Object.keys(original.counts)).toEqual(SnapshotResource.options)
     expect(original.sizeBytes).toBeGreaterThan(0)
     const stored = database.db.select().from(snapshotItems).where(eq(snapshotItems.itemId, 'demo-wlan-0')).get()!

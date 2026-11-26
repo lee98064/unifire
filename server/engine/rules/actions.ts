@@ -10,6 +10,7 @@ import { UnifiError } from '../../unifi/errors'
 import type { WriteContext } from '../../unifi/writes'
 import { apiError } from '../../utils/api-error'
 import { MINUTE } from '../access-time'
+import type { createInfra } from '../infra'
 import type { createManagedRoutes } from '../managed-routes'
 import type { createNotifier } from '../notifiers'
 import { httpUrl } from '../notifiers/channels'
@@ -25,6 +26,7 @@ type Effects = {
   notifications: ReturnType<typeof createNotifier>
   watchdogs: ReturnType<typeof createWatchdogs>
   wol: ReturnType<typeof createWol>
+  infra?: ReturnType<typeof createInfra>
 }
 
 function placeholder(event: RuleEvent, path: string) {
@@ -75,6 +77,9 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
 
   return async (action: RuleActionT, rule: RuleT, event: RuleEvent, dryRun: boolean, explicitDryRun: boolean, signal: AbortSignal) => {
     const ctx: WriteContext = { actor: { type: 'rule', id: rule.id, name: rule.name }, dryRun }
+    if (action.type === 'poe.set' || action.type === 'client.kick') {
+      return { changed: false, ok: false, message: 'rule.result.not_implemented' }
+    }
     const preview = explicitDryRun || dryRun && action.type !== 'notify' && action.type !== 'webhook' && action.type !== 'delay'
     if (preview) return { changed: false, ok: true, message: 'rule.result.would' }
     if (signal.aborted) throw signal.reason
@@ -138,6 +143,12 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
           : await run.writes.deviceAction({ cmd: 'restart', macs: [action.mac] }, ctx)
         if (action.type === 'wlan.toggle' && result.changed && !result.dryRun) await run.cache.refresh('wlans').catch(() => {})
         changed = result.changed && !result.dryRun
+        break
+      }
+      case 'device.locate': {
+        if (!effects.infra) throw new UnifiError('UNIFI_INACTIVE')
+        const result = await effects.infra.locate(action.mac, { on: true, minutes: action.minutes }, ctx)
+        changed = result?.changed === true && !result.dryRun
         break
       }
       case 'wol':

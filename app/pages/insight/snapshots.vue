@@ -6,8 +6,10 @@ const fmt = useFormat()
 const api = useApi()
 const { data: snaps, refresh } = useFetch<{ items: SnapshotT[], nextCursor: string | null }>('/api/snapshots', { key: 'snapshots', query: { limit: 100 }, default: () => ({ items: [], nextCursor: null }) })
 
-const selectedId = ref<string | null>(null)
-const compareTo = ref<'previous' | 'live'>('previous')
+// Deep links (e.g. from an incident's "what changed before"): ?snapshot=<id>&compare=live|previous
+const route = useRoute()
+const selectedId = ref<string | null>(typeof route.query.snapshot === 'string' ? route.query.snapshot : null)
+const compareTo = ref<'previous' | 'live'>(route.query.compare === 'live' ? 'live' : 'previous')
 watch(snaps, (v) => { if (!selectedId.value && v.items[0]) selectedId.value = v.items[0].id }, { immediate: true })
 const selectedIdx = computed(() => snaps.value.items.findIndex(s => s.id === selectedId.value))
 const diffQuery = computed(() => {

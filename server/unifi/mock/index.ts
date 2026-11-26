@@ -4,6 +4,7 @@ import { createServer as createSecureServer, type ServerOptions } from 'node:htt
 import { WebSocket, WebSocketServer } from 'ws'
 import { Doc, Route, Station, type WireDoc } from '../endpoints/schemas'
 import { osPaths } from '../paths'
+import { createMockFleet } from './infra'
 import { buildFixtures, createRandom, DEMO_ROUTES, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
 
 type Failure = 'html' | '401' | 'loginRequired' | '403' | '404' | '429'
@@ -47,7 +48,8 @@ export async function startMockController(options: {
   const wlans = new Map(fixtures.wlans.map(wlan => [wlan._id, Doc.parse(wlan)]))
   const savedWlan = options.guestWlan && wlans.get(options.guestWlan.id)
   if (savedWlan && options.guestWlan) savedWlan.x_passphrase = options.guestWlan.passphrase
-  const devices = fixtures.devices
+  const fleet = createMockFleet(clients, now, createRandom((options.seed ?? 903) + 1))
+  const { devices } = fleet
   const portForwards = new Map<string, WireDoc>([['demo-forward', { _id: 'demo-forward', name: 'Demo port forward',
     enabled: true, src: 'any', dst_port: '8443', fwd: '10.235.0.25', fwd_port: '443', proto: 'tcp' }]])
   const staticDns = new Map<string, WireDoc>([['demo-dns', { _id: 'demo-dns',
@@ -112,6 +114,7 @@ export async function startMockController(options: {
       client['tx_bytes-r'] = Math.floor(tx / 10)
       client.last_seen = Math.floor(now() / 1000)
     }
+    emit('device:sync', devices)
     simulatedTicks++
     if (simulatedTicks % 9 === 0) togglePortForward()
     const rotation = Math.floor((now() - started) / 300_000)
@@ -169,16 +172,16 @@ export async function startMockController(options: {
     res.setHeader('X-Updated-Csrf-Token', session.csrf)
   }
 
-  const sysinfo = { version: '11.0.99', console_display_version: '6.0.17', udm_version: '6.0.17',
+  const sysinfo = { version: '11.0.104', console_display_version: '6.0.17', udm_version: '6.0.17',
     name: 'Dream Machine Pro', ubnt_device_type: 'UDMPRO', hostname: 'demo-console', timezone: 'Asia/Taipei' }
   const readClassic = new Map<string, () => unknown>([
     [paths.sites, () => [{ _id: 'demo-site', name: MOCK_SITE, desc: 'Default' }]],
     [paths.classic('stat/sysinfo'), () => [sysinfo]],
     [paths.classic('rest/networkconf'), () => networks],
-    [paths.classic('stat/sta'), () => [...clients.values()].filter(client => client.online)],
+    [paths.classic('stat/sta'), () => [...clients.values()].filter(fleet.activeClient)],
     [paths.classic('rest/user'), () => [...clients.values()]],
     [paths.classic('stat/alluser'), () => [...clients.values()]],
-    [paths.classic('stat/device'), () => devices],
+    [paths.classic('stat/device'), fleet.poll],
     [paths.classic('stat/gateway'), () => devices.slice(0, 1)],
     [paths.classic('stat/health'), () => [{ subsystem: 'wan', status: 'ok' }]],
     [paths.classic('rest/wlanconf'), () => [...wlans.values()]],
@@ -189,7 +192,7 @@ export async function startMockController(options: {
   const readV2 = new Map<string, () => unknown>([
     [paths.v2('trafficroutes'), () => [...routes.values()]],
     [paths.v2('object-oriented-network-configs'), () => [...objects.values()]],
-    [paths.v2('clients/active'), () => [...clients.values()].filter(client => client.online).map(client => {
+    [paths.v2('clients/active'), () => [...clients.values()].filter(fleet.activeClient).map(client => {
       const { rx_bytes, tx_bytes, ...fields } = client
       return { ...fields, trafficUsage: { rxBytes: rx_bytes, txBytes: tx_bytes } }
     })],
@@ -303,13 +306,22 @@ export async function startMockController(options: {
         const wasUp = port.up
         port.up = false
         emit('device:sync', [device])
-        later(() => { port.up = wasUp; emit('device:sync', [device]) }, 1200)
+        later(() => {
+          port.up = wasUp
+          fleet.reboot(fleet.graph.downstream(String(body.mac), Number(body.port_idx)).map(peer => peer.device.mac))
+          emit('device:sync', [device])
+        }, 1200)
       } else if (body.cmd === 'restart') {
         const macs = Array.isArray(body.macs) ? body.macs : []
         const targets = devices.filter(item => macs.includes(item.mac))
         if (!targets.length) return failure(res, '404')
-        emit('device:sync', targets.map(device => ({ ...device, state: 4 })))
-        later(() => emit('device:sync', targets.map(device => ({ ...device, state: 1 }))), 1000)
+        fleet.reboot(targets.map(device => device.mac))
+        emit('device:sync', targets)
+      } else if (body.cmd === 'set-locate' || body.cmd === 'unset-locate') {
+        const device = devices.find(item => item.mac === body.mac)
+        if (!device) return failure(res, '404')
+        device.locating = body.cmd === 'set-locate'
+        emit('device:sync', [device])
       } else return failure(res, '404')
       rotate(res, session)
       return json(res, classic())
@@ -416,6 +428,12 @@ export async function startMockController(options: {
   return {
     config: { url, username: MOCK_USERNAME, password: MOCK_PASSWORD, site: MOCK_SITE, verifyMode: 'insecure' as const },
     paths, emit, tick, setOnline,
+    scenario(kind: Parameters<typeof fleet.scenario>[0]) {
+      const result = fleet.scenario(kind)
+      emit('device:sync', devices)
+      if (kind === 'roam') emit('sta:sync', [...clients.values()].filter(fleet.activeClient))
+      return result
+    },
     get loginAttempts() { return logins },
     get mutationCount() { return mutations },
     expireSession() {

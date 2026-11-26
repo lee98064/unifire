@@ -8,7 +8,16 @@ import type { UnifiTransport } from './client'
 import { Doc, MacAddress, type WireDoc } from './endpoints/schemas'
 import { UnifiError } from './errors'
 
+export type InfraEvent =
+  | { type: 'infra.offline', mac: string }
+  | { type: 'infra.online', mac: string, downSec: number }
+  | { type: 'infra.rebooted', mac: string, unexpected: boolean }
+  | { type: 'infra.overheat', mac: string, tempC: number }
+  | { type: 'infra.temperature', mac: string, tempC: number }
+  | { type: 'infra.firmware', mac: string, version: string }
+
 export type ControllerEvent =
+  | InfraEvent
   | { type: 'client.connected' | 'client.disconnected' | 'client.roam', mac: string, data: WireDoc, source?: 'poll' }
   | { type: 'client.updated' | 'device.updated' | 'user.updated', mac: string | null, data: WireDoc }
   | { type: 'controller.event', key: string, data: WireDoc }

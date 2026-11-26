@@ -27,6 +27,14 @@ const defaults: SettingsT = {
   broadcastOverrides: {},
   selfMacOverride: null,
   excludedRouteIds: [],
+  infra: {
+    tempWarnC: 80, cpuWarnPct: 85, memWarnPct: 90, errorRatePct: 0.1, flapsPerHour: 5,
+    downgradeMinPolls: 2, ignoredPorts: [], retainRawDays: 7, retainRollupDays: 400,
+  },
+  energy: { ratePerKwh: null, currency: 'TWD' },
+  rooms: { dwellMinutes: 2 },
+  sticky: { enabled: false, signalDbm: -75, minutes: 5, nudge: false, maxNudgesPerDay: 3, skipAboveBps: 2_000_000 },
+  incidents: { windowMinutes: 10, quietMinutes: 5, notifyMinSeverity: 'warning', massDisconnectMin: 5, massDisconnectPct: 30 },
 }
 
 export function validateTimezone(timezone: string) {

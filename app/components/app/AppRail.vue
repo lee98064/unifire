@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { adminNav, navGroupLabels, settingsNav, type NavItem } from '~/utils/nav'
+import { activeNavTo, adminNav, navGroupLabels, settingsNav, type NavItem } from '~/utils/nav'
 
 const { t } = useI18n()
 const route = useRoute()
 const expanded = useLocalStorage('uf-rail-expanded', false)
 const badges = useBadges()
 
+const activeTo = computed(() => activeNavTo(route.path))
 function isActive(item: NavItem) {
-  if (item.to === '/') return route.path === '/'
-  return route.path === item.to || route.path.startsWith(`${item.to}/`)
+  return activeTo.value === item.to
 }
 function badgeCount(item: NavItem) {
   if (item.badge === 'approvals') return badges.approvals.value
   if (item.badge === 'requests') return badges.requests.value
+  if (item.badge === 'incidents') return badges.incidents.value
   return 0
 }
 </script>

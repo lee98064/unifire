@@ -28,6 +28,7 @@ export const Station = z.looseObject({
   mac: MacAddress, _id: text, name: text, hostname: text, oui: text, ip: text, fixed_ip: text,
   use_fixedip: flag, network: text, network_id: text, is_wired: flag, blocked: flag,
   ap_mac: text, sw_mac: text, sw_port: z.number().int().nullish(), essid: text, signal: number,
+  last_uplink_mac: text, last_uplink_remote_port: z.number().int().nullish(), radio: text,
   first_seen: number, last_seen: number, rx_bytes: number, tx_bytes: number,
   'rx_bytes-r': number, 'tx_bytes-r': number,
 })
@@ -54,8 +55,26 @@ export const ActiveStation = z.preprocess(input => {
     'tx_bytes-r': value['tx_bytes-r'] ?? traffic.txBytesPerSecond,
   }
 }, Station)
+const numeric = z.union([z.number(), z.string()]).nullish()
+const DeviceUplink = z.looseObject({
+  type: text, uplink_mac: text, uplink_remote_port: numeric, port_idx: numeric,
+  speed: numeric, max_speed: numeric, full_duplex: flag, signal: numeric,
+  uplink_device_name: text, 'rx_bytes-r': numeric, 'tx_bytes-r': numeric,
+})
+
 export const Device = z.looseObject({
-  mac: MacAddress, name: text, model: text, type: text, port_table: Docs.nullish(),
+  mac: MacAddress, _id: text, name: text, model: text, model_name: text, shortname: text, type: text,
+  state: number, adopted: flag, restarting: flag, ip: text, version: text, upgradable: flag, upgrade_to_firmware: text,
+  uptime: numeric, last_seen: number, is_access_point: flag, gateway_mac: text,
+  'system-stats': z.looseObject({ cpu: numeric, mem: numeric, uptime: numeric }).nullish(),
+  general_temperature: numeric, temperatures: z.array(z.looseObject({ value: numeric })).nullish(),
+  num_sta: number, 'user-num_sta': number, 'guest-num_sta': number,
+  uplink: DeviceUplink.nullish(), last_uplink: DeviceUplink.nullish(),
+  port_table: Docs.nullish(), port_overrides: Docs.nullish(), downlink_table: Docs.nullish(),
+  radio_table: Docs.nullish(), radio_table_stats: Docs.nullish(),
+  vap_table: z.array(z.looseObject({ essid: text, ap_mac: text, radio: text, num_sta: number })).nullish(),
+  total_max_power: numeric, total_used_power: numeric, ethernet_table: Docs.nullish(),
+  led_override: text, locating: flag,
   wan1: Doc.nullish(), wan2: Doc.nullish(), wan3: Doc.nullish(),
   'rx_bytes-r': number, 'tx_bytes-r': number,
 })

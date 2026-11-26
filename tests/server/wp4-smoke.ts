@@ -61,7 +61,7 @@ assert.ok(page.nextCursor)
 const all = Paged(Snapshot).parse(await call(api.snapshots, undefined, '/api/snapshots?limit=50'))
 const historical = all.items.filter(item => item.trigger === 'scheduled')
 assert.equal(historical.length, 3)
-assert.ok(historical.every(item => item.complete && Object.keys(item.counts).length === 12))
+assert.ok(historical.every(item => item.complete && Object.hasOwn(item.counts, 'devices')))
 const pageTwo = Paged(Snapshot).parse(await call(api.snapshots, undefined, `/api/snapshots?limit=2&cursor=${page.nextCursor}`))
 assert.ok(pageTwo.items.every(item => !page.items.some(first => first.id === item.id)))
 

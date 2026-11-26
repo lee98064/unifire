@@ -91,7 +91,8 @@ export function createSnapshotStore(db: Db) {
           items.set(row.itemId, row)
           old.set(row.resource, items)
         }
-        const comparable = SnapshotResource.options.filter(resource => !previous.failed.includes(resource) && !failed.includes(resource))
+        const comparable = SnapshotResource.options.filter(resource =>
+          Object.hasOwn(previous.counts, resource) && !previous.failed.includes(resource) && !failed.includes(resource))
         if (comparable.length) changeCount = comparable.reduce((count, resource) =>
           count + [...compareMaps(old.get(resource) ?? new Map(), collections.get(resource) ?? new Map())].length, 0)
       }

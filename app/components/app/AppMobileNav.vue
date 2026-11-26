@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { adminNav, mobileTabs, navGroupLabels, settingsNav, type NavItem } from '~/utils/nav'
+import { activeNavTo, adminNav, mobileTabs, navGroupLabels, settingsNav, type NavItem } from '~/utils/nav'
 
 const { t } = useI18n()
 const route = useRoute()
 const badges = useBadges()
 const moreOpen = ref(false)
 
+const activeTo = computed(() => activeNavTo(route.path))
 function isActive(to: string) {
-  return to === '/' ? route.path === '/' : route.path.startsWith(to)
+  return activeTo.value === to
 }
 function badgeCount(item: NavItem) {
   if (item.badge === 'approvals') return badges.approvals.value
   if (item.badge === 'requests') return badges.requests.value
+  if (item.badge === 'incidents') return badges.incidents.value
   return 0
 }
 const moreActive = computed(() => !mobileTabs.some(i => isActive(i.to)))

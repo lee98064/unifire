@@ -21,6 +21,12 @@ const invalidations: Partial<Record<LiveType, string[]>> = {
   'audit': ['audit-feed'],
   'controller': ['controller-status'],
   'sweep': ['egresses', 'sweep'],
+  'device': ['devices', 'device-detail', 'dashboard'],
+  'port.event': ['port-events', 'device-detail', 'devices', 'dashboard'],
+  'poe': ['poe', 'device-detail', 'devices'],
+  'topology': ['topology'],
+  'room': ['rooms', 'room-timeline', 'people'],
+  'incident': ['incidents', 'incidents-open', 'incident-detail', 'dashboard'],
 }
 
 const pending = new Set<string>()
@@ -67,7 +73,7 @@ export function useLive() {
       if (retryTimer) clearTimeout(retryTimer)
       retryTimer = setTimeout(connect, delay)
     }
-    const types: LiveType[] = ['hello', 'controller', 'egress.health', 'route.switched', 'route.changed', 'client.changed', 'approval.new', 'presence', 'quota', 'extension.request', 'audit', 'sweep', 'toast']
+    const types: LiveType[] = ['hello', 'controller', 'egress.health', 'route.switched', 'route.changed', 'client.changed', 'approval.new', 'presence', 'quota', 'extension.request', 'audit', 'sweep', 'toast', 'device', 'port.event', 'poe', 'topology', 'room', 'incident']
     for (const type of types) {
       source.addEventListener(type, (ev) => {
         try { dispatch(type, JSON.parse((ev as MessageEvent).data)) }

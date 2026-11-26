@@ -3,6 +3,8 @@ import { isDeepStrictEqual } from 'node:util'
 import { z } from 'zod'
 import type { ControllerModeT } from '#shared/schemas/controller'
 import type { AuditEventT, SnapshotResourceT } from '#shared/schemas/insight'
+import { createDeviceGraph } from '../engine/infra/poe-safety'
+import { deviceName, isGateway } from './device-shape'
 import { digest, fieldDiff, normalize } from '../engine/snapshots/diff'
 import { classifyRoute, PROBE_PREFIX, QUOTA_PREFIX, routeFingerprint } from '../services/ownership'
 import type { createAuditService } from '../services/audit'
@@ -74,6 +76,7 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   onRouteWrite?: (route: WireRoute) => void
   onRoutesChanged?: () => void
   onConfigWrite?: ConfigWrite
+  onDevicePower?: (macs: string[]) => void
 }) {
   const { paths, write } = transport
   const queue = <T>(work: () => Promise<T>) => serializeSite(siteKey(transport.origin.origin, options.site), work)
@@ -425,17 +428,39 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
         }
       })
     },
+    deviceCommand(command: 'set-locate' | 'unset-locate', mac: string, ctx: WriteContext,
+      options?: { label?: string, onSent?: () => void }) {
+      const body = { cmd: command, mac }
+      return run(`device.${command}`, 'device', { type: 'device', id: mac, label: options?.label }, ctx,
+        async () => ({ after: body, apply: () => write('POST', paths.classic('cmd/devmgr'), body), commit: options?.onSent }))
+    },
     deviceAction(command: { cmd: 'restart', macs: string[] } | { cmd: 'power-cycle', mac: string, port_idx: number } | { cmd: 'speedtest' },
-      ctx: WriteContext) {
+      ctx: WriteContext, confirmGateway = false) {
       const id = command.cmd === 'restart' ? command.macs.join(',') : command.cmd === 'power-cycle' ? command.mac : 'gateway'
-      return run(`device.${command.cmd}`, command.cmd === 'power-cycle' ? 'poe' : 'system', { type: 'device', id }, ctx,
-        async setLabel => {
-          if (command.cmd === 'power-cycle') {
-            const device = assertPoePort(await api.devices(), command.mac, command.port_idx)
-            setLabel(device.name || device.mac)
+      const category = command.cmd === 'power-cycle' ? 'poe' : command.cmd === 'restart' ? 'device' : 'system'
+      return run(`device.${command.cmd}`, category, { type: 'device', id }, ctx, async setLabel => {
+        let affected: string[] = []
+        if (command.cmd === 'power-cycle') {
+          const devices = await api.devices()
+          const device = assertPoePort(devices, command.mac, command.port_idx)
+          setLabel(deviceName(device))
+          affected = createDeviceGraph(devices).downstream(command.mac, command.port_idx).map(child => child.device.mac)
+        }
+        if (command.cmd === 'restart') {
+          const devices = await api.devices()
+          const targets = command.macs.map(mac => devices.find(device => device.mac === mac && device.adopted !== false))
+          if (targets.some(device => !device)) throw new UnifiError('DEVICE_NOT_FOUND', 404)
+          if (!confirmGateway && targets.some(device => device && isGateway(device))) {
+            throw new UnifiError('GATEWAY_CONFIRMATION_REQUIRED', 409)
           }
-          return { after: parseWire(Doc, command), apply: () => write('POST', paths.classic('cmd/devmgr'), command) }
-        })
+          setLabel(targets.flatMap(device => device ? deviceName(device) : []).join(', '))
+          affected = command.macs
+        }
+        return {
+          after: parseWire(Doc, command), apply: () => write('POST', paths.classic('cmd/devmgr'), command),
+          commit: affected.length ? () => options.onDevicePower?.(affected) : undefined,
+        }
+      })
     },
   }
 }

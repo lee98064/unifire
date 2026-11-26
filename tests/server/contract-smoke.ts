@@ -4,9 +4,10 @@ import { ZodError } from 'zod'
 import { api, type ApiName } from '../../shared/api'
 import { ApprovalItem, Client, Person } from '../../shared/schemas/access'
 import { SetupStatus } from '../../shared/schemas/auth'
-import { GuestWifi, PoeWatchdog, Rule, WolTarget } from '../../shared/schemas/automation'
+import { GuestWifi, PoeWatchdog, Rule, RuleRun, WolTarget } from '../../shared/schemas/automation'
 import { ControllerStatus } from '../../shared/schemas/controller'
 import { Egress } from '../../shared/schemas/egress'
+import { InfraDevice, InfraDeviceDetail } from '../../shared/schemas/infra'
 import { IspReport, Snapshot, SpeedtestStatus, UsageReport } from '../../shared/schemas/insight'
 import { ManagedRoute, UnifiRoute } from '../../shared/schemas/routes'
 import { DashboardSummary, Settings } from '../../shared/schemas/system'
@@ -130,6 +131,15 @@ async function run() {
   if (forward) assert.ok(wifi.kioskUrl?.startsWith('https://wp7.example.test/kiosk/'))
   const snapshot = first(Snapshot.array().parse((await get('snapshots', { query: { limit: '10' } }) as { items: unknown }).items), 'snapshot')
   const itemId = first(unifiRoutes.filter(item => item.ownership !== 'probe'), 'UniFi route').id
+  const devices = InfraDevice.array().parse(await get('devices'))
+  assert.equal(devices.length, 6)
+  const ap = devices.find(device => device.name === 'AP Living Room')!
+  const gateway = devices.find(device => device.type === 'gateway')!
+  const core = devices.find(device => device.model === 'USPM16P')!
+  assert.equal(devices.find(device => device.model === 'UDMA69B')?.type, 'ap')
+  assert.equal(devices.find(device => device.name === 'AP Garden')?.uplink?.type, 'wireless')
+  assert.ok(ap && gateway && core)
+  const deviceParams = { mac: ap.mac }
   const { timezone } = Settings.parse(await get('settings'))
   const now = Date.now()
   const monthFormat = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit' })
@@ -139,6 +149,9 @@ async function run() {
   }
   const month = monthAt(now)
   const options: Partial<Record<ApiName, Parameters<typeof call>[1]>> = {
+    device: { params: deviceParams },
+    deviceSeries: { params: deviceParams, query: { range: '24h' } },
+    deviceEvents: { params: deviceParams, query: { from: String(now - 86_400_000), to: String(now) } },
     egressHistory: { params: { id: egress.id }, query: { range: '24h' } },
     managedRoute: { params: { id: route.id } },
     managedRoutePreview: { params: { id: route.id }, query: { hours: '24' } },
@@ -158,13 +171,15 @@ async function run() {
     ispReport: { query: { month } },
     usageReport: { query: { range: '7d' } },
   }
-  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET')
+  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP(?:9|10|11)\b/.test(api[name].note ?? ''))
   const readResults = await Promise.allSettled(allReads.map(name => get(name, options[name])))
   assert.ok(readResults.every(result => result.status === 'fulfilled'), 'One or more contract GETs failed')
   assert.equal(covered.size, allReads.length)
   const dashboard = DashboardSummary.parse(values.get('dashboard'))
   assert.ok(dashboard.wans.some(wan => wan.rxBps !== null && wan.txBps !== null))
   assert.ok(dashboard.throughput.length > 0 && dashboard.throughput.length <= 60)
+  assert.equal(dashboard.infra.total, devices.length)
+  assert.ok(dashboard.infra.poeWatts)
   assert.ok(dashboard.recentAudit.length > 0 && dashboard.recentAudit.length <= 10)
   assert.ok(UsageReport.parse(values.get('usageReport')).totals.rxBytes > 0)
   assert.ok(IspReport.parse(values.get('ispReport')).wans.length > 0)
@@ -200,7 +215,74 @@ async function run() {
     config: { type: 'webhook', url: 'http://127.0.0.1/unifire-demo-echo', secret: 'WP7-SMOKE-HOOK-531!' }, events: ['rule'] } }) as { id: string }
   await call('channelTest', { params: { id: channel.id } })
 
+  const infraRule = Rule.parse(await call('ruleCreate', { body: {
+    name: 'WP8 test overheat', description: null, enabled: false, trigger: { type: 'infra.overheat', mac: ap.mac, celsius: 65 },
+    conditions: [], actions: [{ type: 'device.locate', mac: ap.mac, minutes: 1 }], cooldownSeconds: 0,
+  } }))
+  const infraRun = RuleRun.parse(await call('ruleTest', { params: { id: infraRule.id }, body: { dryRun: true } }))
+  assert.equal(infraRun.event.temp, 65)
+  assert.equal(infraRun.event.device, ap.name)
+  assert.equal(infraRun.results[0]?.action, 'device.locate')
+  const located = InfraDevice.parse(await call('deviceLocate', { params: deviceParams, body: { on: true, minutes: 1 } }))
+  assert.equal(located.locating, true)
+  const unlocated = InfraDevice.parse(await call('deviceLocate', { params: deviceParams, body: { on: false } }))
+  assert.equal(unlocated.locating, false)
+  const unconfirmed = await fetch(new URL(pathFor('deviceRestart', { mac: gateway.mac }), origin), {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}',
+  })
+  assert.equal(unconfirmed.status, 409)
+  assert.equal((await unconfirmed.json()).data.code, 'GATEWAY_CONFIRMATION_REQUIRED')
+  await call('deviceRestart', { params: { mac: gateway.mac }, body: { confirmGateway: true } })
+  assert.equal(saved.counts.devices, 6)
+
+  async function scenario(name: string) {
+    const path = `/api/dev/mock/${name}`
+    const check = { check: name, path: `POST ${path}`, result: 'PASS' }
+    try {
+      const response = await fetch(new URL(path, origin), { method: 'POST', headers: { cookie }, signal: AbortSignal.timeout(30_000) })
+      assert.equal(response.status, 200, path)
+      const body = await response.json()
+      assert.equal(body.scenario, name)
+      assert.equal(body.ok, true)
+      return body.result
+    } catch (error) {
+      check.result = 'FAIL'
+      throw error
+    } finally {
+      checks.push(check)
+    }
+  }
+  const coreDetail = () => call('device', { params: { mac: core.mac } }).then(data => InfraDeviceDetail.parse(data))
+  const apDetail = () => call('device', { params: deviceParams }).then(data => InfraDeviceDetail.parse(data))
+  await scenario('reboot-ap')
+  const rebooted = await apDetail()
+  assert.ok(rebooted.uptimeSec !== null && rebooted.uptimeSec < 10)
+  assert.ok(rebooted.lastReboot)
+  const offline = await scenario('offline-switch') as { macs: string[] }
+  assert.equal(offline.macs.length, 5)
+  assert.equal((await coreDetail()).state, 'offline')
+  await scenario('recover')
+  assert.equal((await coreDetail()).state, 'online')
+  const link = await scenario('downgrade-port') as { portIdx: number }
+  assert.equal((await coreDetail()).ports.find(port => port.idx === link.portIdx)?.speedMbps, 100)
+  const errors = await scenario('port-errors') as { rxErrors: number, txErrors: number }
+  assert.ok(errors.rxErrors > 0 && errors.txErrors > 0)
+  const flap = await scenario('flap-port') as { portIdx: number, up: boolean, linkDownCount: number }
+  assert.ok(flap.linkDownCount > 0)
+  assert.equal((await coreDetail()).ports.find(port => port.idx === flap.portIdx)?.up, flap.up)
+  const roam = await scenario('roam') as { mac: string, from: string, to: string }
+  assert.notEqual(roam.from, roam.to)
+  assert.equal(Client.parse(await call('client', { params: { mac: roam.mac } })).uplinkMac, roam.to)
+  await scenario('overheat')
+  assert.ok((await apDetail()).issues.some(issue => issue.kind === 'overheat'))
+  await scenario('firmware-available')
+  assert.ok((await apDetail()).issues.some(issue => issue.kind === 'firmware_available'))
+  await scenario('recover')
+  await call('deviceRestart', { params: deviceParams, body: {} })
+
   await call('controllerMode', { body: { mode: 'dry-run' } })
+  const locatePreview = InfraDevice.parse(await call('deviceLocate', { params: deviceParams, body: {} }))
+  assert.equal(locatePreview.locating, false)
   const preview = SpeedtestStatus.parse(await call('speedtestStart', { label: 'speedtest dry-run' }))
   assert.equal(preview.running, false)
   await call('controllerMode', { body: { mode: 'live' } })

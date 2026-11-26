@@ -66,7 +66,7 @@ export const actionSpecs: Record<ActionType, BlockSpec<RuleActionT>> = {
   'wol': { icon: 'i-lucide-power', tone: 'success', fields: [{ key: 'targetId', kind: 'wol', required: true }], defaults: () => ({ type: 'wol', targetId: '' }) },
   'device.restart': { icon: 'i-lucide-rotate-cw', tone: 'warning', fields: [{ key: 'mac', kind: 'mac', required: true }], defaults: () => ({ type: 'device.restart', mac: '' }) as RuleActionT },
   'delay': { icon: 'i-lucide-hourglass', tone: 'neutral', fields: [{ key: 'seconds', kind: 'number' }], defaults: () => ({ type: 'delay', seconds: 30 }) },
-  'poe.set': { icon: 'i-lucide-zap-off', tone: 'warning', fields: [{ key: 'port', kind: 'switchport', required: true }, { key: 'on', kind: 'bool' }, { key: 'minutes', kind: 'minutesOpt' }], defaults: () => ({ type: 'poe.set', switchMac: '', portIdx: 1, on: false, minutes: 60 }) as RuleActionT },
+  'poe.set': { icon: 'i-lucide-zap-off', tone: 'warning', fields: [{ key: 'port', kind: 'switchport', required: true }, { key: 'on', kind: 'bool' }, { key: 'minutes', kind: 'minutesOpt' }, { key: 'acknowledgedAp', kind: 'bool' }], defaults: () => ({ type: 'poe.set', switchMac: '', portIdx: 1, on: false, minutes: 60, acknowledgedAp: false }) as RuleActionT },
   'device.locate': { icon: 'i-lucide-locate-fixed', tone: 'primary', fields: [{ key: 'mac', kind: 'device', required: true }, { key: 'minutes', kind: 'minutes' }], defaults: () => ({ type: 'device.locate', mac: '', minutes: 5 }) as RuleActionT },
   'client.kick': { icon: 'i-lucide-wifi-off', tone: 'warning', fields: [{ key: 'mac', kind: 'mac', required: true }], defaults: () => ({ type: 'client.kick', mac: '' }) as RuleActionT },
 }

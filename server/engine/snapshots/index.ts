@@ -85,7 +85,7 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
       for (const resource of row.failed) unavailable.add(resource)
       const collections = store.documents(row.id, unavailable)
       for (const resource of SnapshotResource.options) {
-        if ((collections.get(resource)?.size ?? 0) !== (row.counts[resource] ?? 0)) unavailable.add(resource)
+        if (!Object.hasOwn(row.counts, resource) || (collections.get(resource)?.size ?? 0) !== row.counts[resource]) unavailable.add(resource)
       }
       return collections
     }
@@ -125,7 +125,7 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
         const targetId = sameRuntime && toId === undefined && left && !right
           ? store.resolveId(sameRuntime.scope, resource, id) : id
         const liveReplacement = targetId !== id ? target.collections.get(resource)?.get(targetId) : undefined
-        changes.push({ resource, itemId: id, itemLabel, kind, fields, ...summary(resource, itemLabel, kind, fields),
+        changes.push({ resource, itemId: id, itemLabel, kind, fields, ...summary(resource, itemLabel, kind, fields, left?.doc, right?.doc),
           restorable: !(kind === 'added' && replacements.has(JSON.stringify([resource, id])))
             && !(resource === 'trafficroutes' && owner?.excluded.has(id))
             && !restoreReason(resource, targetId, left?.doc, right?.doc ?? liveReplacement?.doc, owner) })

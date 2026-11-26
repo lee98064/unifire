@@ -83,7 +83,8 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
     const params = Object.fromEntries(Object.entries(safeData).filter(([, value]) =>
       typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean').map(([key, value]) => [key, String(value)]))
     const url = input.member ? '/me' : input.event === 'new_device' || input.event === 'extension_request' ? '/approvals'
-      : routeId ? `/routes/${encodeURIComponent(routeId)}` : egressId ? '/egresses' : '/'
+      : input.event === 'device_firmware' && string('mac') ? `/devices/${encodeURIComponent(string('mac')!)}`
+        : routeId ? `/routes/${encodeURIComponent(routeId)}` : egressId ? '/egresses' : '/'
     return { data: safeData, params, url }
   }
 
