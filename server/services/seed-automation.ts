@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { NotificationEvent } from '#shared/schemas/system'
 import type { Db } from '../db'
-import { guestWifi, notificationChannels, poeWatchdogs, rules, settings, wolTargets, personGroups } from '../db/schema'
+import { guestWifi, notificationChannels, poeWatchdogs, rules, settings, wolTargets } from '../db/schema'
 import { nextCron } from '../engine/automation-cron'
 import { initialWatchdogState } from '../engine/watchdogs'
 import { buildFixtures, SWITCH_MAC } from '../unifi/mock/fixtures'
@@ -20,7 +20,6 @@ export function seedMockAutomation(db: Db, at = Date.now()) {
       encryptedConfig: encrypt({ type: 'webpush' }),
     }).run()
     if (!tx.select().from(rules).limit(1).get()) {
-      const kids = tx.select().from(personGroups).where(eq(personGroups.groupId, 'demo-kids')).all()
       const baseline = { createdAt: at, description: null, conditions: [], cooldownSeconds: 300, actions: [] }
       tx.insert(rules).values([
         { ...baseline, id: 'demo-rule-vpn', name: 'VPN down', enabled: true, trigger: { type: 'egress.down', egressId: 'demo-vpn-4' },
@@ -29,9 +28,8 @@ export function seedMockAutomation(db: Db, at = Date.now()) {
           encryptedActions: encrypt([{ type: 'webhook', url: 'http://127.0.0.1/unifire-demo-echo', method: 'POST',
             headers: {}, body: '{"person":"{{person}}"}' }]) },
         { ...baseline, id: 'demo-rule-curfew', name: 'Pause Kids at 22:00', enabled: false,
-          trigger: { type: 'schedule', cron: '0 22 * * *', timezone }, encryptedActions: encrypt(kids.length
-            ? kids.map(kid => ({ type: 'pause', personId: kid.personId, minutes: 60 }))
-            : [{ type: 'block', target: { type: 'group', id: 'demo-kids' }, minutes: 60 }]) },
+          trigger: { type: 'schedule', cron: '0 22 * * *', timezone },
+          encryptedActions: encrypt([{ type: 'group.pause', groupId: 'demo-kids', minutes: 60 }]) },
       ]).run()
     }
     if (!tx.select().from(poeWatchdogs).limit(1).get()) {

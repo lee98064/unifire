@@ -51,3 +51,11 @@ Read `docs/codex/BRIEF.md` first. WP1–WP6 are in the repo.
   unreachable. Log level via env. Ensure no secrets in logs (grep test).
 - `pnpm typecheck`, `pnpm test`, `pnpm build`, run the production build in mock mode and pass the contract
   smoke test. Report everything.
+
+## WP6 review follow-ups (from Claude — do these too)
+- `group.pause` / `group.resume` rule actions were added by Claude (contract + engine branch + test).
+  Add them to any rule validation/reference checks (e.g. reject a rule whose `groupId` no longer exists,
+  and clean up rule actions when a group is deleted, mirroring what you do for persons).
+- The `extension_decided` notification-event contract request is declined for now; keep the variant.
+- `docs/backend/i18n-keys.md` never listed the server-rendered `notification.<event>.title/body` keys and
+  their params. Claude added them; from now on list every server-rendered key there.

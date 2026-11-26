@@ -43,6 +43,9 @@ export const RuleAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('unblock'), target: ClientOrPerson }),
   z.object({ type: z.literal('pause'), personId: Id, minutes: z.number().int().min(1).nullable().default(60) }),
   z.object({ type: z.literal('resume'), personId: Id }),
+  /** Group pause/resume follows current membership at run time (members added later are included). */
+  z.object({ type: z.literal('group.pause'), groupId: Id, minutes: z.number().int().min(1).nullable().default(60) }),
+  z.object({ type: z.literal('group.resume'), groupId: Id }),
   /** Message supports {{placeholders}} from the trigger event. */
   z.object({ type: z.literal('notify'), channelIds: z.array(Id).default([]), title: z.string().min(1), body: z.string().default('') }),
   z.object({

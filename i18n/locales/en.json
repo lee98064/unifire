@@ -124,7 +124,25 @@
     "webauthnAlreadyRegistered": "This passkey is already registered",
     "webauthnBusy": "Wait before trying another passkey",
     "webauthnChallengeInvalid": "The passkey challenge expired — start again",
-    "webauthnRegistrationFailed": "Couldn’t register the passkey"
+    "webauthnRegistrationFailed": "Couldn’t register the passkey",
+    "invalidChannelSecret": "Enter the secret when adding a channel",
+    "channelNotFound": "Channel not found",
+    "pushActionInvalid": "This notification action is invalid, expired or already used",
+    "invalidAutomationCron": "Enter a valid cron expression",
+    "ruleNotFound": "Rule not found",
+    "watchdogNotFound": "Watchdog not found",
+    "watchdogDuplicatePort": "This port already has a watchdog",
+    "watchdogDailyLimit": "Daily power-cycle limit reached",
+    "watchdogCooldown": "The port is cooling down — try later",
+    "unsafePoePort": "Pick a downstream PoE-capable port",
+    "guestWlanRequired": "Select a Wi-Fi network to rotate",
+    "wlanNotFound": "Wi-Fi network not found",
+    "wlanPskRequired": "Pick a Wi-Fi network that uses a shared WPA passphrase",
+    "kioskNotFound": "This kiosk link is invalid or disabled",
+    "kioskRateLimited": "Wait a moment before refreshing",
+    "wolNotFound": "Wake-on-LAN target not found",
+    "wolBroadcastUnknown": "Set a broadcast address for this target or its network",
+    "wolSendFailed": "Couldn’t send the magic packet"
   },
   "fmt": {
     "h": "{h}h",
@@ -817,7 +835,11 @@
       "device": {
         "restart": "Restart device"
       },
-      "delay": "Wait"
+      "delay": "Wait",
+      "group": {
+        "pause": "Pause group",
+        "resume": "Resume group"
+      }
     },
     "desc": "Chain UniFi events into automations: switch exits on arrival, alert when a VPN drops, push on new devices…",
     "add": "New rule",
@@ -927,7 +949,8 @@
       "wlanId": "SSID",
       "enabled": "Action",
       "targetId": "Target",
-      "seconds": "Seconds"
+      "seconds": "Seconds",
+      "groupId": "Group"
     },
     "bool": {
       "condition": {
@@ -1283,18 +1306,38 @@
       "excludedRouteIds": "never-touch routes"
     },
     "approval": {
-      "hostnameMatched": "Randomized MAC {mac} matched approved “{hostname}” — auto-approved",
-      "approved": "Approved device {mac}",
-      "blocked": "Blocked pending device {mac}",
-      "ignored": "Dismissed approval for {mac}"
+      "hostnameMatched": "Randomized-MAC device “{name}” matched approved “{hostname}” — auto-approved",
+      "approved": "Approved device “{name}”",
+      "blocked": "Blocked pending device “{name}”",
+      "ignored": "Dismissed review for “{name}”"
     },
     "block": {
-      "applied": "Blocked device {mac}",
-      "released": "Unblocked device {mac}"
+      "applied": "Blocked “{name}”",
+      "released": "Unblocked “{name}”"
     },
     "extension": {
-      "approved": "Approved an extension request",
-      "denied": "Denied an extension request"
+      "approved": "Approved {minutes} more minutes for {person}",
+      "denied": "Denied {person}’s extension request"
+    },
+    "push": {
+      "routeOpened": "Opened a drifted route from a notification"
+    },
+    "rule": {
+      "run": "Rule “{name}” ran"
+    },
+    "watchdog": {
+      "cycle": "PoE watchdog power-cycled “{name}”"
+    },
+    "guestWifi": {
+      "rotated": "Rotated guest Wi-Fi “{ssid}” password"
+    },
+    "wol": {
+      "woke": "Woke “{name}” ({broadcast})",
+      "preview": "Dry run: would wake “{name}” ({broadcast})",
+      "failed": "Failed to wake “{name}”"
+    },
+    "quota": {
+      "routeOverlap": "{person}’s quota egress overlaps “{route}” — applied as an override"
     }
   },
   "presence": {
@@ -1416,6 +1459,100 @@
       "selfMacRequired": "Detect or enter the Unifire host MAC",
       "dryRun": "Live sweep skipped in dry-run mode",
       "traceTimeout": "No stable distinct public IP within 20 s"
+    }
+  },
+  "notification": {
+    "new_device": {
+      "title": "New device joined",
+      "body": "{displayName} ({mac}) is waiting for review"
+    },
+    "route_switch": {
+      "title": "Egress switched",
+      "body": "“{route}”: {from} → {to}"
+    },
+    "route_drift": {
+      "title": "Route changed in UniFi",
+      "body": "“{route}” was edited in UniFi. Unifire paused managing it — review and resume"
+    },
+    "egress_down": {
+      "title": "Egress down",
+      "body": "{egress} is unreachable"
+    },
+    "egress_up": {
+      "title": "Egress recovered",
+      "body": "{egress} is back online"
+    },
+    "egress_ip_changed": {
+      "title": "Egress IP changed",
+      "body": "{egress}: {previousIp} → {ip}"
+    },
+    "quota_warning": {
+      "title": "Quota almost used",
+      "body": "{person} has used over 80% of “{quota}”"
+    },
+    "quota_exceeded": {
+      "title": "Quota used up",
+      "body": "{person} has used up “{quota}”"
+    },
+    "extension_request": {
+      "title": "Extension request",
+      "body": "{person} is asking for more time online"
+    },
+    "extension_decided": {
+      "title": "Your request was answered",
+      "body": "Open Unifire to see your {minutes}-minute request"
+    },
+    "poe_cycle": {
+      "title": "PoE port power-cycled",
+      "body": "“{name}” stopped responding and was power-cycled"
+    },
+    "external_change": {
+      "title": "UniFi config changed",
+      "body": "“{label}” was changed outside Unifire"
+    },
+    "guest_wifi_rotated": {
+      "title": "Guest Wi-Fi password rotated",
+      "body": "“{ssid}” has a new password"
+    },
+    "controller_error": {
+      "title": "Controller problem",
+      "body": "{error}"
+    },
+    "rule": {
+      "title": "Automation rule",
+      "body": "A rule ran"
+    },
+    "test": {
+      "title": "Unifire test notification",
+      "body": "If you can read this, the channel works 🎉"
+    },
+    "action": {
+      "approve": "Approve",
+      "block": "Block",
+      "deny": "Deny",
+      "open": "Open",
+      "succeeded": "Done",
+      "failed": "Failed or expired"
+    },
+    "delivery": {
+      "failed": "Delivery failed",
+      "noSubscription": "This account has no push subscription yet — enable push on this device first"
+    }
+  },
+  "rule": {
+    "result": {
+      "would": "Dry run: would run",
+      "failed": "Failed",
+      "webhookFailed": "Webhook request failed"
+    }
+  },
+  "watchdog": {
+    "event": {
+      "fail": "Target stopped responding",
+      "cycle": "Power-cycled",
+      "recovered": "Responding again",
+      "limit": "Daily cycle limit reached",
+      "error": "Monitor or PoE command error"
     }
   },
   "settings": {

@@ -100,6 +100,15 @@ export function createRuleActions(db: Db, service: ControllerService, effects: E
         access.people.pause(action.personId, null)
         await access.blocks.reconcile(access.desired)
         break
+      // Group pauses follow membership at evaluation time, so members added later are covered too.
+      case 'group.pause':
+        access.people.groupPause(action.groupId, { minutes: action.minutes, reason: rule.name.slice(0, 120) })
+        await access.blocks.reconcile(access.desired)
+        break
+      case 'group.resume':
+        access.people.groupPause(action.groupId, null)
+        await access.blocks.reconcile(access.desired)
+        break
       case 'notify':
         await notifications.notify({ event: 'rule', data: event,
           message: { title: renderRuleText(action.title, event), body: renderRuleText(action.body, event) } }, action.channelIds, true)

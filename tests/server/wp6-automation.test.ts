@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PoeWatchdogInput, RuleInput, GuestWifiInput, WolTargetInput } from '#shared/schemas/automation'
 import { NotificationChannelInput, PushPayload } from '#shared/schemas/system'
-import { PersonInput, QuotaInput } from '#shared/schemas/access'
+import { GroupInput, PersonInput, QuotaInput } from '#shared/schemas/access'
 import { createDatabase } from '../../server/db'
 import { auditEvents, clients, notificationChannels, pushSubscriptions, quotaRoutes, routeOverrides, settings, users } from '../../server/db/schema'
 import { DAY, MINUTE, quotaPeriod } from '../../server/engine/access-time'
@@ -235,6 +235,29 @@ describe('WP6 automation with fake transports', () => {
     at += 31 * DAY
     rules.tick()
     expect(rules.page({ limit: 50 }).items).toEqual([])
+  })
+
+  it('pauses and resumes a whole group, including members added after the rule was written', async () => {
+    const { db } = database
+    const notify = createNotifier(db, access, { translate, mock: true })
+    const wol = createWol(db, controller)
+    const watchdogs = createWatchdogs(db, controller, notify.notify, { probe: testProbe })
+    const rules = createRules(db, controller, { access, notifications: notify, wol, watchdogs,
+      managed: createManagedRoutes(db, controller, () => at) }, { now: () => at, http: vi.fn<typeof fetch>() })
+    const [first, second] = access.people.rows()
+    const group = access.people.groupCreate(GroupInput.parse({ name: 'Rule group', color: '#8E59FF', personIds: [first!.id] }))
+    const pause = rules.create(RuleInput.parse({ name: 'Group curfew', description: null, enabled: true, cooldownSeconds: 0,
+      trigger: { type: 'schedule', cron: '0 22 * * *' }, conditions: [], actions: [{ type: 'group.pause', groupId: group.id, minutes: 30 }] }))
+    // Membership changes after the rule exists are honoured at run time.
+    access.people.groupUpdate(group.id, { personIds: [first!.id, second!.id] })
+    expect((await rules.test(pause.id, false)).results).toMatchObject([{ ok: true }])
+    expect(access.people.get(first!.id).pause.active).toBe(true)
+    expect(access.people.get(second!.id).pause.active).toBe(true)
+    const resume = rules.create(RuleInput.parse({ name: 'Group morning', description: null, enabled: true, cooldownSeconds: 0,
+      trigger: { type: 'schedule', cron: '0 7 * * *' }, conditions: [], actions: [{ type: 'group.resume', groupId: group.id }] }))
+    await rules.test(resume.id, false)
+    expect(access.people.get(first!.id).pause.active).toBe(false)
+    expect(access.people.get(second!.id).pause.active).toBe(false)
   })
 
   it('fires level triggers from last-seen and sliding usage data once per threshold crossing', async () => {

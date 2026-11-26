@@ -2,7 +2,7 @@ import type { RuleActionT, RuleConditionT, RuleTriggerT } from '#shared/schemas/
 
 /** Field kinds the generic rule block editor knows how to render. */
 export type FieldKind =
-  | 'macs' | 'mac' | 'person' | 'personOpt' | 'egressOpt' | 'egress' | 'route' | 'quotaOpt' | 'cron' | 'tz'
+  | 'macs' | 'mac' | 'person' | 'personOpt' | 'group' | 'egressOpt' | 'egress' | 'route' | 'quotaOpt' | 'cron' | 'tz'
   | 'number' | 'minutes' | 'minutesOpt' | 'bytes' | 'text' | 'textarea' | 'days' | 'time' | 'bool'
   | 'channels' | 'wlan' | 'wol' | 'switchport' | 'method' | 'target' | 'scope' | 'url' | 'headers'
 
@@ -44,6 +44,8 @@ export const actionSpecs: Record<ActionType, BlockSpec<RuleActionT>> = {
   'unblock': { icon: 'i-lucide-circle-check', tone: 'success', fields: [{ key: 'target', kind: 'target', required: true }], defaults: () => ({ type: 'unblock', target: { type: 'person', id: '' } }) },
   'pause': { icon: 'i-lucide-circle-pause', tone: 'warning', fields: [{ key: 'personId', kind: 'person', required: true }, { key: 'minutes', kind: 'minutesOpt' }], defaults: () => ({ type: 'pause', personId: '', minutes: 60 }) },
   'resume': { icon: 'i-lucide-play', tone: 'success', fields: [{ key: 'personId', kind: 'person', required: true }], defaults: () => ({ type: 'resume', personId: '' }) },
+  'group.pause': { icon: 'i-lucide-users-round', tone: 'warning', fields: [{ key: 'groupId', kind: 'group', required: true }, { key: 'minutes', kind: 'minutesOpt' }], defaults: () => ({ type: 'group.pause', groupId: '', minutes: 60 }) },
+  'group.resume': { icon: 'i-lucide-users-round', tone: 'success', fields: [{ key: 'groupId', kind: 'group', required: true }], defaults: () => ({ type: 'group.resume', groupId: '' }) },
   'notify': { icon: 'i-lucide-bell-ring', tone: 'primary', fields: [{ key: 'channelIds', kind: 'channels' }, { key: 'title', kind: 'text', required: true }, { key: 'body', kind: 'textarea' }], defaults: () => ({ type: 'notify', channelIds: [], title: '', body: '' }) },
   'webhook': { icon: 'i-lucide-webhook', tone: 'vpn', fields: [{ key: 'url', kind: 'url', required: true }, { key: 'method', kind: 'method' }, { key: 'headers', kind: 'headers' }, { key: 'body', kind: 'textarea' }], defaults: () => ({ type: 'webhook', url: '', method: 'POST', headers: {}, body: null }) },
   'poe.cycle': { icon: 'i-lucide-plug-zap', tone: 'warning', fields: [{ key: 'port', kind: 'switchport', required: true }], defaults: () => ({ type: 'poe.cycle', switchMac: '', portIdx: 1 }) as RuleActionT },

@@ -14,7 +14,7 @@ useHead({ title: computed(() => data.value?.title ?? 'Wi-Fi'), meta: [{ name: 't
 </script>
 
 <template>
-  <div class="min-h-dvh flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_20%_0%,#0b3a7a_0%,#131416_55%),radial-gradient(ellipse_at_100%_100%,#3a1f7a_0%,transparent_50%)] text-white px-6 py-10 select-none">
+  <div class="fixed inset-0 overflow-hidden flex flex-col items-center justify-center bg-[radial-gradient(ellipse_at_20%_0%,#0b3a7a_0%,#131416_55%),radial-gradient(ellipse_at_100%_100%,#3a1f7a_0%,transparent_50%)] text-white px-6 py-10 select-none">
     <div class="absolute top-6 left-0 right-0 flex justify-between px-8 text-white/60 text-sm">
       <span class="flex items-center gap-2"><AppLogo :size="22" /><span class="font-medium text-white/80">{{ data?.title }}</span></span>
       <span class="uf-num text-lg font-medium text-white/80">{{ fmt.time(now.getTime()) }}</span>

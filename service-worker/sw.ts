@@ -114,6 +114,14 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     if (!picked) return focusOrOpen(data.url)
+    // "Open" actions (e.g. a drifted route) navigate; the token POST only records the audit trail.
+    if (picked.action === 'open') {
+      void fetch(picked.endpoint, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ token: new URL(picked.endpoint, self.location.origin).searchParams.get('token') }),
+      }).catch(() => {})
+      return focusOrOpen(data.url)
+    }
     try {
       const res = await fetch(picked.endpoint, {
         method: 'POST',

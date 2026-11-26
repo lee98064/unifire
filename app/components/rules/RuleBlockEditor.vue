@@ -26,6 +26,7 @@ const ports = useFetch<PoePortT[]>('/api/watchdogs/ports', { key: 'poe-ports', d
 
 const clientItems = computed(() => clients.value.map(c => ({ label: c.displayName, value: c.mac, description: c.mac })))
 const personItems = computed(() => people.value.map(p => ({ label: `${p.avatar} ${p.name}`, value: p.id })))
+const groupItems = computed(() => groups.value.map(g => ({ label: g.name, value: g.id })))
 const egressItems = computed(() => egresses.value.map(e => ({ label: e.name, value: e.id })))
 const anyItem = (label: string) => ({ label, value: null })
 
@@ -65,6 +66,9 @@ const times = Array.from({ length: 96 }, (_, k) => `${String(Math.floor(k / 4)).
       </UFormField>
       <UFormField v-else-if="f.kind === 'person' || f.kind === 'personOpt'" :label="label(f)">
         <USelectMenu :model-value="block[f.key]" :items="f.kind === 'personOpt' ? [anyItem(t('rules.anyone')), ...personItems] : personItems" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />
+      </UFormField>
+      <UFormField v-else-if="f.kind === 'group'" :label="label(f)">
+        <USelectMenu :model-value="block[f.key]" :items="groupItems" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />
       </UFormField>
       <UFormField v-else-if="f.kind === 'egress' || f.kind === 'egressOpt'" :label="label(f)">
         <USelectMenu :model-value="block[f.key]" :items="f.kind === 'egressOpt' ? [anyItem(t('rules.anyEgress')), ...egressItems] : egressItems" value-key="value" class="w-full" @update:model-value="set(f.key, $event)" />

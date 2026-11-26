@@ -124,7 +124,25 @@
     "webauthnAlreadyRegistered": "這個 Passkey 已經註冊過了",
     "webauthnBusy": "請稍候再試 Passkey",
     "webauthnChallengeInvalid": "Passkey 驗證已過期，請重新開始",
-    "webauthnRegistrationFailed": "無法註冊 Passkey"
+    "webauthnRegistrationFailed": "無法註冊 Passkey",
+    "invalidChannelSecret": "新增通知管道時請填入密鑰",
+    "channelNotFound": "找不到這個通知管道",
+    "pushActionInvalid": "這個通知按鈕已失效、過期或已使用過",
+    "invalidAutomationCron": "請輸入有效的 cron 表達式",
+    "ruleNotFound": "找不到這條規則",
+    "watchdogNotFound": "找不到這個看門狗",
+    "watchdogDuplicatePort": "這個連接埠已經有看門狗了",
+    "watchdogDailyLimit": "今日重啟次數已達上限",
+    "watchdogCooldown": "連接埠冷卻中，請稍後再試",
+    "unsafePoePort": "請選擇下游、支援 PoE 的連接埠",
+    "guestWlanRequired": "請選擇要輪換密碼的 Wi-Fi",
+    "wlanNotFound": "找不到這個 Wi-Fi",
+    "wlanPskRequired": "請選擇使用 WPA 共用密碼的 Wi-Fi",
+    "kioskNotFound": "這個展示連結無效或已停用",
+    "kioskRateLimited": "請稍候再重新整理",
+    "wolNotFound": "找不到這個喚醒目標",
+    "wolBroadcastUnknown": "請為這個目標或網段設定廣播位址",
+    "wolSendFailed": "無法送出喚醒封包"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -817,7 +835,11 @@
       "device": {
         "restart": "重啟 UniFi 設備"
       },
-      "delay": "等待"
+      "delay": "等待",
+      "group": {
+        "pause": "暫停群組上網",
+        "resume": "恢復群組上網"
+      }
     },
     "desc": "用「當…如果…就…」把 UniFi 事件串成自動化：到家切換出口、VPN 斷線通知、新裝置推播…",
     "add": "新增規則",
@@ -927,7 +949,8 @@
       "wlanId": "SSID",
       "enabled": "動作",
       "targetId": "喚醒目標",
-      "seconds": "秒數"
+      "seconds": "秒數",
+      "groupId": "群組"
     },
     "bool": {
       "condition": {
@@ -1283,18 +1306,38 @@
       "excludedRouteIds": "永不寫入的路由"
     },
     "approval": {
-      "hostnameMatched": "隨機 MAC {mac} 與已核准的「{hostname}」同名，自動核准",
-      "approved": "已核准裝置 {mac}",
-      "blocked": "已封鎖待審裝置 {mac}",
-      "ignored": "已忽略裝置 {mac} 的審核"
+      "hostnameMatched": "隨機 MAC 裝置「{name}」與已核准的「{hostname}」同名，自動核准",
+      "approved": "已核准裝置「{name}」",
+      "blocked": "已封鎖待審裝置「{name}」",
+      "ignored": "已忽略「{name}」的審核"
     },
     "block": {
-      "applied": "已封鎖裝置 {mac}",
-      "released": "已解除裝置 {mac} 的封鎖"
+      "applied": "已封鎖「{name}」",
+      "released": "已解除「{name}」的封鎖"
     },
     "extension": {
-      "approved": "已核准一筆延長申請",
-      "denied": "已拒絕一筆延長申請"
+      "approved": "已核准 {person} 的 {minutes} 分鐘延長",
+      "denied": "已拒絕 {person} 的延長申請"
+    },
+    "push": {
+      "routeOpened": "從通知開啟了漂移路由"
+    },
+    "rule": {
+      "run": "規則「{name}」已執行"
+    },
+    "watchdog": {
+      "cycle": "PoE 看門狗重啟了「{name}」"
+    },
+    "guestWifi": {
+      "rotated": "訪客 Wi-Fi「{ssid}」密碼已輪換"
+    },
+    "wol": {
+      "woke": "已喚醒「{name}」（{broadcast}）",
+      "preview": "Dry-run：會喚醒「{name}」（{broadcast}）",
+      "failed": "喚醒「{name}」失敗"
+    },
+    "quota": {
+      "routeOverlap": "{person} 的配額出口與受管路由「{route}」重疊，改用臨時出口"
     }
   },
   "presence": {
@@ -1416,6 +1459,100 @@
       "selfMacRequired": "請先偵測或填寫 Unifire 主機 MAC",
       "dryRun": "Dry-run 模式略過實際掃描",
       "traceTimeout": "20 秒內無法確認穩定的新公網 IP"
+    }
+  },
+  "notification": {
+    "new_device": {
+      "title": "新裝置連上網路",
+      "body": "{displayName}（{mac}）等待你審核"
+    },
+    "route_switch": {
+      "title": "出口已切換",
+      "body": "「{route}」：{from} → {to}"
+    },
+    "route_drift": {
+      "title": "路由在 UniFi 被修改",
+      "body": "「{route}」的條件被改動，Unifire 已暫停管理，請檢查後恢復"
+    },
+    "egress_down": {
+      "title": "出口斷線",
+      "body": "{egress} 目前無法連線"
+    },
+    "egress_up": {
+      "title": "出口恢復",
+      "body": "{egress} 已恢復連線"
+    },
+    "egress_ip_changed": {
+      "title": "出口 IP 變更",
+      "body": "{egress}：{previousIp} → {ip}"
+    },
+    "quota_warning": {
+      "title": "配額快用完了",
+      "body": "{person} 的「{quota}」已用掉 80% 以上"
+    },
+    "quota_exceeded": {
+      "title": "配額已用完",
+      "body": "{person} 的「{quota}」已用完"
+    },
+    "extension_request": {
+      "title": "延長上網申請",
+      "body": "{person} 想要多一點上網時間"
+    },
+    "extension_decided": {
+      "title": "延長申請有結果了",
+      "body": "打開 Unifire 查看你的 {minutes} 分鐘延長申請"
+    },
+    "poe_cycle": {
+      "title": "PoE 已重啟",
+      "body": "「{name}」沒有回應，已斷電重啟"
+    },
+    "external_change": {
+      "title": "UniFi 設定被修改",
+      "body": "「{label}」在 Unifire 之外被修改"
+    },
+    "guest_wifi_rotated": {
+      "title": "訪客 Wi-Fi 密碼已更新",
+      "body": "「{ssid}」已換上新密碼"
+    },
+    "controller_error": {
+      "title": "控制器連線異常",
+      "body": "{error}"
+    },
+    "rule": {
+      "title": "自動化規則",
+      "body": "規則已執行"
+    },
+    "test": {
+      "title": "Unifire 測試通知",
+      "body": "看到這則訊息代表通知管道設定成功 🎉"
+    },
+    "action": {
+      "approve": "核准",
+      "block": "封鎖",
+      "deny": "拒絕",
+      "open": "查看",
+      "succeeded": "已完成",
+      "failed": "操作失敗或已過期"
+    },
+    "delivery": {
+      "failed": "通知送出失敗",
+      "noSubscription": "這個帳號還沒有可用的推播訂閱，請先在此裝置開啟推播"
+    }
+  },
+  "rule": {
+    "result": {
+      "would": "試算：會執行",
+      "failed": "執行失敗",
+      "webhookFailed": "Webhook 呼叫失敗"
+    }
+  },
+  "watchdog": {
+    "event": {
+      "fail": "目標沒有回應",
+      "cycle": "已斷電重啟",
+      "recovered": "已恢復回應",
+      "limit": "已達每日重啟上限",
+      "error": "監測或 PoE 指令錯誤"
     }
   },
   "settings": {
