@@ -3,8 +3,6 @@ import { z } from 'zod'
 import { apiError } from './api-error'
 
 // The package gates these imports behind a Nuxt module option.
-export { defineWebAuthnRegisterEventHandler } from '../../node_modules/nuxt-auth-utils/dist/runtime/server/lib/webauthn/register.js'
-export { defineWebAuthnAuthenticateEventHandler } from '../../node_modules/nuxt-auth-utils/dist/runtime/server/lib/webauthn/authenticate.js'
 
 const encoded = z.string().min(1).max(64 * 1024).regex(/^[A-Za-z0-9_-]+$/)
 const userName = z.string().min(1).max(64)

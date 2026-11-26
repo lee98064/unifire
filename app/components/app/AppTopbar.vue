@@ -14,6 +14,8 @@ const notifCount = computed(() => badges.approvals.value + badges.requests.value
 
 async function logout() {
   await $fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+  // Drop the offline session snapshot and cached API data so a later offline open can't show this account.
+  if (import.meta.client && 'caches' in window) await Promise.all(['uf-session', 'uf-api'].map(name => caches.delete(name))).catch(() => {})
   await clear()
   await navigateTo('/login')
 }

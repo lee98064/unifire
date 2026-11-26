@@ -15,12 +15,30 @@ declare let self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: strin
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
 
-// SPA navigations: network first, fall back to the last cached shell when offline.
-registerRoute(new NavigationRoute(new NetworkFirst({
+// SPA navigations: network first. ssr:false means every route serves the same shell, so when offline
+// an unvisited route falls back to any cached shell (warmed at install time).
+const pages = new NetworkFirst({
   cacheName: 'uf-pages',
   networkTimeoutSeconds: 4,
   plugins: [new ExpirationPlugin({ maxEntries: 20 })],
-}), { denylist: [/^\/api\//, /^\/kiosk\//] }))
+})
+registerRoute(new NavigationRoute(async (options) => {
+  try { return await pages.handle(options) }
+  catch {
+    const cache = await caches.open('uf-pages')
+    const shell = (await cache.match('/')) ?? (await cache.keys().then(keys => (keys[0] ? cache.match(keys[0]) : undefined)))
+    return shell ?? Response.error()
+  }
+}, { denylist: [/^\/api\//, /^\/kiosk\//] }))
+self.addEventListener('install', (event) => {
+  event.waitUntil(caches.open('uf-pages').then(cache => cache.add(new Request('/', { credentials: 'same-origin' }))).catch(() => {}))
+})
+
+// Session snapshot so the app still opens (read-only) while offline. Cleared on logout by the app.
+registerRoute(
+  ({ url, request }) => request.method === 'GET' && url.pathname === '/api/_auth/session',
+  new NetworkFirst({ cacheName: 'uf-session', networkTimeoutSeconds: 4, plugins: [new ExpirationPlugin({ maxEntries: 1 })] }),
+)
 
 // Read-only API snapshots for offline viewing. Never cache SSE, auth, or mutations (non-GET aren't routed).
 registerRoute(

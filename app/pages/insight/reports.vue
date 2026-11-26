@@ -30,7 +30,7 @@ const dailyChart = computed<EChartsOption>(() => ({
   tooltip: { valueFormatter: (v: unknown) => (v == null ? '—' : `${Number(v).toFixed(2)}%`) },
   xAxis: { type: 'category', data: isp.value?.wans[0]?.daily.map(d => d.date.slice(5)) ?? [] },
   yAxis: { type: 'value', min: (v: { min: number }) => Math.max(0, Math.floor(v.min - 1)), max: 100, axisLabel: { formatter: '{value}%' } },
-  series: (isp.value?.wans ?? []).map(w => ({ type: 'line', name: w.name, smooth: 0.2, showSymbol: false, lineStyle: { width: 2, color: getEgress(w.egressId)?.color }, itemStyle: { color: getEgress(w.egressId)?.color }, data: w.daily.map(d => d.uptimePct) })),
+  series: (isp.value?.wans ?? []).map(w => ({ type: 'line', name: w.name, smooth: 0.2, symbol: 'circle', symbolSize: 5, connectNulls: false, lineStyle: { width: 2, color: getEgress(w.egressId)?.color }, itemStyle: { color: getEgress(w.egressId)?.color }, data: w.daily.map(d => d.uptimePct) })),
 }))
 const speedChart = computed<EChartsOption>(() => ({
   legend: { bottom: 0, icon: 'circle', itemWidth: 8, textStyle: { fontSize: 11 } },

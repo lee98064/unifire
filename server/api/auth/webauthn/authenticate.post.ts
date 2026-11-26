@@ -4,7 +4,7 @@ import { createChallengeStore, createPasskeysService } from '../../../services/p
 import { createUsersService } from '../../../services/users'
 import { apiError } from '../../../utils/api-error'
 import { checkLoginLimit, completeLogin, recordLoginFailure } from '../../../utils/auth'
-import { defineWebAuthnAuthenticateEventHandler, authenticationBody, webAuthnChallengeCodes, readWebAuthnBody, hasWebAuthnErrorCode } from '../../../utils/webauthn'
+import { authenticationBody, webAuthnChallengeCodes, readWebAuthnBody, hasWebAuthnErrorCode } from '../../../utils/webauthn'
 
 const challenges = createChallengeStore()
 const limiter = createLoginLimiter()

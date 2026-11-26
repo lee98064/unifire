@@ -3,7 +3,7 @@ import { createAuditService, userActor } from '../../../services/audit'
 import { createChallengeStore, createPasskeysService } from '../../../services/passkeys'
 import { apiError } from '../../../utils/api-error'
 import { activeSessionUser, requireAccount } from '../../../utils/auth'
-import { defineWebAuthnRegisterEventHandler, registrationBody, webAuthnChallengeCodes, readWebAuthnBody, hasWebAuthnErrorCode } from '../../../utils/webauthn'
+import { registrationBody, webAuthnChallengeCodes, readWebAuthnBody, hasWebAuthnErrorCode } from '../../../utils/webauthn'
 
 const challenges = createChallengeStore()
 

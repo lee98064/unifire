@@ -93,7 +93,7 @@ export default defineNuxtConfig({
     },
     buildSW: {
       swSrc: 'service-worker/sw.ts',
-      globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'],
+      globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
     },
     maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
     client: { installPrompt: true, periodicSyncForUpdates: 3600 },
