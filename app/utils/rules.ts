@@ -26,7 +26,7 @@ export const triggerSpecs: Record<TriggerType, BlockSpec<RuleTriggerT>> = {
   'quota.warning': { icon: 'i-lucide-hourglass', tone: 'warning', fields: [{ key: 'quotaId', kind: 'quotaOpt' }], defaults: () => ({ type: 'quota.warning', quotaId: null }) },
   'quota.exceeded': { icon: 'i-lucide-octagon-x', tone: 'error', fields: [{ key: 'quotaId', kind: 'quotaOpt' }], defaults: () => ({ type: 'quota.exceeded', quotaId: null }) },
   'device.offline': { icon: 'i-lucide-unplug', tone: 'error', fields: [{ key: 'mac', kind: 'mac', required: true }, { key: 'minutes', kind: 'minutes' }], defaults: () => ({ type: 'device.offline', mac: '', minutes: 5 }) as RuleTriggerT },
-  'traffic.threshold': { icon: 'i-lucide-gauge', tone: 'vpn', fields: [{ key: 'scope', kind: 'scope', required: true }, { key: 'bytes', kind: 'bytes' }, { key: 'windowMinutes', kind: 'minutes' }], defaults: () => ({ type: 'traffic.threshold', scope: { type: 'person', id: '' }, bytes: 1024 ** 3, windowMinutes: 60 }) },
+  'traffic.threshold': { icon: 'i-lucide-gauge', tone: 'vpn', fields: [{ key: 'scope', kind: 'scope', required: true }, { key: 'bytes', kind: 'bytes' }, { key: 'windowMinutes', kind: 'minutes' }], defaults: () => ({ type: 'traffic.threshold', scope: { type: 'person', id: '' }, bytes: 1e9, windowMinutes: 60 }) },
 }
 
 export const conditionSpecs: Record<ConditionType, BlockSpec<RuleConditionT>> = {

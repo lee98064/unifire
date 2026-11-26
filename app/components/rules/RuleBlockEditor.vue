@@ -43,8 +43,8 @@ function setTarget(key: 'target' | 'scope', patch: Record<string, unknown>) {
   set(key, { ...(block.value[key] ?? {}), ...patch })
 }
 const gbValue = computed({
-  get: () => Math.round(((block.value.bytes ?? 0) / 1024 ** 3) * 10) / 10,
-  set: v => set('bytes', Math.round(v * 1024 ** 3)),
+  get: () => Math.round(((block.value.bytes ?? 0) / 1e9) * 10) / 10,
+  set: v => set('bytes', Math.round(v * 1e9)),
 })
 const portItems = computed(() => ports.value.filter(p => p.poe && !p.isUplink).map(p => ({ label: `${p.switchName} #${p.portIdx}${p.connectedClientName ? ` · ${p.connectedClientName}` : ''}`, value: `${p.switchMac}|${p.portIdx}` })))
 const headerText = computed({

@@ -46,7 +46,7 @@ const timezones = ['Asia/Taipei', 'Asia/Tokyo', 'Asia/Hong_Kong', 'Asia/Shanghai
         <UInputNumber :model-value="settings.presence.graceMinutes" :min="1" :max="120" class="w-full" @update:model-value="patch('presence', { graceMinutes: $event ?? 10 })" />
       </UFormField>
       <UFormField :label="t('settings.general.activeThreshold')" :description="t('settings.general.activeThresholdHint')">
-        <div class="flex items-center gap-2"><UInputNumber :model-value="Math.round(settings.usage.activeThresholdBytes / 1024)" :min="1" class="flex-1" @update:model-value="patch('usage', { ...settings.usage, activeThresholdBytes: ($event ?? 50) * 1024 })" /><span class="text-[12px] text-dimmed">KB/min</span></div>
+        <div class="flex items-center gap-2"><UInputNumber :model-value="Math.round(settings.usage.activeThresholdBytes / 1000)" :min="1" class="flex-1" @update:model-value="patch('usage', { ...settings.usage, activeThresholdBytes: ($event ?? 50) * 1000 })" /><span class="text-[12px] text-dimmed">KB/min</span></div>
       </UFormField>
       <UFormField :label="t('settings.general.rawRetention')">
         <div class="flex items-center gap-2"><UInputNumber :model-value="settings.usage.retainRawDays" :min="1" :max="90" class="flex-1" @update:model-value="patch('usage', { ...settings.usage, retainRawDays: $event ?? 14 })" /><span class="text-[12px] text-dimmed">{{ t('common.days') }}</span></div>

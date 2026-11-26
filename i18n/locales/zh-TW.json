@@ -96,7 +96,35 @@
     "unifiRestoreRecoveryFailed": "替換失敗且無法重建原始紀錄",
     "unifiVerifyFailed": "寫入後讀回無法確認變更",
     "unifiInvalidResponse": "控制器回應格式不符預期",
-    "unifiRouteNotFound": "UniFi 找不到這條路由"
+    "unifiRouteNotFound": "UniFi 找不到這條路由",
+    "groupNotFound": "找不到這個群組",
+    "invalidPresenceDevices": "在家偵測用的裝置必須屬於這個人",
+    "quotaNotFound": "找不到這個配額",
+    "quotaScopeNotFound": "找不到配額套用的人員、群組或裝置",
+    "approvalNotPending": "這台裝置已經審核過了",
+    "requestPending": "已經有一筆延長申請在等待回覆",
+    "requestNotFound": "找不到這筆申請",
+    "requestNotPending": "這筆申請已處理或已過期",
+    "unifiQuotaRouteConflict": "UniFi 上已有同名的配額路由但不屬於 Unifire，請先檢查",
+    "probeSelfMacRequired": "請先偵測或填寫 Unifire 主機 MAC",
+    "sweepDryRun": "Dry-run 模式略過實際掃描",
+    "unifiApiError": "控制器 API 拒絕了請求",
+    "unifiAuthLocked": "連續登入被拒，已停止自動登入",
+    "unifiEmpty": "控制器回傳空結果",
+    "unifiFingerprintMismatch": "憑證指紋與信任的不符",
+    "unifiForbidden": "控制器拒絕此操作（帳號權限不足？）",
+    "unifiHtml": "控制器回傳了 HTML 頁面（網址錯誤？）",
+    "unifiInvalidCredentials": "控制器帳號或密碼錯誤",
+    "unifiLoginBackoff": "稍候再嘗試登入（避免觸發 UDM 鎖定）",
+    "unifiLoginResponse": "登入回應缺少 Cookie 或 CSRF Token",
+    "unifiRateLimited": "控制器正在限流",
+    "unifiTls": "無法建立 TLS 連線",
+    "unifiUnreachable": "無法連線到控制器",
+    "unifiWebsocket": "無法開啟控制器事件串流",
+    "webauthnAlreadyRegistered": "這個 Passkey 已經註冊過了",
+    "webauthnBusy": "請稍候再試 Passkey",
+    "webauthnChallengeInvalid": "Passkey 驗證已過期，請重新開始",
+    "webauthnRegistrationFailed": "無法註冊 Passkey"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -1220,6 +1248,11 @@
         "restart": "重啟設備",
         "power_cycle": "PoE 斷電重啟",
         "speedtest": "測速"
+      },
+      "approval": {
+        "approve": "核准",
+        "block": "封鎖",
+        "ignore": "忽略"
       }
     },
     "method": {
@@ -1248,6 +1281,20 @@
       "broadcastOverrides": "WoL 廣播位址",
       "selfMacOverride": "主機 MAC",
       "excludedRouteIds": "永不寫入的路由"
+    },
+    "approval": {
+      "hostnameMatched": "隨機 MAC {mac} 與已核准的「{hostname}」同名，自動核准",
+      "approved": "已核准裝置 {mac}",
+      "blocked": "已封鎖待審裝置 {mac}",
+      "ignored": "已忽略裝置 {mac} 的審核"
+    },
+    "block": {
+      "applied": "已封鎖裝置 {mac}",
+      "released": "已解除裝置 {mac} 的封鎖"
+    },
+    "extension": {
+      "approved": "已核准一筆延長申請",
+      "denied": "已拒絕一筆延長申請"
     }
   },
   "presence": {
@@ -1317,7 +1364,12 @@
   },
   "block": {
     "manual": "由管理員在 Unifire 封鎖",
-    "unifi": "直接在 UniFi 封鎖（Unifire 不會解除）"
+    "unifi": "直接在 UniFi 封鎖（Unifire 不會解除）",
+    "pause": "暫停上網中",
+    "bedtime": "睡覺時段",
+    "quota": "配額已用完",
+    "approval": "等待審核（嚴格模式）",
+    "rule": "被自動化規則封鎖"
   },
   "capability": {
     "empty": "控制器回傳空結果",

@@ -96,7 +96,35 @@
     "unifiRestoreRecoveryFailed": "Replacement failed and the original couldn’t be recreated",
     "unifiVerifyFailed": "Read-back did not confirm the change",
     "unifiInvalidResponse": "Unexpected controller response format",
-    "unifiRouteNotFound": "UniFi no longer lists this route"
+    "unifiRouteNotFound": "UniFi no longer lists this route",
+    "groupNotFound": "Group not found",
+    "invalidPresenceDevices": "Presence devices must belong to this person",
+    "quotaNotFound": "Quota not found",
+    "quotaScopeNotFound": "The person, group or client for this quota wasn’t found",
+    "approvalNotPending": "This device has already been reviewed",
+    "requestPending": "An extension request is already waiting",
+    "requestNotFound": "Request not found",
+    "requestNotPending": "This request was already handled or expired",
+    "unifiQuotaRouteConflict": "An unowned quota route with this name exists in UniFi — check it first",
+    "probeSelfMacRequired": "Detect or enter the Unifire host MAC first",
+    "sweepDryRun": "Live sweep skipped in dry-run mode",
+    "unifiApiError": "The controller API rejected the request",
+    "unifiAuthLocked": "Auto-login stopped after repeated rejections",
+    "unifiEmpty": "The controller returned an empty result",
+    "unifiFingerprintMismatch": "Certificate doesn’t match the trusted fingerprint",
+    "unifiForbidden": "The controller refused this (insufficient role?)",
+    "unifiHtml": "The controller returned an HTML page (wrong URL?)",
+    "unifiInvalidCredentials": "Wrong controller username or password",
+    "unifiLoginBackoff": "Waiting before the next login (avoids UDM lockout)",
+    "unifiLoginResponse": "Login response lacked a cookie or CSRF token",
+    "unifiRateLimited": "The controller is rate limiting",
+    "unifiTls": "Couldn’t establish a TLS connection",
+    "unifiUnreachable": "Can’t reach the controller",
+    "unifiWebsocket": "Couldn’t open the controller event stream",
+    "webauthnAlreadyRegistered": "This passkey is already registered",
+    "webauthnBusy": "Wait before trying another passkey",
+    "webauthnChallengeInvalid": "The passkey challenge expired — start again",
+    "webauthnRegistrationFailed": "Couldn’t register the passkey"
   },
   "fmt": {
     "h": "{h}h",
@@ -1220,6 +1248,11 @@
         "restart": "restart device",
         "power_cycle": "PoE power cycle",
         "speedtest": "speed test"
+      },
+      "approval": {
+        "approve": "approve",
+        "block": "block",
+        "ignore": "ignore"
       }
     },
     "method": {
@@ -1248,6 +1281,20 @@
       "broadcastOverrides": "WoL broadcast addresses",
       "selfMacOverride": "host MAC",
       "excludedRouteIds": "never-touch routes"
+    },
+    "approval": {
+      "hostnameMatched": "Randomized MAC {mac} matched approved “{hostname}” — auto-approved",
+      "approved": "Approved device {mac}",
+      "blocked": "Blocked pending device {mac}",
+      "ignored": "Dismissed approval for {mac}"
+    },
+    "block": {
+      "applied": "Blocked device {mac}",
+      "released": "Unblocked device {mac}"
+    },
+    "extension": {
+      "approved": "Approved an extension request",
+      "denied": "Denied an extension request"
     }
   },
   "presence": {
@@ -1317,7 +1364,12 @@
   },
   "block": {
     "manual": "Blocked by an admin in Unifire",
-    "unifi": "Blocked directly in UniFi (Unifire won’t lift it)"
+    "unifi": "Blocked directly in UniFi (Unifire won’t lift it)",
+    "pause": "Internet paused",
+    "bedtime": "Bedtime",
+    "quota": "Quota used up",
+    "approval": "Awaiting approval (strict mode)",
+    "rule": "Blocked by an automation rule"
   },
   "capability": {
     "empty": "The controller returned an empty result",

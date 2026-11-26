@@ -30,14 +30,14 @@ const form = reactive({
   useWeekday: false, weekday: [120, 120, 120, 120, 180, 240, 240] as number[],
   warnAtPct: 80, actionType: 'block' as 'block' | 'egress' | 'notify', actionEgressId: null as string | null, enabled: true,
 })
-const unitFactor = { min: 1, h: 60, MB: 1024 ** 2, GB: 1024 ** 3 }
+const unitFactor = { min: 1, h: 60, MB: 1e6, GB: 1e9 }
 watch(() => form.metric, (m) => { form.limitUnit = m === 'activeMinutes' ? 'min' : 'GB'; form.limitValue = m === 'activeMinutes' ? 120 : 20 })
 
 function openEditor(q: QuotaT | null) {
   editingId.value = q?.id ?? null
   if (q) {
     const isTime = q.metric === 'activeMinutes'
-    const unit = isTime ? (q.limit % 60 === 0 ? 'h' : 'min') : (q.limit >= 1024 ** 3 ? 'GB' : 'MB')
+    const unit = isTime ? (q.limit % 60 === 0 ? 'h' : 'min') : (q.limit >= 1e9 ? 'GB' : 'MB')
     Object.assign(form, {
       name: q.name, scopeType: q.scope.type, scopeId: q.scope.id, metric: q.metric, period: q.period,
       limitUnit: unit, limitValue: q.limit / unitFactor[unit],

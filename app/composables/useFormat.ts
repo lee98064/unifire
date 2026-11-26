@@ -4,12 +4,13 @@ export function useFormat() {
   const tz = useState<string>('site-tz', () => 'Asia/Taipei')
   const intlLocale = computed(() => (locale.value === 'zh-TW' ? 'zh-Hant-TW' : 'en-US'))
 
+  // Decimal (SI) units like UniFi and ISP data caps: 1 GB = 10^9 bytes. Quota editors use the same factor.
   function bytes(n: number | null | undefined, digits = 1): string {
     if (n == null || Number.isNaN(n)) return '—'
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     let i = 0
     let v = Math.abs(n)
-    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    while (v >= 1000 && i < units.length - 1) { v /= 1000; i++ }
     return `${(n < 0 ? -v : v).toFixed(i === 0 ? 0 : digits)} ${units[i]}`
   }
 

@@ -74,3 +74,14 @@ hooks — implement the real notifier behind those hooks now.
   authorization (wrong chat ignored); webhook HMAC; rule trigger filtering, conditions (midnight crossing),
   cooldown, action continuation on failure, dry-run; watchdog state machine incl. daily limit & uplink
   refusal; passphrase generator properties; WoL packet bytes & broadcast derivation.
+
+## WP5 review follow-ups (from Claude — do these too)
+- **Human labels in access audit rows.** `audit.block.*` / `audit.approval.*` rows use the MAC as both
+  `target.label` and the only param. Use the client's display name (alias → hostname → vendor → MAC) as
+  `target.label` and add a `name` param next to `mac`; for `audit.extension.*` add `person` and `minutes`
+  params. Update `docs/backend/i18n-keys.md` (Claude will reword the messages to use `{name}`).
+- **Quota egress routes vs managed routes.** A `[unifire-quota]` INTERNET route for a person can overlap a
+  managed route that targets the same client MAC. Detect the overlap when a quota egress action fires and
+  surface it (audit warning `audit.quota.routeOverlap` {person, route}); do not create a second route for a
+  MAC that a managed route already targets — instead apply the quota egress as a route override on that
+  managed route (reason `rule`, until the quota resets).
