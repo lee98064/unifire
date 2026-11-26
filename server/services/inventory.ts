@@ -21,6 +21,7 @@ import { createAuditService } from './audit'
 import { rate } from './cache'
 import { wanRates, wanTelemetry } from '../unifi/wan'
 import type { ControllerService } from './controller'
+import { compareEgresses } from './egress-order'
 import { classifyRoute } from './ownership'
 import { routeDestinations, routeTargets } from './route-shape'
 
@@ -62,8 +63,7 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
   function currentEgresses() {
     const present = new Set(snapshot().networks.map(network => network._id))
     return db.select().from(egresses).where(eq(egresses.site, site())).all()
-      .filter(row => present.has(row.id)).sort((a, b) => Number(b.kind === 'wan') - Number(a.kind === 'wan')
-        || a.id.localeCompare(b.id, 'en', { numeric: true }))
+      .filter(row => present.has(row.id)).sort(compareEgresses)
   }
 
   function listEgresses() {

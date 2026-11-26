@@ -7,6 +7,7 @@ import { createAuditService } from '../../services/audit'
 import { systemContext, type ControllerService } from '../../services/controller'
 import { classifyRoute, PROBE_PREFIX, routeFingerprint } from '../../services/ownership'
 import { routeDraft } from '../../services/route-shape'
+import { compareEgresses } from '../../services/egress-order'
 import { createSettingsService } from '../../services/settings'
 import { UnifiError, unifiErrorCode, unifiStatusKey } from '../../unifi/errors'
 import type { WireRoute } from '../../unifi/endpoints/schemas'
@@ -47,7 +48,7 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
     if (!run) return []
     const present = new Set(run.cache.snapshot().networks.map(network => network._id))
     return db.select().from(egresses).where(eq(egresses.site, run.config.site)).all()
-      .filter(row => present.has(row.id)).sort((a, b) => a.id.localeCompare(b.id, 'en', { numeric: true }))
+      .filter(row => present.has(row.id)).sort(compareEgresses)
   }
 
   function sweepId(run: Runtime) {
