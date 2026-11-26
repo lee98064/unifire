@@ -1,0 +1,60 @@
+{
+  "name": "unifire",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Unifire — UniFi extension & automation console",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "start": "node .output/server/index.mjs",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@nuxt/ui": "^4.13.1",
+    "@nuxtjs/i18n": "^10.7.0",
+    "@simplewebauthn/browser": "^13.2.2",
+    "@simplewebauthn/server": "^13.2.2",
+    "@vite-pwa/nuxt": "^2.0.4",
+    "@vue-flow/background": "^1.3.2",
+    "@vue-flow/core": "^1.48.2",
+    "@vueuse/core": "^15.1.0",
+    "@vueuse/nuxt": "^15.1.0",
+    "better-sqlite3": "^13.2.0",
+    "croner": "^11.0.1",
+    "drizzle-orm": "^0.45.4",
+    "echarts": "^6.1.0",
+    "nuxt": "^4.7.0",
+    "nuxt-auth-utils": "^0.6.2",
+    "qrcode": "^1.5.4",
+    "undici": "^8.13.1",
+    "vue-echarts": "^8.3.2",
+    "web-push": "^4.0.0",
+    "ws": "^8.23.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@iconify-json/circle-flags": "^1.2.14",
+    "@iconify-json/lucide": "^1.2.159",
+    "@nuxt/test-utils": "^4.4.0",
+    "@playwright/test": "^1.65.1",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/web-push": "^3.6.4",
+    "@types/ws": "^8.18.2",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.2",
+    "vue-tsc": "^3.3.14"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3", "esbuild", "@parcel/watcher", "vue-demi"]
+  },
+  "engines": { "node": ">=22" }
+}
