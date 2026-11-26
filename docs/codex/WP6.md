@@ -14,7 +14,7 @@ hooks — implement the real notifier behind those hooks now.
   Admin-only events go to admin subscriptions; member events (their request decided, their quota warning) go
   to that member. Remove subscriptions on 404/410.
   Actions: `new_device` → approve / block; `extension_request` → approve / deny; `route_drift` → open.
-  Each action carries a signed, single-use, 24 h token; `POST /api/push/action {token}` executes it
+  Each action carries a signed, single-use, 24 h token; the action `endpoint` MUST be `/api/push/action?token=<token>` (the service worker POSTs `{token}` to it); `POST /api/push/action {token}` executes it
   (public endpoint, token is the auth) and audits with actor = the admin the token was minted for.
 - **Telegram**: `sendMessage` (HTML parse mode) with inline keyboard when `interactive`; long-polling
   `getUpdates` loop (one per bot token, backoff on errors) handling `callback_query` from the configured
