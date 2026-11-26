@@ -1,0 +1,39 @@
+{
+  "route_name": "example hourly egress",
+  "client_mac": "02:00:00:00:01:14",
+  "midnight": {
+    "id": "egress-01",
+    "name": "WAN1 Static"
+  },
+  "vpn_cycle": [
+    {
+      "id": "egress-02",
+      "name": "VPN A"
+    },
+    {
+      "id": "egress-03",
+      "name": "VPN B"
+    },
+    {
+      "id": "egress-04",
+      "name": "VPN C"
+    },
+    {
+      "id": "egress-03",
+      "name": "VPN B"
+    },
+    {
+      "id": "egress-05",
+      "name": "VPN D"
+    },
+    {
+      "id": "egress-02",
+      "name": "VPN A"
+    },
+    {
+      "id": "egress-06",
+      "name": "VPN E"
+    }
+  ],
+  "route_id": "route-01"
+}
