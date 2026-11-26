@@ -94,9 +94,16 @@ export const egressSamples = sqliteTable('egress_samples', {
   latencyMs: real('latency_ms'),
   lossPct: real('loss_pct'),
   jitterMs: real('jitter_ms'),
+  intervalMs: integer('interval_ms'),
   source: text('source').$type<EgressHealthT['source']>().notNull().default('probe'),
   status: text('status').$type<HealthStatusT>().notNull(),
 }, t => [primaryKey({ columns: [t.egressId, t.ts] }), index('egress_samples_ts').on(t.ts)])
+
+export const egressReportArchive = sqliteTable('egress_report_archive', {
+  egressId: text('egress_id').notNull().references(() => egresses.id, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  samples: blob('samples', { mode: 'buffer' }).notNull(),
+}, t => [primaryKey({ columns: [t.egressId, t.ts] })])
 
 export const egressHealth = sqliteTable('egress_health', {
   egressId: text('egress_id').primaryKey().references(() => egresses.id, { onDelete: 'cascade' }),
@@ -509,7 +516,9 @@ export const speedtests = sqliteTable('speedtests', {
   downMbps: real('down_mbps').notNull(),
   upMbps: real('up_mbps').notNull(),
   latencyMs: real('latency_ms'),
-}, t => [index('speedtests_ts').on(t.ts), index('speedtests_egress_ts').on(t.egressId, t.ts)])
+  scope: text('controller_scope'),
+}, t => [index('speedtests_ts').on(t.ts), index('speedtests_egress_ts').on(t.egressId, t.ts),
+  index('speedtests_scope_ts').on(t.scope, t.ts)])
 
 export const appliedClientBlocks = sqliteTable('applied_client_blocks', {
   controllerScope: text('controller_scope').notNull(),

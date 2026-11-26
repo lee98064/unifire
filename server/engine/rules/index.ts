@@ -18,6 +18,7 @@ import { bedtimeWindows, DAY, HOUR, MINUTE } from '../access-time'
 import { createCronJobs, validateCron } from '../automation-cron'
 import { httpUrl } from '../notifiers/channels'
 import type { HttpTransport } from '../notifiers/telegram'
+import { checkAccessActions } from './access-references'
 import { createRuleActions, type RuleEvent } from './actions'
 
 type Effects = Parameters<typeof createRuleActions>[2]
@@ -184,6 +185,15 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
 
   function onEvent(event: ControllerEvent) {
     if (!leased?.()) return
+    if (event.type === 'rules.changed') {
+      for (const id of event.ruleIds) {
+        latched.delete(id)
+        const saved = row(id)
+        if (saved) sync(internal(saved))
+        else jobs.set(id, null, async () => {})
+      }
+      return
+    }
     if (event.type === 'client.connected' || event.type === 'client.disconnected') {
       if (connectionScope !== service.runtime) {
         connections.clear()
@@ -262,6 +272,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
   function save(id: string, input: Partial<RuleInputT>, current?: RuleT) {
     const fields = RuleInput.parse({ ...current, ...input })
     if (fields.trigger.type === 'schedule') validateCron(fields.trigger)
+    checkAccessActions(db, fields.actions)
     fields.actions = fields.actions.map((action, index) => {
       if (action.type !== 'webhook') return action
       httpUrl(action.url)

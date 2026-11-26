@@ -2,15 +2,18 @@ import { randomUUID } from 'node:crypto'
 import type { Db } from '../db'
 import { createAutomation } from '../engine/automation'
 import { createAuditWatch } from '../engine/audit-watch'
+import { createSpeedtests } from '../engine/reports/speedtest'
 import { createSnapshots } from '../engine/snapshots'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
 import { apiError } from '../utils/api-error'
+import { createInventory } from './inventory'
 import { createControllerService, type ControllerService } from './controller'
 import { createAccess } from './access'
 import { seedMockAutomation } from './seed-automation'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
+let speedtests: ReturnType<typeof createSpeedtests> | undefined
 let automation: ReturnType<typeof createAutomation> | undefined
 let access: ReturnType<typeof createAccess> | undefined
 let current: ControllerService | undefined
@@ -23,6 +26,19 @@ export async function useController() {
   if (!current) await starting
   if (!current) throw new UnifiError('UNIFI_INACTIVE')
   return current
+}
+
+export const cachedControllerStatus = () => current?.connectivity()
+
+export async function useSpeedtests() {
+  await useController()
+  if (!speedtests) throw apiError(503, 'UNIFI_INACTIVE', 'errors.unifiInactive')
+  return speedtests
+}
+
+export async function useDashboard(db: Db) {
+  const service = await useController()
+  return createInventory(db, service, routing, access).dashboard()
 }
 
 export async function useAccess() {
@@ -56,12 +72,12 @@ export async function useSnapshots() {
 
 const TTL = 45_000
 
-export function startControllerRuntime(db: Db, mock: boolean, lively: boolean) {
-  starting = runControllerRuntime(db, mock, lively)
+export function startControllerRuntime(db: Db, mock: boolean, lively: boolean, onError: () => void = () => {}) {
+  starting = runControllerRuntime(db, mock, lively, onError)
   return starting
 }
 
-async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
+async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onError: () => void) {
   const owner = randomUUID()
   let expiresAt = 0
   let stopping = false
@@ -71,6 +87,21 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
   let stopAutomation: (() => Promise<void>) | undefined
   let stopAccess: (() => Promise<void>) | undefined
 
+  async function stopServices() {
+    const service = current
+    const reportWorker = speedtests
+    current = undefined
+    routing = undefined
+    access = undefined
+    snapshots = undefined
+    snapshotsReady = undefined
+    automation = undefined
+    speedtests = undefined
+    await Promise.allSettled([stopAutomation?.(), stopRouting?.(), stopAccess?.(), stopInsights?.(), reportWorker?.stop()])
+    stopAutomation = stopRouting = stopAccess = stopInsights = undefined
+    await service?.stop()
+  }
+
   async function maintain() {
     if (stopping) return
     const now = Date.now()
@@ -79,24 +110,14 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       return
     }
     if (current) {
-      const stale = current
-      current = undefined
-      routing = undefined
-      access = undefined
-      snapshots = undefined
-      snapshotsReady = undefined
-      automation = undefined
       expiresAt = 0
-      await stopAutomation?.()
-      await stopRouting?.()
-      await stopAccess?.()
-      await stopInsights?.()
-      await stale.stop()
+      await stopServices()
     }
     if (stopping || !acquireLease(ENGINE_LEASE, owner, TTL, db, now)) return
     expiresAt = now + TTL
     try {
       current = await createControllerService(db, { mock, lively, active: () => Date.now() < expiresAt })
+      speedtests = createSpeedtests(db, current)
       snapshots = createSnapshots(db, current)
       const snapshotJob = snapshots.start()
       snapshotsReady = snapshotJob.ready.catch(() => {})
@@ -115,33 +136,21 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       stopAutomation = automation.start(hasLease)
     } catch (error) {
       expiresAt = 0
-      releaseLease(ENGINE_LEASE, owner, db)
+      try { await stopServices() } finally { releaseLease(ENGINE_LEASE, owner, db) }
       throw error
     }
   }
 
-  await maintain()
+  await maintain().catch(onError)
   const heartbeat = setInterval(() => {
     if (maintenance) return
-    maintenance = maintain().catch(() => {}).finally(() => { maintenance = undefined })
+    maintenance = maintain().catch(onError).finally(() => { maintenance = undefined })
   }, 10_000)
   heartbeat.unref()
   return async () => {
     stopping = true
     clearInterval(heartbeat)
     await maintenance
-    const service = current
-    access = undefined
-    automation = undefined
-    current = undefined
-    routing = undefined
-    snapshots = undefined
-    snapshotsReady = undefined
-    await stopAutomation?.()
-    await stopRouting?.()
-    await stopAccess?.()
-    await stopInsights?.()
-    await service?.stop()
-    releaseLease(ENGINE_LEASE, owner, db)
+    try { await stopServices() } finally { releaseLease(ENGINE_LEASE, owner, db) }
   }
 }

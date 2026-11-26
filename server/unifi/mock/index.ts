@@ -293,7 +293,7 @@ export async function startMockController(options: {
       if (body.cmd === 'speedtest-status') {
         const finished = speedtestAt !== null && now() >= speedtestAt
         return json(res, classic([{ status: speedtestAt === null ? 'idle' : finished ? 'finished' : 'running',
-          ...(finished && { xput_download: 421.8, xput_upload: 96.5, latency: 7 }) }]))
+          ...(finished && { xput_download: 421.8, xput_upload: 96.5, latency: 7, timestamp: speedtestAt, wan_networkgroup: 'WAN' }) }]))
       }
       if (body.cmd === 'speedtest') speedtestAt = now() + 2000
       else if (body.cmd === 'power-cycle') {

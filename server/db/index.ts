@@ -33,6 +33,8 @@ export function useDb(): Db {
 }
 
 export function closeDb() {
-  connection?.sqlite.close()
+  const closing = connection
   connection = undefined
+  if (!closing) return
+  try { closing.sqlite.pragma('wal_checkpoint(PASSIVE)') } finally { closing.sqlite.close() }
 }

@@ -6,7 +6,7 @@ export const HOUR = 60 * MINUTE
 export const DAY = 24 * HOUR
 
 const formatters = new Map<string, Intl.DateTimeFormat>()
-function localEpoch(at: number, timezone: string) {
+export function localEpoch(at: number, timezone: string) {
   let format = formatters.get(timezone)
   if (!format) {
     format = new Intl.DateTimeFormat('en-GB', {
@@ -24,7 +24,7 @@ export function localDate(at: number, timezone: string) {
   return Math.floor(localEpoch(at, timezone) / DAY) * DAY
 }
 
-function weekday(date: number) {
+export function weekday(date: number) {
   return (new Date(date).getUTCDay() + 6) % 7
 }
 

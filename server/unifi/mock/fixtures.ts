@@ -74,9 +74,9 @@ export function buildFixtures(now: number, selfIp: string) {
   const devices = [
     {
       mac: GATEWAY_MAC, name: 'Dream Machine Pro', model: 'UDMPRO', type: 'udm',
-      wan1: { up: true, ip: '198.51.100.11', 'rx_bytes-r': 105_000, 'tx_bytes-r': 30_000 },
-      wan2: { up: true, ip: '198.51.100.12', 'rx_bytes-r': 21_000, 'tx_bytes-r': 8_000 },
-      wan3: { up: true, ip: '198.51.100.13', 'rx_bytes-r': 2_000, 'tx_bytes-r': 420 },
+      wan1: { up: true, public_ip: '198.51.100.11', 'rx_bytes-r': 105_000, 'tx_bytes-r': 30_000 },
+      wan2: { up: true, public_ip: '198.51.100.12', 'rx_bytes-r': 21_000, 'tx_bytes-r': 8_000 },
+      wan3: { up: true, public_ip: '198.51.100.13', 'rx_bytes-r': 2_000, 'tx_bytes-r': 420 },
       'rx_bytes-r': 128_000, 'tx_bytes-r': 38_420,
     },
     { mac: SWITCH_MAC, name: 'Studio Switch', model: 'USW-Pro-24-PoE', type: 'usw', port_table: Array.from({ length: 24 }, (_, index) => ({

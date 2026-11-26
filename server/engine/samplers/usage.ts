@@ -18,7 +18,7 @@ function addTotals(total: Totals, other: Totals) {
   total.activeMinutes += other.activeMinutes
 }
 
-function countBits(mask: number) {
+export function countBits(mask: number) {
   let count = 0
   for (; mask; mask &= mask - 1) count++
   return count

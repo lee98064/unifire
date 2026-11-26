@@ -2,6 +2,7 @@ import { createEventStream, defineEventHandler, setResponseHeader } from 'h3'
 import type { LiveEventT } from '#shared/schemas/system'
 import { activeSessionUser, requireAccount } from '../utils/auth'
 import { canReceiveEvent, liveBus } from '../utils/bus'
+import { forgetEventStream, trackEventStream } from '../utils/event-streams'
 
 const heartbeatMs = 20_000
 
@@ -16,10 +17,11 @@ export default defineEventHandler(async event => {
   function close() {
     if (closed) return
     closed = true
+    forgetEventStream(close)
     res.off('close', close)
     clearInterval(heartbeat)
     unsubscribe()
-    void stream.close()
+    void stream.close().catch(() => {})
   }
 
   function sendEvent(message: LiveEventT) {
@@ -41,6 +43,7 @@ export default defineEventHandler(async event => {
 
   const sending = stream.send()
   setResponseHeader(event, 'Cache-Control', 'no-store')
-  sendEvent({ type: 'hello', data: { ts: Date.now() } })
+  trackEventStream(close)
+  if (!closed) sendEvent({ type: 'hello', data: { ts: Date.now() } })
   return sending
 })

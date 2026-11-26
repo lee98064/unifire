@@ -4,8 +4,10 @@ import { useAutomation } from '../../services/controller-runtime'
 import { readApiBody } from '../../utils/api-error'
 import { requireAny } from '../../utils/auth'
 
+import { trustedProxyOrigin } from '../../utils/proxy-origin'
+
 export default defineEventHandler(async event => {
   const user = await requireAny(event)
   const input = await readApiBody(event, PushSubscriptionInput)
-  return (await useAutomation()).notifications.push.subscribe(user.id, input)
+  return (await useAutomation()).notifications.push.subscribe(user.id, input, trustedProxyOrigin(event))
 })

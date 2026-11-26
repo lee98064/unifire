@@ -10,7 +10,7 @@ import type { createRouting } from '../engine'
 import { latestPublicIp, readHealth, unknownHealth, wanStatus } from '../engine/probes/health'
 import type { Db } from '../db'
 import { clients, egresses, people, personDevices } from '../db/schema'
-import { MacAddress, type WireStation } from '../unifi/endpoints/schemas'
+import { Doc, MacAddress, type WireStation } from '../unifi/endpoints/schemas'
 import { UnifiError } from '../unifi/errors'
 import type { WriteContext } from '../unifi/writes'
 import { liveBus } from '../utils/bus'
@@ -19,6 +19,7 @@ import { createAccess } from './access'
 import { createSettingsService } from './settings'
 import { createAuditService } from './audit'
 import { rate } from './cache'
+import { wanRates, wanTelemetry } from '../unifi/wan'
 import type { ControllerService } from './controller'
 import { classifyRoute } from './ownership'
 import { routeDestinations, routeTargets } from './route-shape'
@@ -51,26 +52,35 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
     })
   }
 
+  function egressHealthView(row: typeof egresses.$inferSelect) {
+    const gateway = service.runtime?.cache.gateway() ?? null
+    const wan = row.kind === 'wan' ? wanStatus(gateway, [], row.wanGroup) : null
+    return readHealth(db, row.id)?.value ?? (wan === null ? unknownHealth
+      : { ...unknownHealth, status: wan ? 'healthy' : 'down', source: 'unifi' } as const)
+  }
+
+  function currentEgresses() {
+    const present = new Set(snapshot().networks.map(network => network._id))
+    return db.select().from(egresses).where(eq(egresses.site, site())).all()
+      .filter(row => present.has(row.id)).sort((a, b) => Number(b.kind === 'wan') - Number(a.kind === 'wan')
+        || a.id.localeCompare(b.id, 'en', { numeric: true }))
+  }
+
   function listEgresses() {
-    const { networks, routes } = snapshot()
-    const present = new Set(networks.map(network => network._id))
+    const { routes } = snapshot()
     const counts = new Map<string, number>()
     for (const route of routes) {
       if (route.network_id) counts.set(route.network_id, (counts.get(route.network_id) ?? 0) + 1)
     }
-    return Egress.array().parse(db.select().from(egresses).where(eq(egresses.site, site())).all()
-      .filter(row => present.has(row.id)).sort((a, b) => Number(b.kind === 'wan') - Number(a.kind === 'wan')
-        || a.id.localeCompare(b.id, 'en', { numeric: true })).map(row => {
-        const probe = routing?.probes.probeState(row)
-        const wan = row.kind === 'wan' ? wanStatus(service.runtime?.cache.gateway() ?? null, [], row.wanGroup) : null
-        const health = readHealth(db, row.id)?.value ?? (wan === null ? unknownHealth
-          : { ...unknownHealth, status: wan ? 'healthy' : 'down', source: 'unifi' })
-        return {
-          ...row, health, publicIp: latestPublicIp(db, row.id), routeCount: counts.get(row.id) ?? 0,
-          probe: { enabled: row.probeEnabled, ip: probe?.ip ?? row.probeIp, routeId: probe?.routeId ?? null,
-            state: probe?.state ?? (row.probeEnabled ? 'missing' : 'disabled') },
-        }
-      }))
+    return Egress.array().parse(currentEgresses().map(row => {
+      const probe = routing?.probes.probeState(row)
+      const health = egressHealthView(row)
+      return {
+        ...row, health, publicIp: latestPublicIp(db, row.id), routeCount: counts.get(row.id) ?? 0,
+        probe: { enabled: row.probeEnabled, ip: probe?.ip ?? row.probeIp, routeId: probe?.routeId ?? null,
+          state: probe?.state ?? (row.probeEnabled ? 'missing' : 'disabled') },
+      }
+    }))
   }
 
   function updateEgress(id: string, input: z.output<typeof EgressUpdateInput>, context: WriteContext) {
@@ -208,25 +218,36 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
       id: wlan._id, name: wlan.name, enabled: wlan.enabled ?? false, security: wlan.security ?? 'unknown', isGuest: wlan.is_guest ?? false,
     }))),
     dashboard() {
-      const allClients = listClients()
-      const exits = listEgresses()
+      const { activeClients, knownClients } = snapshot()
+      const active = indexByMac(activeClients)
+      const known = indexByMac(knownClients)
+      const owned = ownedBlocks(db, service.runtime?.scope)
+      const clientCounts = { online: 0, known: 0, pendingApproval: 0, blocked: 0 }
+      for (const { mac, approval } of db.select({ mac: clients.mac, approval: clients.approval }).from(clients).all()) {
+        clientCounts.known++
+        if (active.has(mac)) clientCounts.online++
+        if (approval === 'pending') clientCounts.pendingApproval++
+        if (known.get(mac)?.blocked ?? active.get(mac)?.blocked ?? owned.has(mac)) clientCounts.blocked++
+      }
+      const exits = currentEgresses().map(row => ({ ...row, health: egressHealthView(row) }))
       const cache = service.runtime?.cache
       const gateway = cache?.gateway()
-      const routes = [...service.ownership(site()).managed.values()]
-      const peopleRows = access.people.rows()
       const at = Date.now()
       const managed = routing?.managed.dashboard(at)
+      const fallbackRoutes = routing ? [] : [...service.ownership(site()).managed.values()]
+      const enabledWans = exits.filter(exit => exit.kind === 'wan' && exit.enabled).length
+      const uplinkRates = wanRates(enabledWans === 1 ? Doc.safeParse(gateway?.uplink).data : null)
       return DashboardSummary.parse({
         generatedAt: at,
         wans: exits.filter(egress => egress.kind === 'wan').map(egress => {
-          const group = egress.wanGroup?.toLowerCase()
-          const wan = group === 'wan' || group === 'wan1' ? gateway?.wan1
-            : group === 'wan2' ? gateway?.wan2 : group === 'wan3' ? gateway?.wan3 : undefined
+          const wan = wanTelemetry(gateway, egress.wanGroup)
+          const rates = wanRates(wan)
           return {
             egressId: egress.id, name: egress.name,
             status: egress.health.status, latencyMs: egress.health.latencyMs,
-            publicIp: egress.publicIp?.ip ?? (typeof wan?.public_ip === 'string' ? wan.public_ip : null),
-            rxBps: rate(wan?.['rx_bytes-r']), txBps: rate(wan?.['tx_bytes-r']),
+            publicIp: latestPublicIp(db, egress.id)?.ip ?? (typeof wan?.public_ip === 'string' ? wan.public_ip : null),
+            rxBps: rates.rxBps ?? (egress.enabled ? uplinkRates.rxBps : null),
+            txBps: rates.txBps ?? (egress.enabled ? uplinkRates.txBps : null),
           }
         }),
         egresses: {
@@ -235,12 +256,9 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
           down: exits.filter(exit => exit.health.status === 'down').length,
           unknown: exits.filter(exit => exit.health.status === 'unknown').length,
         },
-        clients: { online: allClients.filter(client => client.online).length, known: allClients.length,
-          pendingApproval: allClients.filter(client => client.approval === 'pending').length,
-          blocked: allClients.filter(client => client.blocked).length },
-        people: { home: peopleRows.filter(person => person.presence.home).length, total: peopleRows.length,
-          paused: peopleRows.filter(person => person.pause.active).length },
-        routes: managed?.routes ?? { managed: routes.length, drift: routes.filter(route => route.state === 'drift').length,
+        clients: clientCounts,
+        people: access.people.counts(at),
+        routes: managed?.routes ?? { managed: fallbackRoutes.length, drift: fallbackRoutes.filter(route => route.state === 'drift').length,
           overrides: 0, unifiTotal: snapshot().routes.length },
         upcoming: managed?.upcoming ?? [], recentSwitches: managed?.recentSwitches ?? [], recentAudit: audit.list({ limit: 10 }).items,
         throughput: cache?.throughput() ?? [],

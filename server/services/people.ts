@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, gt, isNull, lt, or } from 'drizzle-orm'
+import { and, desc, eq, exists, gt, isNull, lt, or } from 'drizzle-orm'
 import type { z } from 'zod'
 import { type GroupT, type PersonT, type PresenceTimelineT, type GroupInput, type PauseInput, type PersonInput } from '#shared/schemas/access'
 import type { Db } from '../db'
 import { allowances, clients, groupPauses, groups, pauseSchedules, people, personDevices, personGroups, presenceSessions, users } from '../db/schema'
 import { MINUTE } from '../engine/access-time'
+import { removeAccessActions } from '../engine/rules/access-references'
 import { apiError } from '../utils/api-error'
 import { liveBus } from '../utils/bus'
 import type { EngineEvents } from '../unifi/ws'
@@ -168,11 +169,26 @@ export function createPeopleService(db: Db, engine: EngineEvents, now = Date.now
 
   return {
     rows, get, changed,
+    counts(at: number) {
+      const home = exists(db.select({ id: presenceSessions.id }).from(presenceSessions)
+        .where(and(eq(presenceSessions.personId, people.id), isNull(presenceSessions.end))))
+      const pausedGroup = exists(db.select({ id: personGroups.groupId }).from(personGroups)
+        .innerJoin(groupPauses, eq(groupPauses.groupId, personGroups.groupId))
+        .where(and(eq(personGroups.personId, people.id), or(isNull(groupPauses.until), gt(groupPauses.until, at)))))
+      const rows = db.select({ home, paused: or(pausedGroup, and(eq(people.paused, true),
+        or(isNull(people.pausedUntil), gt(people.pausedUntil, at))))! }).from(people).all()
+      return { total: rows.length, home: rows.filter(row => row.home).length, paused: rows.filter(row => row.paused).length }
+    },
     create: (input: z.output<typeof PersonInput>) => update(randomUUID(), input, input),
     update, pause: personPause,
     remove(id: string) {
       const person = get(id)
-      db.delete(people).where(eq(people.id, id)).run()
+      const ruleIds = db.transaction(tx => {
+        const affected = removeAccessActions(tx, { type: 'person', id })
+        tx.delete(people).where(eq(people.id, id)).run()
+        return affected
+      })
+      if (ruleIds.length) engine.emit('event', { type: 'rules.changed', ruleIds })
       if (person.deviceMacs.length) liveBus.emit({ type: 'client.changed', data: { macs: person.deviceMacs } })
       changed([])
       return { ok: true as const }
@@ -188,7 +204,12 @@ export function createPeopleService(db: Db, engine: EngineEvents, now = Date.now
     groupUpdate, groupPause,
     groupRemove(id: string) {
       const group = groupGet(id)
-      db.delete(groups).where(eq(groups.id, id)).run()
+      const ruleIds = db.transaction(tx => {
+        const affected = removeAccessActions(tx, { type: 'group', id })
+        tx.delete(groups).where(eq(groups.id, id)).run()
+        return affected
+      })
+      if (ruleIds.length) engine.emit('event', { type: 'rules.changed', ruleIds })
       changed(group.personIds)
       return { ok: true as const }
     },

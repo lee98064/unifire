@@ -253,3 +253,10 @@ Rule notifications use the administrator-provided templates. The test action use
 | `errors.wolNotFound` | The Wake-on-LAN target could not be found. | None |
 | `errors.wolBroadcastUnknown` | Configure a broadcast address for this target or its network. | None |
 | `errors.wolSendFailed` | The Wake-on-LAN packet could not be sent. | None |
+
+## WP7 reports and operations
+
+| Key | Description | Params |
+| --- | --- | --- |
+| `errors.speedtestUnsupported` | Gateway speed testing is unavailable on the configured controller. | None |
+| `errors.databaseUnavailable` | The local database health check failed. | None |

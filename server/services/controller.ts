@@ -518,6 +518,10 @@ export async function createControllerService(db: Db, options: {
   }
 
   return {
+    connectivity() {
+      const { configured, connected } = activeRuntime?.status ?? fallback
+      return { configured, connected }
+    },
     engine, beforeWrite, beforeRoutingChange, routingLocked: () => routingChange, status, ownership, test, save, setMode, probe,
     get mockProbe() { return mock?.probe },
     get mockWatchdogProbe() { return mock?.watchdogProbe },
@@ -538,6 +542,7 @@ export async function createControllerService(db: Db, options: {
         await testRuntime?.transport.close()
         await mock?.close()
       })
+      await background
     },
   }
 }
@@ -547,6 +552,7 @@ export type ControllerService = {
   beforeWrite: Set<BeforeWrite>
   beforeRoutingChange: Set<() => Promise<void>>
   routingLocked: () => boolean
+  connectivity: () => { configured: boolean, connected: boolean }
   status: () => ControllerStatusT
   ownership: (site: string) => {
     managed: Map<string, typeof managedRoutes.$inferSelect>, excluded: Set<string>, probes: Set<string>, quotaRoutes: Set<string>

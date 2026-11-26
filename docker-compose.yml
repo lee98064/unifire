@@ -1,0 +1,18 @@
+services:
+  unifire:
+    build: .
+    network_mode: host
+    environment:
+      PORT: "${PORT:-3000}"
+      TZ: "${TZ:-Asia/Taipei}"
+      NITRO_HOST: "${NITRO_HOST:-127.0.0.1}"
+      NUXT_UNIFIRE_SECRET: "${NUXT_UNIFIRE_SECRET:-}"
+      NUXT_SESSION_PASSWORD: "${NUXT_SESSION_PASSWORD:-}"
+      NUXT_TRUST_PROXY: "${NUXT_TRUST_PROXY:-true}"
+      NUXT_LOG_LEVEL: "${NUXT_LOG_LEVEL:-info}"
+    volumes:
+      - ./data:/data
+    cap_add:
+      - NET_RAW
+    restart: unless-stopped
+    stop_grace_period: 45s

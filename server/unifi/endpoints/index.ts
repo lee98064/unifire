@@ -56,6 +56,7 @@ export function createUnifiEndpoints({ paths, read, postRead }: UnifiTransport) 
         Object.entries(query).flatMap(([key, value]) => value === undefined ? [] : [[key, String(value)]]),
       )}`, z.union([Doc, Docs])),
     speedtestStatus: async () => parseWire(z.union([Doc, Docs]), await postRead(paths.classic('cmd/devmgr'), { cmd: 'speedtest-status' })),
+    speedtestWidget: () => v2('aggregated-dashboard?historySeconds=86400', Doc).then(doc => ({ speed_test: doc.speed_test ?? doc.speedtest })),
     firewallZones: () => v2('firewall/zone', Docs),
     firewallPolicies: () => v2('firewall-policies', Docs),
     portForwards: () => classic('rest/portforward', Docs),

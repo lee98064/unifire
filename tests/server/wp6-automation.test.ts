@@ -258,6 +258,12 @@ describe('WP6 automation with fake transports', () => {
     await rules.test(resume.id, false)
     expect(access.people.get(first!.id).pause.active).toBe(false)
     expect(access.people.get(second!.id).pause.active).toBe(false)
+    rules.update(pause.id, { actions: [...pause.actions, { type: 'delay', seconds: 1 }] })
+    access.people.groupRemove(group.id)
+    expect(rules.get(pause.id).actions).toEqual([{ type: 'delay', seconds: 1 }])
+    expect(() => rules.get(resume.id)).toThrow('errors.ruleNotFound')
+    expect(rules.page({ ruleId: resume.id, limit: 1 }).items).toHaveLength(1)
+    expect(() => rules.update(pause.id, { actions: resume.actions })).toThrow('errors.groupNotFound')
   })
 
   it('fires level triggers from last-seen and sliding usage data once per threshold crossing', async () => {

@@ -61,7 +61,7 @@ export function createProbeRunner(db: Db, service: ControllerService, routes: Re
         const health = { egressId, value, failedRounds }
         tx.insert(egressHealth).values(health).onConflictDoUpdate({ target: egressHealth.egressId, set: { value, failedRounds } }).run()
         tx.insert(egressSamples).values({ egressId, ts: at, status: value.status, latencyMs: value.latencyMs,
-          lossPct: value.lossPct, jitterMs: value.jitterMs, source: value.source }).onConflictDoNothing().run()
+          lossPct: value.lossPct, jitterMs: value.jitterMs, intervalMs: probe.intervalSec * 1000, source: value.source }).onConflictDoNothing().run()
         if (changed) tx.insert(egressHealthTransitions).values({ egressId, ts: at, status: value.status })
           .onConflictDoUpdate({ target: [egressHealthTransitions.egressId, egressHealthTransitions.ts], set: { status: value.status } }).run()
       }

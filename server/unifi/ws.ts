@@ -16,6 +16,7 @@ export type ControllerEvent =
   | { type: 'config.external_change', resource: SnapshotResourceT, itemId: string, label: string }
   | { type: 'cache.changed', resource: string }
   | { type: 'controller.reconnected' | 'controller.mode' | 'routing.settings' }
+  | { type: 'rules.changed', ruleIds: string[] }
   | { type: 'routing.changed', managedRouteId: string }
   | { type: 'egress.healthChanged', egressId: string }
   | { type: 'egress.down' | 'egress.up', egressId: string }

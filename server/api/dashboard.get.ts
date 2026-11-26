@@ -1,4 +1,5 @@
-import { useInventory } from '../services/inventory-runtime'
+import { useDb } from '../db'
+import { useDashboard } from '../services/controller-runtime'
 import { adminControllerHandler } from '../utils/controller-api'
 
-export default adminControllerHandler(async () => (await useInventory()).dashboard())
+export default adminControllerHandler(() => useDashboard(useDb()))

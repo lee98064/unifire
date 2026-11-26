@@ -1,6 +1,7 @@
 import { CapabilityKey, type CapabilityKeyT, type CapabilityT, type ControllerModeT } from '#shared/schemas/controller'
 import type { UnifiEndpoints } from './endpoints'
 import { UnifiError, unifiErrorCode, unifiStatusKey } from './errors'
+import { readSpeedtest } from './speedtest'
 import type { WriteContext, createWriteGate } from './writes'
 
 const empty = (value: unknown): boolean => {
@@ -57,7 +58,11 @@ export async function probeCapabilities(options: {
       })),
       check('systemlog', () => api.systemLog('all', { pageNumber: 0, pageSize: 1 })),
       check('wlanconf', api.wlans),
-      check('speedtest', api.speedtestStatus, 'capability.speedtestStatusOnly'),
+      check('speedtest', async () => {
+        const value = await readSpeedtest(api)
+        if (!value.available) throw new UnifiError('UNIFI_UNSUPPORTED', 404)
+        return value
+      }, 'capability.speedtestStatusOnly'),
     ])
     put('stamgr', 'unknown', 'capability.requiresAction')
     put('devmgr.powercycle', 'unknown', 'capability.requiresAction')

@@ -32,7 +32,7 @@ const invalid = () => apiError(403, 'PUSH_ACTION_INVALID', 'errors.pushActionInv
 const key = 'notifications.vapid'
 const subscriptionKey = (endpoint: string) => digest(endpoint).toString('hex')
 const SubscriptionKeys = z.object({ p256dh: z.string(), auth: z.string() })
-const EncryptedSubscription = SubscriptionKeys.extend({ endpoint: z.string().optional() })
+const EncryptedSubscription = SubscriptionKeys.extend({ endpoint: z.string().optional(), origin: z.string().url().optional() })
 
 export function createPush(db: Db, access: Pick<ReturnType<typeof createAccess>, 'approval' | 'extensions'>, options: {
   now?: () => number
@@ -98,10 +98,10 @@ export function createPush(db: Db, access: Pick<ReturnType<typeof createAccess>,
     return { ok: true as const }
   }
 
-  function subscribe(userId: string, input: z.output<typeof PushSubscriptionInput>) {
+  function subscribe(userId: string, input: z.output<typeof PushSubscriptionInput>, origin?: string) {
     const url = httpUrl(input.endpoint)
     if (url.protocol !== 'https:' || !publicPushHost(url.hostname)) throw apiError(400, 'INVALID_INPUT', 'errors.invalidInput')
-    const row = { userId, encryptedKeys: encrypt({ ...input.keys, endpoint: input.endpoint }), deviceLabel: input.deviceLabel ?? null, createdAt: now() }
+    const row = { userId, encryptedKeys: encrypt({ ...input.keys, endpoint: input.endpoint, ...(origin && { origin }) }), deviceLabel: input.deviceLabel ?? null, createdAt: now() }
     db.transaction(tx => {
       tx.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, input.endpoint)).run()
       tx.insert(pushSubscriptions).values({ ...row, endpoint: subscriptionKey(input.endpoint) })
@@ -125,11 +125,13 @@ export function createPush(db: Db, access: Pick<ReturnType<typeof createAccess>,
 
   async function deliver(recipient: ReturnType<typeof recipients>[number], payload: z.input<typeof PushPayload>, subject: string) {
     const { sub } = recipient
-    const { endpoint = sub.endpoint, ...keys } = EncryptedSubscription.parse(decrypt(sub.encryptedKeys))
+    const { endpoint = sub.endpoint, origin, ...keys } = EncryptedSubscription.parse(decrypt(sub.encryptedKeys))
     const url = httpUrl(endpoint)
     if (url.protocol !== 'https:' || !publicPushHost(url.hostname)) throw new Error('Invalid push endpoint')
     try {
-      await send({ endpoint, keys }, JSON.stringify(PushPayload.parse(payload)),
+      const body = PushPayload.parse(payload)
+      if (origin && body.url.startsWith('/') && !body.url.startsWith('//')) body.url = new URL(body.url, origin).href
+      await send({ endpoint, keys }, JSON.stringify(body),
         { vapidDetails: { subject, ...stored().keys }, TTL: 86_400, timeout: 10_000, contentEncoding: 'aes128gcm', agent: pushAgent })
       return true
     } catch (error) {

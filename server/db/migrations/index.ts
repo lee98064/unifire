@@ -9,7 +9,9 @@ import { accessSql } from './0004-access'
 
 import { automationSql } from './0005-automation'
 
-const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }]
+import { reportsSql } from './0006-reports'
+
+const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }, { version: 6, sql: reportsSql }]
 
 export function migrateDatabase(sqlite: Database.Database) {
   sqlite.transaction(() => {

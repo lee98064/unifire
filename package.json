@@ -12,6 +12,7 @@
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
+    "test:contract": "tsx tests/server/contract-smoke.ts",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate"
@@ -50,6 +51,8 @@
     "@types/ws": "^8.18.2",
     "@vite-pwa/workbox-swkit": "8.0.15",
     "drizzle-kit": "^0.31.11",
+    "tailwindcss": "4.3.5",
+    "tsx": "4.23.15",
     "typescript": "~5.9.3",
     "vitest": "^5.1.2",
     "vue-tsc": "^3.3.14"

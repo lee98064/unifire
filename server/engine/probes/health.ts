@@ -3,7 +3,9 @@ import { EgressHistory, type EgressHealthT, type EgressHistoryT, type HealthStat
 import type { Db } from '../../db'
 import { egressHealth, egressHealthTransitions, egressIpChecks, egressSampleRollups, egressSamples } from '../../db/schema'
 import type { WireDevice, WireDoc } from '../../unifi/endpoints/schemas'
+import { wanTelemetry } from '../../unifi/wan'
 import { UnifiError } from '../../unifi/errors'
+import { archiveReportSamples, utcHour } from '../reports/egress-archive'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -51,7 +53,7 @@ export function wanStatus(gateway: WireDevice | null, records: WireDoc[], group:
   if (!key) return null
   const reports = records.filter(record => [record.subsystem, record.wan_networkgroup, record.wan]
     .some(value => typeof value === 'string' && (value.toLowerCase() === key || key === 'wan1' && value.toLowerCase() === 'wan')))
-  const statuses = [statusOf(gateway?.[key]), ...reports.map(statusOf)]
+  const statuses = [statusOf(wanTelemetry(gateway, group)), ...reports.map(statusOf)]
   return statuses.includes(false) ? false : statuses.includes(true) ? true : null
 }
 
@@ -112,11 +114,12 @@ export function history(db: Db, egressId: string, range: EgressHistoryT['range']
 }
 
 export function compactSamples(db: Db, now: number) {
-  const rawCutoff = Math.floor((now - 7 * DAY) / MINUTE) * MINUTE
+  const rawCutoff = utcHour(now - 7 * DAY)
   const minuteCutoff = Math.floor((now - 30 * DAY) / (10 * MINUTE)) * (10 * MINUTE)
   const rank = sql`max(CASE status WHEN 'down' THEN 3 WHEN 'degraded' THEN 2 WHEN 'unknown' THEN 1 ELSE 0 END)`
   const worstStatus = sql`CASE ${rank} WHEN 3 THEN 'down' WHEN 2 THEN 'degraded' WHEN 1 THEN 'unknown' ELSE 'healthy' END`
   db.transaction(tx => {
+    archiveReportSamples(tx, 0, rawCutoff)
     tx.run(sql`
       INSERT INTO egress_sample_rollups
         (egress_id, resolution, ts, latency_total, latency_count, loss_total, loss_count, status)

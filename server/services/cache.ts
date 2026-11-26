@@ -4,6 +4,7 @@ import type { Db } from '../db'
 import { egresses } from '../db/schema'
 import type { UnifiEndpoints } from '../unifi/endpoints'
 import type { WireDevice, WireStation } from '../unifi/endpoints/schemas'
+import { gatewayRates, wanRates, wanTelemetry } from '../unifi/wan'
 import type { ControllerEvent, EngineEvents } from '../unifi/ws'
 import { liveBus } from '../utils/bus'
 import { createClientSync } from './client-sync'
@@ -88,6 +89,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   const wsRefreshes = new Set<Resource>()
   let wsTimer: ReturnType<typeof setTimeout> | undefined
   let gateway: WireDevice | null = null
+  let gatewayAt = -Infinity
   let stopped = false
   let started = false
   const throughput: Throughput[] = []
@@ -96,17 +98,26 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   let activeClientsAt: number | null = null
   let clientBaselineReady = false
 
-  async function refreshGateway(preferred: WireDevice | undefined, at: number) {
+  async function refreshGateway(preferred: WireDevice | undefined) {
+    const groups = snapshot.networks.filter(network => network.purpose === 'wan' && network.enabled !== false)
+      .map(network => network.wan_networkgroup ?? null)
     let current = preferred
-    if (!current || rate(current['rx_bytes-r']) === null || rate(current['tx_bytes-r']) === null) {
-      const extra = await api.gateway().then(devices => devices[0]).catch(() => undefined)
-      if (extra) current = { ...current, ...extra }
+    const direct = current && gatewayRates(current, groups)
+    const missingWan = groups.some(group => {
+      const rates = wanRates(wanTelemetry(preferred, group))
+      return rates.rxBps === null || rates.txBps === null
+    })
+    if (!direct || direct.rxBps === null || direct.txBps === null || missingWan) {
+      const extra = await api.gateway().then(devices => devices.find(isGateway) ?? devices[0]).catch(() => undefined)
+      if (extra) current = { ...current, ...extra,
+        wan1: { ...current?.wan1, ...extra.wan1 }, wan2: { ...current?.wan2, ...extra.wan2 },
+        wan3: { ...current?.wan3, ...extra.wan3 } }
     }
     if (!current || stopped || !options.active()) return
     gateway = current
-    const rxBps = rate(current['rx_bytes-r'])
-    const txBps = rate(current['tx_bytes-r'])
-    const ts = Math.floor(at / 60_000) * 60_000
+    gatewayAt = now()
+    const { rxBps, txBps } = gatewayRates(current, groups)
+    const ts = Math.floor(gatewayAt / 60_000) * 60_000
     while (throughput[0] && throughput[0].ts < ts - 59 * 60_000) throughput.shift()
     if (rxBps === null || txBps === null) return
     if (throughput.at(-1)?.ts === ts) throughput.pop()
@@ -150,7 +161,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
         }
       }
       options.onPoll({ resource, at, error: null })
-      if (resource === 'devices') await refreshGateway((next as WireDevice[]).find(isGateway), at)
+      if (resource === 'devices') await refreshGateway((next as WireDevice[]).find(isGateway))
     } catch (error) {
       if (!stopped && options.active()) options.onPoll({ resource, at: now(), error })
       throw error
@@ -210,7 +221,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
 
   return {
     snapshot: () => snapshot as Readonly<Snapshot>,
-    gateway: () => gateway,
+    gateway: () => now() - gatewayAt < 2 * POLL_MS.devices ? gateway : null,
     activeClientsAt: () => clientBaselineReady ? activeClientsAt : null,
     throughput: () => throughput.filter(point => point.ts >= Math.floor(now() / 60_000) * 60_000 - 59 * 60_000),
     refresh,

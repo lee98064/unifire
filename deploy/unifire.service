@@ -1,0 +1,37 @@
+[Unit]
+Description=Unifire
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=unifire
+Group=unifire
+WorkingDirectory=/opt/unifire
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=NITRO_HOST=127.0.0.1
+Environment=NUXT_DATA_DIR=/var/lib/unifire
+Environment=NUXT_TRUST_PROXY=true
+Environment=TZ=Asia/Taipei
+EnvironmentFile=-/etc/unifire/unifire.env
+ExecStart=/usr/bin/node /opt/unifire/.output/server/index.mjs
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+StateDirectory=unifire
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+CapabilityBoundingSet=CAP_NET_RAW
+AmbientCapabilities=CAP_NET_RAW
+
+[Install]
+WantedBy=multi-user.target

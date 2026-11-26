@@ -1,0 +1,41 @@
+server {
+    listen 80;
+    server_name unifire.example.com;
+    access_log off;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name unifire.example.com;
+
+    ssl_certificate /etc/nginx/tls/unifire.fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/unifire.key;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $server_name;
+    proxy_set_header X-Forwarded-Host $server_name;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Port $server_port;
+    proxy_set_header Connection "";
+
+    location = /api/events {
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    # The URL contains a kiosk credential or signed action token.
+    location ~ ^/(?:api/(?:kiosk/|push/action$)|kiosk/) {
+        access_log off;
+        error_log /dev/null;
+        add_header Referrer-Policy no-referrer always;
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+}
