@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RestoreInput, SnapshotResource } from '../../shared/schemas/insight'
 import type { SnapshotResourceT } from '../../shared/schemas/insight'
 import { createDatabase } from '../../server/db'
-import { managedRoutes, snapshotItems } from '../../server/db/schema'
+import { managedRoutes, snapshotItems, unifiLogEntries } from '../../server/db/schema'
 import { createAuditWatch } from '../../server/engine/audit-watch'
 import { createSnapshots } from '../../server/engine/snapshots'
 import { indexCollection } from '../../server/engine/snapshots/capture'
@@ -276,6 +276,32 @@ describe('WP4 snapshots and audit with fake UniFi', () => {
     expect(items).toMatchObject([{ ts: entry.timestamp, category: 'system', messageKey: 'audit.unifi.log',
       messageParams: { key: entry.key, message: entry.key } }])
     expect(JSON.stringify(items)).not.toContain('raw-secret')
+  })
+
+  it('renders Network 11 system-log templates from parameter names and re-imports rows stored by older builds', async () => {
+    const scope = runtime.scope
+    // A row imported by an older build that could not read the Network 11 format.
+    database.db.insert(unifiLogEntries).values({ scope, fingerprint: 'old', ts: at - 60_000 }).run()
+    createAuditService(database.db).record({ actor: { type: 'unifi-log', id: null, name: null }, category: 'system', action: 'unifi.log',
+      severity: 'info', messageKey: 'audit.unifi.log', messageParams: { message: '[redacted]', key: 'unifi.event' } }, at - 60_000)
+    const entry = {
+      id: '0f8d7a52-6a43-4c1b-9b7e-4ad1c2f0e001', key: 'CLIENT_CONNECTED_WIRELESS', category: 'CLIENT_DEVICES', severity: 'LOW',
+      timestamp: at - 30 * 60_000, title_raw: 'WiFi Client Connected', message: 'password=raw-secret',
+      message_raw: '{CLIENT} connected to {NETWORK} with {PASSWORD}',
+      parameters: { CLIENT: { id: '02:11:22:33:44:55', name: 'Demo Tablet', ip: '10.0.0.20' }, NETWORK: { id: 'net-1', name: 'Home' }, PASSWORD: { name: 'raw-secret' } },
+    }
+    const spy = vi.spyOn(runtime.api, 'systemLog').mockResolvedValue({ data: [entry], total_page_count: 1, total_element_count: 1, page_number: 0 })
+    await createAuditWatch(database.db, service, () => at).logs()
+    // The first run after the format change looks back a full day; later runs use the short window again.
+    expect(spy.mock.calls[0]![1].timestampFrom).toBe(at - 86_400_000)
+    const { items } = createAuditService(database.db).list({ actor: 'unifi-log' })
+    expect(items).toMatchObject([{ ts: entry.timestamp, messageParams: {
+      key: 'CLIENT_CONNECTED_WIRELESS', message: 'Demo Tablet connected to Home with [redacted]', title: 'WiFi Client Connected', category: 'CLIENT_DEVICES',
+    }, target: { type: 'client', id: '02:11:22:33:44:55', label: 'Demo Tablet' } }])
+    expect(JSON.stringify(items)).not.toContain('raw-secret')
+    await createAuditWatch(database.db, service, () => at + 60_000).logs()
+    expect(spy.mock.calls[1]![1].timestampFrom).toBe(at + 60_000 - 10 * 60_000)
+    expect(createAuditService(database.db).list({ actor: 'unifi-log' }).items).toHaveLength(1)
   })
 
   it('rejects invalid cron expressions and treats unsupported deletes separately from creates', () => {

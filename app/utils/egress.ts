@@ -1,4 +1,4 @@
-import type { EgressKindT, HealthStatusT } from '#shared/schemas/egress'
+import type { EgressKindT, EgressT, HealthStatusT } from '#shared/schemas/egress'
 
 export const egressKindIcon: Record<EgressKindT, string> = {
   wan: 'i-lucide-cable',
@@ -19,6 +19,13 @@ export const healthUi: Record<HealthStatusT, 'success' | 'warning' | 'error' | '
   degraded: 'warning',
   down: 'error',
   unknown: 'neutral',
+}
+
+/** i18n key for an egress status label: disabled egresses and ones without a probe say so instead of "unknown". */
+export function egressHealthKey(e: Pick<EgressT, 'enabled' | 'health' | 'probe'>) {
+  if (!e.enabled) return 'health.disabled'
+  if (e.health.status === 'unknown' && e.health.source === 'none' && e.probe.state === 'disabled') return 'health.notProbed'
+  return `health.${e.health.status}`
 }
 
 /** Latency → color ramp used on rings and sparklines. */

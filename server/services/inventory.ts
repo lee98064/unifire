@@ -250,11 +250,12 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
             txBps: rates.txBps ?? (egress.enabled ? uplinkRates.txBps : null),
           }
         }),
+        // Egresses disabled in UniFi are not counted, so they don't inflate "unknown".
         egresses: {
-          healthy: exits.filter(exit => exit.health.status === 'healthy').length,
-          degraded: exits.filter(exit => exit.health.status === 'degraded').length,
-          down: exits.filter(exit => exit.health.status === 'down').length,
-          unknown: exits.filter(exit => exit.health.status === 'unknown').length,
+          healthy: exits.filter(exit => exit.enabled && exit.health.status === 'healthy').length,
+          degraded: exits.filter(exit => exit.enabled && exit.health.status === 'degraded').length,
+          down: exits.filter(exit => exit.enabled && exit.health.status === 'down').length,
+          unknown: exits.filter(exit => exit.enabled && exit.health.status === 'unknown').length,
         },
         clients: clientCounts,
         people: access.people.counts(at),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { EgressT, EgressHistoryT, SweepStatusT } from '#shared/schemas/egress'
 import type { EChartsOption } from 'echarts'
-import { egressKindIcon, identityPalette } from '~/utils/egress'
+import { egressHealthKey, egressKindIcon, identityPalette } from '~/utils/egress'
 
 const { t } = useI18n()
 const fmt = useFormat()
@@ -97,7 +97,7 @@ const sweepPct = computed(() => sweep.value && sweep.value.total ? Math.round((s
             </div>
             <div class="rounded-lg bg-(--uf-surface-2) ring-1 ring-(--ui-border-muted) p-3">
               <div class="uf-section-title">{{ t('egresses.status') }}</div>
-              <div class="mt-1.5 flex items-center gap-1.5 text-[14px] font-semibold text-highlighted"><StatusDot :status="selected.health.status" />{{ t(`health.${selected.health.status}`) }}</div>
+              <div class="mt-1.5 flex items-center gap-1.5 text-[14px] font-semibold text-highlighted"><StatusDot :status="selected.health.status" />{{ t(egressHealthKey(selected)) }}</div>
               <div class="text-[11px] text-dimmed mt-0.5">{{ t('egresses.since') }} <TimeAgo :ts="selected.health.since" /></div>
             </div>
           </div>

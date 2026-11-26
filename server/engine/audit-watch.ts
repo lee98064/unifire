@@ -1,7 +1,7 @@
-import { lt } from 'drizzle-orm'
+import { and, eq, gte, lt } from 'drizzle-orm'
 import type { SnapshotResourceT } from '#shared/schemas/insight'
 import type { Db } from '../db'
-import { unifiLogEntries } from '../db/schema'
+import { auditEvents, settings, unifiLogEntries } from '../db/schema'
 import { createAuditService } from '../services/audit'
 import type { ControllerService } from '../services/controller'
 import { snapshotResources } from '../unifi/snapshot-resources'
@@ -10,14 +10,16 @@ import type { ControllerEvent } from '../unifi/ws'
 import { captureCollections } from './snapshots/capture'
 import { compareMaps, digest, fieldDiff, labelResolver, type Collections } from './snapshots/diff'
 import { DAY } from './snapshots/store'
+import { describeSystemLog } from './unifi-log'
 
 const watched = ['trafficroutes', 'objects', 'firewall-policies', 'wlanconf', 'portforward', 'networkconf', 'static-dns'] as const
 const configurationEvent = /route|object|firewall|wlan|wifi|port.?forward|network.?conf|static.?dns|config/i
 const external = { type: 'external', id: null, name: null } as const
 const unifiLog = { type: 'unifi-log', id: null, name: null } as const
 const lookback = 10 * 60_000
-const logMessages = new Set(['EVT_LU_Connected', 'EVT_LU_Disconnected', 'EVT_WU_Connected', 'EVT_WU_Disconnected',
-  'EVT_WU_Roam', 'EVT_WU_RoamRadio', 'EVT_RouteUpdated', 'EVT_PortForwardUpdated'])
+// Bumped when the way system-log rows are rendered changes; the next poll re-imports the last day once.
+const LOG_FORMAT_KEY = 'audit.unifiLogFormat'
+const LOG_FORMAT = 2
 
 export function createAuditWatch(db: Db, service: ControllerService, now = Date.now) {
   const audit = createAuditService(db)
@@ -74,28 +76,39 @@ export function createAuditWatch(db: Db, service: ControllerService, now = Date.
     logging = (async () => {
       const end = now()
       const pageSize = 100
+      const current = db.select().from(settings).where(eq(settings.key, LOG_FORMAT_KEY)).get()?.value === LOG_FORMAT
+      if (!current) {
+        // Earlier builds stored Network 11 rows as "[redacted]": drop the last day of imported rows and fetch them again.
+        db.transaction(tx => {
+          tx.delete(auditEvents).where(and(eq(auditEvents.actorType, 'unifi-log'), gte(auditEvents.ts, end - DAY))).run()
+          tx.delete(unifiLogEntries).where(eq(unifiLogEntries.scope, runtime.scope)).run()
+        })
+      }
+      const from = end - (current ? lookback : DAY)
       for (let page = 0; page < 10; page++) {
-        const response = await runtime.api.systemLog('all', { pageNumber: page, pageSize, timestampFrom: end - lookback, timestampTo: end })
+        const response = await runtime.api.systemLog('all', { pageNumber: page, pageSize, timestampFrom: from, timestampTo: end })
         if (!runtime.active() || stopped) return
         for (const row of response.data) {
           const time = row.timestamp ?? row.time ?? row.datetime
           const ts = typeof time === 'number' ? (time < 10_000_000_000 ? time * 1_000 : time)
             : typeof time === 'string' ? Date.parse(time) : end
           const eventTs = Number.isSafeInteger(ts) && ts >= 0 && ts <= end ? ts : end
-          const rawKey = row.key ?? row.eventKey ?? row.event_key
-          const key = typeof rawKey === 'string' && /^EVT_[A-Za-z0-9_]{1,80}$/.test(rawKey) ? rawKey : 'unifi.event'
-          // UniFi can interpolate controller data and secrets into arbitrary prose. Keep only a structured event code.
-          const message = logMessages.has(key) ? key : '[redacted]'
+          // Structured code + template rendered from parameter names only (see describeSystemLog).
+          const { key, message, title, category, severity, target } = describeSystemLog(row)
           const entryId = row._id ?? row.id
           const fingerprint = digest(typeof entryId === 'string' ? entryId : [time ?? null, row])
           db.transaction(tx => {
             const added = tx.insert(unifiLogEntries).values({ scope: runtime.scope, fingerprint, ts: end }).onConflictDoNothing().run()
             if (!added.changes) return
-            audit.record({ actor: unifiLog, category: 'system', action: 'unifi.log', severity: 'info',
-              messageKey: 'audit.unifi.log', messageParams: { message, key } }, eventTs)
+            audit.record({ actor: unifiLog, category: 'system', action: 'unifi.log', severity, target,
+              messageKey: 'audit.unifi.log', messageParams: { message, key, title, category } }, eventTs)
           })
         }
         if (response.data.length < pageSize || response.total_page_count != null && page + 1 >= response.total_page_count) break
+      }
+      if (!current) {
+        db.insert(settings).values({ key: LOG_FORMAT_KEY, value: LOG_FORMAT })
+          .onConflictDoUpdate({ target: settings.key, set: { value: LOG_FORMAT } }).run()
       }
       db.delete(unifiLogEntries).where(lt(unifiLogEntries.ts, end - DAY)).run()
     })().finally(() => { logging = undefined })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EgressT, EgressHistoryT } from '#shared/schemas/egress'
-import { egressKindIcon, latencyColor } from '~/utils/egress'
+import { egressHealthKey, egressKindIcon, latencyColor } from '~/utils/egress'
 
 const props = defineProps<{ egress: EgressT, big?: boolean }>()
 defineEmits<{ open: [] }>()
@@ -27,7 +27,7 @@ const kindLabel = computed(() => t(`egresses.kind.${props.egress.kind}`))
           <div class="text-[11.5px] text-dimmed">{{ egress.kind === 'wan' ? (egress.wanGroup === 'WAN' ? 'WAN1' : egress.wanGroup ?? 'WAN') : kindLabel }} · {{ t('egresses.routesN', { n: egress.routeCount }) }}</div>
         </div>
         <UBadge :color="egress.health.status === 'healthy' ? 'success' : egress.health.status === 'degraded' ? 'warning' : egress.health.status === 'down' ? 'error' : 'neutral'" variant="subtle" size="sm" class="gap-1.5">
-          <StatusDot :status="egress.health.status" :size="6" pulse />{{ t(`health.${egress.health.status}`) }}
+          <StatusDot :status="egress.health.status" :size="6" :pulse="egress.enabled" />{{ t(egressHealthKey(egress)) }}
         </UBadge>
       </div>
 
