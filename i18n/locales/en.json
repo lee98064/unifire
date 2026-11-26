@@ -85,7 +85,18 @@
     "routeShapeUnsupported": "This route uses criteria the editor can’t represent",
     "routeReservedName": "That name is reserved for probe routes",
     "routeDestinationsRequired": "Add at least one destination",
-    "overrideInvalidEnd": "The override must end in the future"
+    "overrideInvalidEnd": "The override must end in the future",
+    "snapshotNotFound": "Snapshot not found",
+    "snapshotItemNotFound": "Item not found in this snapshot",
+    "snapshotScopeMismatch": "This snapshot belongs to another controller or site",
+    "invalidSnapshotCron": "The snapshot schedule isn’t a valid cron expression",
+    "unifiSnapshotIncomplete": "Couldn’t snapshot this collection before writing — write cancelled",
+    "unifiRestoreStale": "The live config changed since the preview — preview again",
+    "unifiRestoreUnsupported": "This item can’t be restored",
+    "unifiRestoreRecoveryFailed": "Replacement failed and the original couldn’t be recreated",
+    "unifiVerifyFailed": "Read-back did not confirm the change",
+    "unifiInvalidResponse": "Unexpected controller response format",
+    "unifiRouteNotFound": "UniFi no longer lists this route"
   },
   "fmt": {
     "h": "{h}h",
@@ -1071,6 +1082,44 @@
       "applied": "Applied",
       "failed": "Failed",
       "skipped": "Skipped"
+    },
+    "summary": {
+      "routeEgress": "Route “{route}” egress: {from} → {to}",
+      "routeToggled": "Route “{route}”: {state}",
+      "added": "Added {resource}: {label}",
+      "removed": "Removed {resource}: {label}",
+      "modified": "{resource} “{label}”: {fields} fields changed",
+      "wifiPassword": "Wi-Fi “{ssid}” password changed",
+      "firewallToggled": "Firewall policy “{name}”: {state}"
+    },
+    "state": {
+      "on": "enabled",
+      "off": "disabled"
+    },
+    "reason": {
+      "excluded": "On the never-touch list or a probe route",
+      "notOwned": "Not a Unifire-managed route",
+      "unsupported": "This resource can’t be restored",
+      "incomplete": "Snapshot or live data incomplete",
+      "replacement": "Needs delete + recreate — restore it on its own",
+      "dryRun": "Dry-run mode — nothing written",
+      "dependencyFailed": "Skipped because an earlier step failed",
+      "compensated": "Replacement failed; original record recreated"
+    },
+    "unavailable": "These collections couldn’t be read and aren’t compared",
+    "resourceShort": {
+      "trafficroutes": "route",
+      "objects": "object",
+      "firewall-policies": "firewall policy",
+      "firewall-zones": "firewall zone",
+      "networkconf": "network",
+      "wlanconf": "Wi-Fi",
+      "portforward": "port forward",
+      "routing": "static route",
+      "static-dns": "static DNS",
+      "qos-rules": "QoS rule",
+      "users": "client setting",
+      "portconf": "port profile"
     }
   },
   "audit": {
@@ -1114,18 +1163,23 @@
     "config": {
       "settingsChanged": "Settings updated: {keys}",
       "controllerSaved": "Controller settings saved (site {site})",
-      "controllerModeChanged": "Controller write mode set to {mode}"
+      "controllerModeChanged": "Controller write mode set to {mode}",
+      "externalChange": "{resource} “{label}” was changed outside Unifire"
     },
     "unifi": {
       "writeApplied": "Applied in UniFi: {action} · {target}",
       "writeUnchanged": "No write needed: {action} · {target}",
       "writeDryRun": "Dry run: {action} · {target}",
-      "writeFailed": "Write failed: {action} · {target} ({error})"
+      "writeFailed": "Write failed: {action} · {target} ({error})",
+      "log": "UniFi event: {message}"
     },
     "egress": {
       "updated": "Updated egress “{egress}”",
       "ipChanged": "Egress “{egress}” public IP changed: {from} → {to}",
-      "sweepDryRun": "Dry run: skipped the IP sweep of {total} egresses"
+      "sweepDryRun": "Dry run: skipped the IP sweep of {total} egresses",
+      "sweepDone": "Egress IP sweep: {ok}/{total} ok, {changed} changed, {failed} failed",
+      "probesProvisioned": "Probe routes: {created} created, {repaired} repaired, {removed} removed",
+      "probeOverlap": "An unowned route overlaps the “{egress}” probe"
     },
     "client": {
       "updated": "Updated client {mac}"
@@ -1171,6 +1225,29 @@
     "method": {
       "password": "password",
       "passkey": "passkey"
+    },
+    "snapshot": {
+      "created": "Configuration snapshot captured ({trigger})",
+      "incomplete": "Snapshot incomplete ({trigger}): couldn’t read {failed}",
+      "deleted": "A snapshot was deleted",
+      "restoreApplied": "Restored: {target} ({action})",
+      "restoreFailed": "Restore failed: {target} ({error})",
+      "restoreSkipped": "Restore skipped: {target} ({reason})",
+      "restoreCompensated": "DNS replacement failed; recreated original “{target}”"
+    },
+    "diffMore": "Show {n} more fields",
+    "diffLess": "Show less",
+    "settingKey": {
+      "timezone": "time zone",
+      "siteUrl": "public URL",
+      "probe": "probe settings",
+      "approval": "device approval",
+      "presence": "presence",
+      "usage": "usage",
+      "snapshots": "snapshot schedule",
+      "broadcastOverrides": "WoL broadcast addresses",
+      "selfMacOverride": "host MAC",
+      "excludedRouteIds": "never-touch routes"
     }
   },
   "presence": {

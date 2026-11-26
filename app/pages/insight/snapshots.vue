@@ -66,7 +66,16 @@ async function applyRestore() {
 }
 const kindUi = { added: { color: 'success', icon: 'i-lucide-plus' }, removed: { color: 'error', icon: 'i-lucide-minus' }, modified: { color: 'warning', icon: 'i-lucide-pencil' } } as const
 const triggerIcon: Record<string, string> = { scheduled: 'i-lucide-alarm-clock', 'pre-write': 'i-lucide-shield', manual: 'i-lucide-hand', 'pre-restore': 'i-lucide-undo-2' }
-const summary = (c: DiffChangeT) => te(c.summaryKey) ? t(c.summaryKey, c.summaryParams) : `${c.kind} ${c.itemLabel}`
+const msg = useMsg()
+// Summary params carry raw ids (resource "trafficroutes", state "true") — localise before interpolating.
+function summary(c: DiffChangeT) {
+  if (!te(c.summaryKey)) return `${c.kind} ${c.itemLabel}`
+  const p: Record<string, string> = { ...c.summaryParams }
+  if (p.resource && te(`snapshots.resourceShort.${p.resource}`)) p.resource = t(`snapshots.resourceShort.${p.resource}`)
+  if (p.state === 'true' || p.state === 'false') p.state = t(p.state === 'true' ? 'snapshots.state.on' : 'snapshots.state.off')
+  return t(c.summaryKey, p)
+}
+const stepNote = (s: RestorePlanT['steps'][number]) => (s.error ? msg(s.error) : s.reason ? (te(`snapshots.reason.${s.reason}`) ? t(`snapshots.reason.${s.reason}`) : s.reason) : '')
 const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v))
 </script>
 
@@ -114,6 +123,8 @@ const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v))
           <UButton v-if="picked.size" class="ml-auto" color="warning" icon="i-lucide-undo-2" @click="previewRestore">{{ t('snapshots.restoreN', { n: picked.size }) }}</UButton>
         </div>
 
+        <UAlert v-if="diff?.unavailableResources?.length" class="mb-4" color="warning" variant="subtle" icon="i-lucide-triangle-alert"
+          :title="t('snapshots.unavailable')" :description="diff.unavailableResources.map(r => t(`snapshots.resource.${r}`)).join('、')" />
         <div v-if="diffStatus === 'pending'" class="space-y-3"><USkeleton v-for="i in 3" :key="i" class="h-24 rounded-xl" /></div>
         <div v-else-if="!diffQuery" class="uf-card"><EmptyState icon="i-lucide-git-compare" :title="t('snapshots.firstSnapshot')" /></div>
         <div v-else-if="!byResource.length" class="uf-card"><EmptyState icon="i-lucide-check-check" :title="t('snapshots.identical')" :description="t('snapshots.identicalDesc')" /></div>
@@ -161,7 +172,7 @@ const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v))
               <UBadge v-if="!s.supported" color="neutral" variant="subtle" size="xs">{{ t('snapshots.unsupported') }}</UBadge>
               <UBadge v-else-if="s.result !== 'pending'" :color="s.result === 'applied' ? 'success' : s.result === 'failed' ? 'error' : 'neutral'" variant="subtle" size="xs">{{ t(`snapshots.result.${s.result}`) }}</UBadge>
             </div>
-            <div class="px-3 py-2 text-[12.5px] text-highlighted">{{ s.label }}<span v-if="s.reason || s.error" class="text-dimmed"> — {{ s.error ?? s.reason }}</span></div>
+            <div class="px-3 py-2 text-[12.5px] text-highlighted">{{ s.label }}<span v-if="s.reason || s.error" class="text-dimmed"> — {{ stepNote(s) }}</span></div>
             <pre v-if="s.body" class="px-3 py-2 text-[11px] uf-mono text-toned max-h-48 overflow-auto bg-(--uf-surface-2)/50 border-t border-(--ui-border-muted)">{{ JSON.stringify(s.body, null, 2) }}</pre>
           </div>
         </div>

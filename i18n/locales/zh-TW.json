@@ -85,7 +85,18 @@
     "routeShapeUnsupported": "這條路由的條件超出受管路由編輯器能表示的範圍",
     "routeReservedName": "此名稱保留給探測路由",
     "routeDestinationsRequired": "請至少加入一個目的地",
-    "overrideInvalidEnd": "臨時出口的結束時間必須在未來"
+    "overrideInvalidEnd": "臨時出口的結束時間必須在未來",
+    "snapshotNotFound": "找不到這份快照",
+    "snapshotItemNotFound": "快照中找不到這個項目",
+    "snapshotScopeMismatch": "這份快照屬於其他控制器或站點",
+    "invalidSnapshotCron": "快照排程不是有效的 cron 表達式",
+    "unifiSnapshotIncomplete": "寫入前無法完整快照這類設定，已取消寫入",
+    "unifiRestoreStale": "UniFi 上的設定在預覽後又變了，請重新預覽",
+    "unifiRestoreUnsupported": "此項目不支援還原",
+    "unifiRestoreRecoveryFailed": "替換失敗且無法重建原始紀錄",
+    "unifiVerifyFailed": "寫入後讀回無法確認變更",
+    "unifiInvalidResponse": "控制器回應格式不符預期",
+    "unifiRouteNotFound": "UniFi 找不到這條路由"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -1071,6 +1082,44 @@
       "applied": "已套用",
       "failed": "失敗",
       "skipped": "略過"
+    },
+    "summary": {
+      "routeEgress": "路由「{route}」出口：{from} → {to}",
+      "routeToggled": "路由「{route}」：{state}",
+      "added": "新增{resource}：{label}",
+      "removed": "移除{resource}：{label}",
+      "modified": "{resource}「{label}」修改了 {fields} 個欄位",
+      "wifiPassword": "Wi-Fi「{ssid}」的密碼已變更",
+      "firewallToggled": "防火牆政策「{name}」：{state}"
+    },
+    "state": {
+      "on": "已啟用",
+      "off": "已停用"
+    },
+    "reason": {
+      "excluded": "在永不寫入清單或是探測路由",
+      "notOwned": "不是 Unifire 管理的路由",
+      "unsupported": "此類設定不支援還原",
+      "incomplete": "快照或目前設定讀取不完整",
+      "replacement": "需要先刪除再重建，請單獨還原",
+      "dryRun": "Dry-run 模式，未實際寫入",
+      "dependencyFailed": "前一個步驟失敗，已略過",
+      "compensated": "替換失敗，已重建原始紀錄"
+    },
+    "unavailable": "以下設定無法讀取，未列入比對",
+    "resourceShort": {
+      "trafficroutes": "路由",
+      "objects": "Object",
+      "firewall-policies": "防火牆政策",
+      "firewall-zones": "防火牆區域",
+      "networkconf": "網路",
+      "wlanconf": "Wi-Fi",
+      "portforward": "連接埠轉發",
+      "routing": "靜態路由",
+      "static-dns": "靜態 DNS",
+      "qos-rules": "QoS 規則",
+      "users": "裝置設定",
+      "portconf": "連接埠設定檔"
     }
   },
   "audit": {
@@ -1114,18 +1163,23 @@
     "config": {
       "settingsChanged": "已更新設定：{keys}",
       "controllerSaved": "已儲存控制器設定（站點 {site}）",
-      "controllerModeChanged": "控制器寫入模式改為 {mode}"
+      "controllerModeChanged": "控制器寫入模式改為 {mode}",
+      "externalChange": "{resource}「{label}」在 Unifire 之外被修改"
     },
     "unifi": {
       "writeApplied": "UniFi 已套用：{action} · {target}",
       "writeUnchanged": "無需寫入：{action} · {target}",
       "writeDryRun": "Dry-run 試算：{action} · {target}",
-      "writeFailed": "寫入失敗：{action} · {target}（{error}）"
+      "writeFailed": "寫入失敗：{action} · {target}（{error}）",
+      "log": "UniFi 事件：{message}"
     },
     "egress": {
       "updated": "已更新出口「{egress}」的設定",
       "ipChanged": "出口「{egress}」公網 IP 變更：{from} → {to}",
-      "sweepDryRun": "Dry-run：略過 {total} 個出口的 IP 掃描"
+      "sweepDryRun": "Dry-run：略過 {total} 個出口的 IP 掃描",
+      "sweepDone": "出口 IP 掃描完成：{ok}/{total} 成功，{changed} 個變更，{failed} 個失敗",
+      "probesProvisioned": "探測路由已更新：新增 {created}、修復 {repaired}、移除 {removed}",
+      "probeOverlap": "有一條非 Unifire 的路由與「{egress}」的探測路由重疊"
     },
     "client": {
       "updated": "已更新裝置 {mac}"
@@ -1171,6 +1225,29 @@
     "method": {
       "password": "密碼",
       "passkey": "Passkey"
+    },
+    "snapshot": {
+      "created": "已建立設定快照（{trigger}）",
+      "incomplete": "快照不完整（{trigger}）：無法讀取 {failed}",
+      "deleted": "已刪除一份快照",
+      "restoreApplied": "已還原：{target}（{action}）",
+      "restoreFailed": "還原失敗：{target}（{error}）",
+      "restoreSkipped": "略過還原：{target}（{reason}）",
+      "restoreCompensated": "DNS 替換失敗，已重建原始紀錄「{target}」"
+    },
+    "diffMore": "顯示其餘 {n} 個欄位",
+    "diffLess": "收合",
+    "settingKey": {
+      "timezone": "時區",
+      "siteUrl": "對外網址",
+      "probe": "探測設定",
+      "approval": "新裝置審核",
+      "presence": "在家偵測",
+      "usage": "用量統計",
+      "snapshots": "快照排程",
+      "broadcastOverrides": "WoL 廣播位址",
+      "selfMacOverride": "主機 MAC",
+      "excludedRouteIds": "永不寫入的路由"
     }
   },
   "presence": {

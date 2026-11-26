@@ -61,6 +61,8 @@ export const SnapshotDiff = z.object({
   fromId: Id,
   toId: Id.nullable(),
   changes: z.array(DiffChange),
+  /** Collections that could not be read (live or stored) — excluded from `changes`, so "no changes" is not implied. */
+  unavailableResources: z.array(SnapshotResource).optional(),
 })
 
 /** GET /api/snapshots/:id/items/:resource/:itemId — redacted document. */

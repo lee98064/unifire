@@ -82,3 +82,12 @@ Read `docs/codex/BRIEF.md` first. WP1–WP4 are in the repo.
 - counter reset handling; union of active minutes; period boundaries incl. weekly/monthly & tz; weekday
   limits; block reconciliation never unblocks foreign blocks; allowance precedence; bedtime crossing
   midnight; presence grace; one pending request rule; member data isolation.
+
+## WP4 review follow-ups (from Claude — do these too)
+- **`SnapshotDiff.unavailableResources`** (contract accepted, already in `shared/schemas/insight.ts` as an
+  optional array): populate it with every collection that could not be read (stored or live) instead of
+  silently omitting it, so the UI can warn "these collections weren't compared".
+- **One audit row per route switch.** A reconciler egress switch currently produces two rows:
+  `audit.route.switched` and the gate's `audit.unifi.writeApplied` for the same PUT. Keep only
+  `route.switched` (attach the gate's field diff to it); suppress the gate row for reconciler switches the
+  same way `quietProbe` does, but keep failures loud.
