@@ -19,7 +19,7 @@ import * as X from './schemas/access'
 import * as M from './schemas/automation'
 import * as I from './schemas/insight'
 import * as S from './schemas/system'
-import { Ok, Paged } from './schemas/common'
+import { BoolQuery, Ok, Paged } from './schemas/common'
 
 type Auth = 'public' | 'any' | 'admin' | 'member'
 interface Endpoint { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; auth: Auth; input?: z.ZodTypeAny; output: z.ZodTypeAny; note?: string }
@@ -73,7 +73,7 @@ export const api = {
   managedRoute: ep('GET', '/api/managed-routes/:id', 'admin', R.ManagedRoute),
   managedRouteCreate: ep('POST', '/api/managed-routes', 'admin', R.ManagedRoute, R.ManagedRouteCreateInput),
   managedRouteUpdate: ep('PATCH', '/api/managed-routes/:id', 'admin', R.ManagedRoute, R.ManagedRouteUpdateInput),
-  managedRouteRelease: ep('DELETE', '/api/managed-routes/:id', 'admin', Ok, z.object({ deleteFromUnifi: z.coerce.boolean().default(false) }), 'Stop managing; optionally delete the UniFi route if Unifire created it.'),
+  managedRouteRelease: ep('DELETE', '/api/managed-routes/:id', 'admin', Ok, z.object({ deleteFromUnifi: BoolQuery.default(false) }), 'Stop managing; optionally delete the UniFi route if Unifire created it.'),
   managedRouteSchedule: ep('PUT', '/api/managed-routes/:id/schedule', 'admin', R.ManagedRoute, R.ScheduleInput),
   managedRouteOverride: ep('POST', '/api/managed-routes/:id/override', 'admin', R.ManagedRoute, R.OverrideInput),
   managedRouteOverrideClear: ep('DELETE', '/api/managed-routes/:id/override', 'admin', R.ManagedRoute),
@@ -82,7 +82,7 @@ export const api = {
   switchLog: ep('GET', '/api/switch-log', 'admin', Paged(R.SwitchLogEntry), z.object({ managedRouteId: z.string().optional(), cursor: z.string().optional(), limit: z.coerce.number().default(50) })),
 
   // ── clients & approvals ───────────────────────────────────────
-  clients: ep('GET', '/api/clients', 'admin', z.array(X.Client), z.object({ online: z.coerce.boolean().optional(), personId: z.string().optional(), q: z.string().optional() })),
+  clients: ep('GET', '/api/clients', 'admin', z.array(X.Client), z.object({ online: BoolQuery.optional(), personId: z.string().optional(), q: z.string().optional() })),
   client: ep('GET', '/api/clients/:mac', 'admin', X.Client),
   clientUpdate: ep('PATCH', '/api/clients/:mac', 'admin', X.Client, X.ClientUpdateInput),
   clientAction: ep('POST', '/api/clients/:mac/action', 'admin', X.Client, X.ClientActionInput),

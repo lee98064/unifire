@@ -16,6 +16,9 @@ export const Weekday = z.number().int().min(0).max(6)
 
 export const Id = z.string().min(1)
 
+/** Boolean query-string param: only "true" / "false" (z.coerce.boolean would turn "false" into true). */
+export const BoolQuery = z.enum(['true', 'false']).transform(v => v === 'true')
+
 export const Page = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(50),
   cursor: z.string().optional(),

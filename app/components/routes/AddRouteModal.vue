@@ -4,7 +4,8 @@ import type { ClientT } from '#shared/schemas/access'
 
 const props = defineProps<{ unifiRoutes: UnifiRouteT[], preselect?: string | null }>()
 const open = defineModel<boolean>('open', { default: false })
-const { t } = useI18n()
+const { t, te } = useI18n()
+const matchLabel = (v: string) => (te(`routes.match.${v}`) ? t(`routes.match.${v}`) : v)
 const api = useApi()
 const { egresses } = useEgresses()
 const { people } = usePeople()
@@ -16,7 +17,8 @@ const busy = ref(false)
 
 /* adopt */
 const adoptId = ref<string | null>(null)
-const adoptable = computed(() => props.unifiRoutes.filter(r => r.ownership === 'external'))
+// Only routes Unifire can model: known matching type, egress-based (not next-hop), no unfamiliar target types.
+const adoptable = computed(() => props.unifiRoutes.filter(r => r.ownership === 'external' && r.egressId && ['INTERNET', 'DOMAIN', 'IP', 'REGION'].includes(r.matchingTarget) && r.targets.every(tg => tg.type !== 'OTHER')))
 watch(() => props.preselect, (v) => { if (v) { mode.value = 'adopt'; adoptId.value = v } }, { immediate: true })
 
 /* create */
@@ -98,7 +100,7 @@ async function submit() {
             <URadioGroup :model-value="adoptId ?? undefined" :items="[{ value: r.id, label: '' }]" class="pointer-events-none" />
             <div class="min-w-0 flex-1">
               <div class="text-[13px] font-medium text-highlighted truncate">{{ r.description || t('routes.unnamed') }}</div>
-              <div class="text-[11.5px] text-dimmed truncate">{{ t(`routes.match.${r.matchingTarget}`) }} · {{ r.targets.length }} {{ t('routes.sources') }}</div>
+              <div class="text-[11.5px] text-dimmed truncate">{{ matchLabel(r.matchingTarget) }} · {{ r.targets.length }} {{ t('routes.sources') }}</div>
             </div>
             <UBadge v-if="r.suspectedAutomation" color="warning" variant="subtle" size="sm" icon="i-lucide-bot">{{ t('routes.suspectedAutomation') }}</UBadge>
             <EgressChip :id="r.egressId" size="xs" />

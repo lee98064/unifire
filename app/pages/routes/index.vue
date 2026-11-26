@@ -3,7 +3,8 @@ import type { ManagedRouteT, UnifiRouteT, SwitchLogEntryT } from '#shared/schema
 import type { TableColumn } from '@nuxt/ui'
 import { wallClock } from '#shared/utils/schedule'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
+const matchLabel = (v: string) => (te(`routes.match.${v}`) ? t(`routes.match.${v}`) : v)
 const fmt = useFormat()
 const route = useRoute()
 const router = useRouter()
@@ -94,7 +95,7 @@ const stateUi: Record<string, { color: 'success' | 'warning' | 'error' | 'neutra
                 <h3 class="text-[15px] font-semibold text-highlighted truncate">{{ r.name }}</h3>
                 <UBadge :color="stateUi[r.state]!.color" variant="subtle" size="sm">{{ t(stateUi[r.state]!.label) }}</UBadge>
               </div>
-              <p class="text-[12px] text-dimmed mt-0.5 truncate">{{ t(`routes.match.${r.matchingTarget}`) }} · {{ t('routes.sourcesN', { n: r.targets.length }) }}<template v-if="r.killSwitch"> · Kill switch</template></p>
+              <p class="text-[12px] text-dimmed mt-0.5 truncate">{{ matchLabel(r.matchingTarget) }} · {{ t('routes.sourcesN', { n: r.targets.length }) }}<template v-if="r.killSwitch"> · Kill switch</template></p>
             </div>
             <UIcon name="i-lucide-chevron-right" class="size-4 text-dimmed group-hover:text-highlighted group-hover:translate-x-0.5 transition" />
           </div>
@@ -158,7 +159,7 @@ const stateUi: Record<string, { color: 'success' | 'warning' | 'error' | 'neutra
           </div>
         </template>
         <template #match-cell="{ row }">
-          <span class="text-[12.5px] text-toned">{{ t(`routes.match.${row.original.matchingTarget}`) }}</span>
+          <span class="text-[12.5px] text-toned">{{ matchLabel(row.original.matchingTarget) }}</span>
           <UBadge v-if="!row.original.enabled" color="neutral" variant="outline" size="xs" class="ml-1.5">{{ t('common.disabled') }}</UBadge>
         </template>
         <template #egress-cell="{ row }"><EgressChip :id="row.original.egressId" size="xs" /></template>

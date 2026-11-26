@@ -21,16 +21,23 @@ export const RouteTarget = z.discriminatedUnion('type', [
  */
 export const RouteOwnership = z.enum(['managed', 'probe', 'external', 'excluded', 'object', 'predefined'])
 
-/** Every UniFi traffic route, as listed by GET /api/routes. */
+/** Route source as listed from UniFi — includes types Unifire doesn't model (kept read-only). */
+export const UnifiRouteTarget = z.union([RouteTarget, z.object({ type: z.literal('OTHER'), raw: z.string() })])
+
+/** Every UniFi traffic route, as listed by GET /api/routes (never omit routes; unknown shapes are read-only). */
 export const UnifiRoute = z.object({
   id: Id, // UniFi _id
   description: z.string(),
   enabled: z.boolean(),
-  matchingTarget: MatchingTarget,
-  targets: z.array(RouteTarget),
+  /** INTERNET | DOMAIN | IP | REGION, or an unfamiliar value from newer firmware. */
+  matchingTarget: z.string(),
+  targets: z.array(UnifiRouteTarget),
   /** Destination summary for DOMAIN / IP / REGION routes (human readable, e.g. ["example.com", "1.2.3.0/24", "US"]). */
   destinations: z.array(z.string()),
-  egressId: Id, // top-level network_id
+  /** Top-level network_id; null for next-hop-only routes. */
+  egressId: Id.nullable(),
+  /** Next-hop IP for next-hop routes, else null. */
+  nextHop: z.string().nullable(),
   killSwitch: z.boolean(),
   ownership: RouteOwnership,
   managedRouteId: Id.nullable(),
@@ -175,6 +182,7 @@ export type MatchingTargetT = z.infer<typeof MatchingTarget>
 export type RouteTargetT = z.infer<typeof RouteTarget>
 export type RouteOwnershipT = z.infer<typeof RouteOwnership>
 export type UnifiRouteT = z.infer<typeof UnifiRoute>
+export type UnifiRouteTargetT = z.infer<typeof UnifiRouteTarget>
 export type ScheduleGridT = z.infer<typeof ScheduleGrid>
 export type RotationGeneratorT = z.infer<typeof RotationGenerator>
 export type RouteScheduleT = z.infer<typeof RouteSchedule>

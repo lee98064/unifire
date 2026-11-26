@@ -4,7 +4,7 @@ import { Client, ClientActionInput, ClientUpdateInput } from '#shared/schemas/ac
 import { Wlan } from '#shared/schemas/automation'
 import { Id } from '#shared/schemas/common'
 import { Egress, EgressUpdateInput } from '#shared/schemas/egress'
-import { MatchingTarget, RouteTarget, UnifiRoute, type RouteTargetT } from '#shared/schemas/routes'
+import { RouteTarget, UnifiRoute, type UnifiRouteTargetT } from '#shared/schemas/routes'
 import { DashboardSummary } from '#shared/schemas/system'
 import type { Db } from '../db'
 import { blocks, clients, egresses, people, personDevices } from '../db/schema'
@@ -21,10 +21,10 @@ const EMPTY = { networks: [], routes: [], activeClients: [], knownClients: [], d
 const text = z.string()
 
 function targets(route: WireRoute) {
-  return route.target_devices.flatMap((value): RouteTargetT[] => {
+  return route.target_devices.map((value): UnifiRouteTargetT => {
     const mac = MacAddress.safeParse(value.client_mac).data
     const result = RouteTarget.safeParse({ type: value.type, mac, networkId: value.network_id })
-    return result.success ? [result.data] : []
+    return result.success ? result.data : { type: 'OTHER', raw: JSON.stringify(value) }
   })
 }
 
@@ -54,15 +54,15 @@ export function createInventory(db: Db, service: ControllerService) {
 
   function listRoutes() {
     const ownership = service.ownership(site())
+    // Never omit routes: unfamiliar shapes are listed read-only (matchingTarget raw, egressId null, OTHER targets).
     return snapshot().routes.flatMap(route => {
-      const match = MatchingTarget.safeParse(route.matching_target)
-      const egressId = Id.safeParse(route.network_id || route.next_hop)
-      if (!match.success || !egressId.success) return []
+      const egressId = Id.safeParse(route.network_id)
+      const nextHop = typeof route.next_hop === 'string' && route.next_hop ? route.next_hop : null
       const owner = classifyRoute(route, ownership)
       return [UnifiRoute.parse({
         id: route._id, description: route.description ?? '', enabled: route.enabled,
-        matchingTarget: match.data, targets: targets(route), destinations: destinations(route),
-        egressId: egressId.data, killSwitch: route.kill_switch_enabled ?? false, ownership: owner,
+        matchingTarget: route.matching_target ?? 'UNKNOWN', targets: targets(route), destinations: destinations(route),
+        egressId: egressId.success ? egressId.data : null, nextHop, killSwitch: route.kill_switch_enabled ?? false, ownership: owner,
         managedRouteId: owner === 'managed' ? ownership.managed.get(route._id)?.id ?? null : null,
         suspectedAutomation: false, lastExternalChangeAt: null,
       })]
@@ -151,7 +151,8 @@ export function createInventory(db: Db, service: ControllerService) {
         today: { activeMinutes: 0, bytes: 0 },
         managedRouteIds: routes.flatMap(route =>
           route.managedRouteId && route.targets.some(target => target.type === 'ALL_CLIENTS'
-            || (target.type === 'CLIENT' ? target.mac === row.mac : target.networkId === networkId)) ? [route.managedRouteId] : []),
+            || (target.type === 'CLIENT' && target.mac === row.mac)
+            || (target.type === 'NETWORK' && target.networkId === networkId)) ? [route.managedRouteId] : []),
       }]
     }))
   }
