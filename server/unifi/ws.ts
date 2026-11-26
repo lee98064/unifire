@@ -20,7 +20,14 @@ export type ControllerEvent =
   | { type: 'egress.healthChanged', egressId: string }
   | { type: 'egress.down' | 'egress.up', egressId: string }
   | { type: 'egress.ip_changed', egressId: string, previousIp: string, ip: string }
+  | { type: 'client.new', mac: string, displayName: string }
+  | { type: 'person.arrived' | 'person.left', personId: string, mac: string }
+  | { type: 'quota.warning' | 'quota.exceeded', quotaId: string, personId: string | null }
+  | { type: 'access.changed' | 'access.clientsChanged' }
   | { type: 'notification', event: 'route_drift', managedRouteId: string }
+  | { type: 'notification', event: 'new_device', mac: string, displayName: string }
+  | { type: 'notification', event: 'quota_warning' | 'quota_exceeded', quotaId: string, personId: string | null }
+  | { type: 'notification', event: 'extension_request', requestId: string, personId: string }
 
 export type EngineEvents = EventEmitter<{ event: [ControllerEvent] }>
 

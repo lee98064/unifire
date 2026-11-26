@@ -5,9 +5,10 @@ import { createSnapshots } from '../engine/snapshots'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
 import { createControllerService, type ControllerService } from './controller'
-import { createInventory } from './inventory'
+import { createAccess } from './access'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
+let access: ReturnType<typeof createAccess> | undefined
 let current: ControllerService | undefined
 let routing: ReturnType<typeof createRouting> | undefined
 let snapshots: ReturnType<typeof createSnapshots> | undefined
@@ -18,6 +19,13 @@ export async function useController() {
   if (!current) await starting
   if (!current) throw new UnifiError('UNIFI_INACTIVE')
   return current
+}
+
+export async function useAccess() {
+  const service = await useController()
+  await service.ready()
+  if (!access) throw new UnifiError('UNIFI_INACTIVE')
+  return access
 }
 
 export async function useRouting() {
@@ -48,8 +56,7 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
   let maintenance: Promise<void> | undefined
   let stopInsights: (() => Promise<unknown>) | undefined
   let stopRouting: (() => Promise<void>) | undefined
-  let inventory: ReturnType<typeof createInventory> | undefined
-  let expiry: Promise<void> | undefined
+  let stopAccess: (() => Promise<void>) | undefined
 
   async function maintain() {
     if (stopping) return
@@ -62,11 +69,12 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       const stale = current
       current = undefined
       routing = undefined
-      inventory = undefined
+      access = undefined
       snapshots = undefined
       snapshotsReady = undefined
       expiresAt = 0
       await stopRouting?.()
+      await stopAccess?.()
       await stopInsights?.()
       await stale.stop()
     }
@@ -81,7 +89,8 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       stopInsights = () => Promise.allSettled([snapshotJob.stop(), stopWatch()])
       routing = createRouting(db, current)
       stopRouting = routing.start()
-      inventory = createInventory(db, current, routing)
+      access = createAccess(db, current)
+      stopAccess = access.start(() => Date.now() < expiresAt)
     } catch (error) {
       expiresAt = 0
       releaseLease(ENGINE_LEASE, owner, db)
@@ -95,26 +104,20 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
     maintenance = maintain().catch(() => {}).finally(() => { maintenance = undefined })
   }, 10_000)
   heartbeat.unref()
-  const expire = setInterval(() => {
-    if (expiry || !inventory || Date.now() >= expiresAt) return
-    expiry = inventory.expireManualBlocks().catch(() => {}).finally(() => { expiry = undefined })
-  }, 15_000)
-  expire.unref()
-
   return async () => {
     stopping = true
     clearInterval(heartbeat)
-    clearInterval(expire)
     await maintenance
     const service = current
+    access = undefined
     current = undefined
     routing = undefined
     snapshots = undefined
     snapshotsReady = undefined
     await stopRouting?.()
+    await stopAccess?.()
     await stopInsights?.()
     await service?.stop()
-    await expiry
     releaseLease(ENGINE_LEASE, owner, db)
   }
 }

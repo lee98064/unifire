@@ -5,7 +5,9 @@ import { routingSql } from './0002-routing'
 
 import { snapshotsSql } from './0003-snapshots'
 
-const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }]
+import { accessSql } from './0004-access'
+
+const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }]
 
 export function migrateDatabase(sqlite: Database.Database) {
   sqlite.transaction(() => {

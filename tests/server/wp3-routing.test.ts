@@ -247,6 +247,11 @@ describe('WP3 with fake UniFi', () => {
         expect(timed.log({ managedRouteId: route.id }).items[0])
           .toMatchObject({ reason: 'schedule', verified: true, fromEgressId: wan, toEgressId: vpn })
       }, { timeout: 2_000 })
+      const audit = createAuditService(database.db).list({ category: 'route' }).items
+      expect(audit.filter(entry => entry.action === 'route.switched' && entry.target?.id === route.id)).toMatchObject([
+        { diff: [{ path: 'network_id', before: wan, after: vpn }] },
+      ])
+      expect(audit.filter(entry => entry.action === 'routes.update')).toEqual([])
       expect(timed.log({ managedRouteId: route.id }).items[0]!.ts - (monday + HOUR)).toBeLessThan(1_000)
     } finally { await stop() }
     at += HOUR

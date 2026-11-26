@@ -23,12 +23,19 @@ export function createSnapshotStore(db: Db) {
     return row
   }
 
-  function documents(id: string): Collections {
+  function documents(id: string, unreadable?: Set<SnapshotResourceT>): Collections {
     const collections: Collections = new Map()
     for (const item of db.select().from(snapshotItems).where(eq(snapshotItems.snapshotId, id)).all()) {
       const entries = collections.get(item.resource) ?? new Map<string, SnapshotEntry>()
-      entries.set(item.itemId, decode(item))
-      collections.set(item.resource, entries)
+      if (unreadable?.has(item.resource)) continue
+      try {
+        entries.set(item.itemId, decode(item))
+        collections.set(item.resource, entries)
+      } catch (error) {
+        if (!unreadable) throw error
+        unreadable.add(item.resource)
+        collections.delete(item.resource)
+      }
     }
     return collections
   }

@@ -8,7 +8,7 @@ import {
   type ControllerModeT, type ControllerStatusT,
 } from '#shared/schemas/controller'
 import type { Db } from '../db'
-import { controller, egresses, managedRoutes, settings } from '../db/schema'
+import { controller, egresses, managedRoutes, quotaRoutes, settings } from '../db/schema'
 import { probeCapabilities } from '../unifi/capabilities'
 import { createUnifiTransport, type UnifiConfig } from '../unifi/client'
 import { createUnifiEndpoints } from '../unifi/endpoints'
@@ -24,6 +24,7 @@ import { createSyncCache } from './cache'
 import { createSettingsService } from './settings'
 import { createRouteObservations } from './route-observations'
 import { seedMockDemo } from './seed'
+import { seedMockAccess } from './seed-access'
 
 const MOCK_ROW = 'mock://unifire'
 const MOCK_MODE = 'wp2.mockMode'
@@ -119,6 +120,8 @@ export async function createControllerService(db: Db, options: {
     const sweepId = scope && db.select().from(settings).where(eq(settings.key, `routing.sweepRoute:${scope}`)).get()?.value
     return {
       managed: new Map(managed.map(row => [row.unifiRouteId, row])),
+      quotaRoutes: new Set(scope ? db.select({ id: quotaRoutes.routeId }).from(quotaRoutes)
+        .where(eq(quotaRoutes.controllerScope, scope)).all().map(row => row.id) : []),
       excluded: new Set(settingsService.get().excludedRouteIds),
       probes: new Set([...probeRows.flatMap(row => row.id ? [row.id] : []), ...(typeof sweepId === 'string' ? [sweepId] : [])]),
     }
@@ -197,7 +200,7 @@ export async function createControllerService(db: Db, options: {
     }
 
     const cache = createSyncCache(api, {
-      db, site: config.site, engine, active: live, observeRoutes: observations.observe,
+      db, site: config.site, scope, engine, active: live, observeRoutes: observations.observe,
       onPoll(result) {
         const wasConnected = state.connected
         if (result.error === null) {
@@ -229,7 +232,8 @@ export async function createControllerService(db: Db, options: {
       site: config.site, mode, ownership: () => ownership(config.site, scope),
       baseline: id => {
         const row = ownership(config.site, scope).managed.get(id)
-        return row?.baselineFingerprint
+        return row?.baselineFingerprint ?? db.select({ fingerprint: quotaRoutes.fingerprint }).from(quotaRoutes)
+          .where(and(eq(quotaRoutes.controllerScope, scope), eq(quotaRoutes.routeId, id))).get()?.fingerprint
       },
       active: live,
       qualified: () => options.mock || db.select().from(settings)
@@ -311,7 +315,10 @@ export async function createControllerService(db: Db, options: {
       cache.start()
       await Promise.allSettled([cache.sync(), inspectVersion(true)])
       if (!live()) return
-      if (options.mock) seedMockDemo(db, cache.snapshot().routes)
+      if (options.mock) {
+        seedMockDemo(db, cache.snapshot().routes)
+        seedMockAccess(db, new Set(cache.snapshot().activeClients.map(row => row.mac)))
+      }
       connectEvents()
       // Boot only qualifies read endpoints. An explicit admin probe authorizes the live scratch route.
       await qualify({ ...systemContext, dryRun: true })
@@ -534,7 +541,7 @@ export type ControllerService = {
   routingLocked: () => boolean
   status: () => ControllerStatusT
   ownership: (site: string) => {
-    managed: Map<string, typeof managedRoutes.$inferSelect>, excluded: Set<string>, probes: Set<string>
+    managed: Map<string, typeof managedRoutes.$inferSelect>, excluded: Set<string>, probes: Set<string>, quotaRoutes: Set<string>
   }
   test: (input: ControllerInputT, context: WriteContext) => Promise<ControllerStatusT>
   save: (input: ControllerInputT, context: WriteContext) => Promise<ControllerStatusT>

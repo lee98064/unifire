@@ -3,17 +3,19 @@ import type { RouteOwnershipT } from '#shared/schemas/routes'
 import type { WireRoute } from '../unifi/endpoints/schemas'
 
 export const PROBE_PREFIX = '[unifire-probe]'
+export const QUOTA_PREFIX = '[unifire-quota]'
 
 export function classifyRoute(route: WireRoute, inputs: {
   managed: ReadonlyMap<string, { id: string }>
   excluded: ReadonlySet<string>
   probes: ReadonlySet<string>
+  quotaRoutes?: ReadonlySet<string>
 }): RouteOwnershipT {
   if (inputs.excluded.has(route._id)) return 'excluded'
   if (Object.hasOwn(route, 'origin_type')) return 'object'
   if (route.predefined === true) return 'predefined'
   if (route.description?.startsWith(PROBE_PREFIX) && inputs.probes.has(route._id)) return 'probe'
-  if (inputs.managed.has(route._id)) return 'managed'
+  if (inputs.managed.has(route._id) || (route.description?.startsWith(QUOTA_PREFIX) && inputs.quotaRoutes?.has(route._id))) return 'managed'
   return 'external'
 }
 

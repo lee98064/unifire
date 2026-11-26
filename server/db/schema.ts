@@ -1,8 +1,8 @@
 import { sql } from 'drizzle-orm'
-import { blob, check, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, check, index, integer, primaryKey, real, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { LocaleT, RoleT } from '#shared/schemas/auth'
 import type { CapabilityT, ControllerModeT, ControllerStatusT } from '#shared/schemas/controller'
-import type { ApprovalStateT, BlockSourceT, ExtensionRequestT, QuotaT } from '#shared/schemas/access'
+import type { ApprovalStateT, BlockSourceT, ExtensionRequestT, QuotaStatusT, QuotaT } from '#shared/schemas/access'
 import type { EgressHealthT, EgressKindT, HealthStatusT } from '#shared/schemas/egress'
 import type { GuestWifiT, PoeWatchdogT, RuleT, RuleRunT, WatchdogEventT, WolTargetT } from '#shared/schemas/automation'
 import type { AuditEventT, SnapshotResourceT, SnapshotT } from '#shared/schemas/insight'
@@ -302,6 +302,8 @@ export const extensionRequests = sqliteTable('extension_requests', {
   quotaId: text('quota_id').references(() => quotas.id, { onDelete: 'set null' }),
   amount: real('amount').notNull(),
   grantedAmount: real('granted_amount'),
+  periodStart: integer('period_start'),
+  expiresAt: integer('expires_at'),
   reason: text('reason'),
   status: text('status').$type<ExtensionRequestT['status']>().notNull().default('pending'),
   createdAt: integer('created_at').notNull(),
@@ -311,6 +313,7 @@ export const extensionRequests = sqliteTable('extension_requests', {
   index('extension_requests_person_ts').on(t.personId, t.createdAt),
   index('extension_requests_status_ts').on(t.status, t.createdAt),
   index('extension_requests_quota').on(t.quotaId),
+  uniqueIndex('extension_requests_one_pending').on(t.personId).where(sql`status = 'pending'`),
 ])
 
 export const rules = sqliteTable('rules', {
@@ -452,6 +455,7 @@ export const presenceSessions = sqliteTable('presence_sessions', {
   mac: text('mac').notNull(),
   start: integer('start').notNull(),
   end: integer('end'),
+  offlineSince: integer('offline_since'),
 }, t => [
   index('presence_sessions_person_start').on(t.personId, t.start),
   index('presence_sessions_start').on(t.start),
@@ -505,3 +509,37 @@ export const speedtests = sqliteTable('speedtests', {
   upMbps: real('up_mbps').notNull(),
   latencyMs: real('latency_ms'),
 }, t => [index('speedtests_ts').on(t.ts), index('speedtests_egress_ts').on(t.egressId, t.ts)])
+
+export const appliedClientBlocks = sqliteTable('applied_client_blocks', {
+  controllerScope: text('controller_scope').notNull(),
+  mac: text('mac').notNull().references(() => clients.mac, { onDelete: 'cascade' }),
+}, t => [primaryKey({ columns: [t.controllerScope, t.mac] })])
+
+export const groupPauses = sqliteTable('group_pauses', {
+  groupId: text('group_id').primaryKey().references(() => groups.id, { onDelete: 'cascade' }),
+  until: integer('until'),
+  reason: text('reason'),
+})
+
+export const usageQuarters = sqliteTable('usage_quarters', {
+  ...usageColumns(),
+  activeMask: integer('active_mask').notNull(),
+  sampleMask: integer('sample_mask').notNull(),
+}, t => [primaryKey({ columns: [t.mac, t.ts] }), index('usage_quarters_ts').on(t.ts)])
+
+export const quotaTransitions = sqliteTable('quota_transitions', {
+  quotaId: text('quota_id').notNull().references(() => quotas.id, { onDelete: 'cascade' }),
+  subject: text('subject').notNull(),
+  periodStart: integer('period_start').notNull(),
+  periodEnd: integer('period_end').notNull(),
+  state: text('state').$type<QuotaStatusT['state']>().notNull(),
+  warned: integer('warned', { mode: 'boolean' }).notNull(),
+  exceeded: integer('exceeded', { mode: 'boolean' }).notNull(),
+}, t => [primaryKey({ columns: [t.quotaId, t.subject] })])
+
+export const quotaRoutes = sqliteTable('quota_routes', {
+  controllerScope: text('controller_scope').notNull(),
+  subject: text('subject').notNull(),
+  routeId: text('route_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+}, t => [primaryKey({ columns: [t.controllerScope, t.subject] }), unique().on(t.controllerScope, t.routeId)])

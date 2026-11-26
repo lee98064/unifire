@@ -1,12 +1,12 @@
 import { isDeepStrictEqual } from 'node:util'
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db'
-import { clients, egresses } from '../db/schema'
+import { egresses } from '../db/schema'
 import type { UnifiEndpoints } from '../unifi/endpoints'
 import type { WireDevice, WireStation } from '../unifi/endpoints/schemas'
 import type { ControllerEvent, EngineEvents } from '../unifi/ws'
 import { liveBus } from '../utils/bus'
-import { macVendor } from './oui'
+import { createClientSync } from './client-sync'
 
 const POLL_MS = {
   networks: 300_000, routes: 30_000, activeClients: 15_000, knownClients: 60_000,
@@ -46,11 +46,6 @@ export function syncEgresses(db: Db, site: string, networks: Snapshot['networks'
   })
 }
 
-export function wireTime(value?: number | null) {
-  if (value == null || value < 0) return null
-  return Math.floor(value < 1e12 ? value * 1000 : value)
-}
-
 function liveClientFields(station: WireStation | undefined) {
   if (!station) return null
   return [
@@ -77,6 +72,7 @@ export function rate(value: unknown) {
 export function createSyncCache(api: UnifiEndpoints, options: {
   db: Db
   site: string
+  scope?: string
   engine: EngineEvents
   onPoll: (result: PollResult) => void
   active: () => boolean
@@ -96,21 +92,9 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   let started = false
   const throughput: Throughput[] = []
 
-  function syncClients(rows: WireStation[], online: boolean, at: number) {
-    options.db.transaction(tx => {
-      const previous = new Map(tx.select().from(clients).all().map(client => [client.mac, client]))
-      for (const station of rows) {
-        const old = previous.get(station.mac)
-        const firstSeen = old?.firstSeen ?? wireTime(station.first_seen) ?? at
-        const lastSeen = Math.max(old?.lastSeen ?? 0, wireTime(station.last_seen) ?? 0, online ? at : 0) || null
-        const { vendor, randomizedMac } = macVendor(station.mac, station.oui)
-        const fields = { hostname: station.hostname ?? old?.hostname ?? null, vendor: vendor ?? old?.vendor ?? null,
-          randomizedMac, firstSeen, lastSeen }
-        tx.insert(clients).values({ mac: station.mac, detectedAt: at, ...fields })
-          .onConflictDoUpdate({ target: clients.mac, set: fields }).run()
-      }
-    })
-  }
+  const syncClients = createClientSync(options.db, options.scope ?? options.site, options.engine, bus)
+  let activeClientsAt: number | null = null
+  let clientBaselineReady = false
 
   async function refreshGateway(preferred: WireDevice | undefined, at: number) {
     let current = preferred
@@ -138,10 +122,19 @@ export function createSyncCache(api: UnifiEndpoints, options: {
       const at = now()
       if (resource === 'routes') options.observeRoutes?.(next as Snapshot['routes'], at, startedAt)
       if (resource === 'networks') syncEgresses(options.db, options.site, next as Snapshot['networks'])
+      const readyBefore = clientBaselineReady
       if (resource === 'activeClients' || resource === 'knownClients') {
-        syncClients(next as WireStation[], resource === 'activeClients', at)
+        clientBaselineReady = syncClients(next as WireStation[], resource === 'activeClients', at)
+        if (resource === 'activeClients') activeClientsAt = at
       }
       snapshot[resource] = next
+      if (resource === 'activeClients' || resource === 'knownClients') {
+        const states = (rows: WireStation[]) => new Map(rows.map(row => [row.mac, row.blocked]))
+        if (readyBefore !== clientBaselineReady
+          || !isDeepStrictEqual(states(before as WireStation[]), states(next as WireStation[]))) {
+          options.engine.emit('event', { type: 'access.clientsChanged' })
+        }
+      }
       if (!isDeepStrictEqual(before, next)) {
         options.engine.emit('event', { type: 'cache.changed', resource })
         if (resource === 'activeClients' || resource === 'knownClients') {
@@ -211,6 +204,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   return {
     snapshot: () => snapshot as Readonly<Snapshot>,
     gateway: () => gateway,
+    activeClientsAt: () => clientBaselineReady ? activeClientsAt : null,
     throughput: () => throughput.filter(point => point.ts >= Math.floor(now() / 60_000) * 60_000 - 59 * 60_000),
     refresh,
     async sync() {

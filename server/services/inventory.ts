@@ -1,4 +1,4 @@
-import { and, eq, lte } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { Client, ClientActionInput, ClientUpdateInput } from '#shared/schemas/access'
 import { Wlan } from '#shared/schemas/automation'
@@ -9,11 +9,14 @@ import { DashboardSummary } from '#shared/schemas/system'
 import type { createRouting } from '../engine'
 import { latestPublicIp, readHealth, unknownHealth, wanStatus } from '../engine/probes/health'
 import type { Db } from '../db'
-import { blocks, clients, egresses, people, personDevices } from '../db/schema'
+import { clients, egresses, people, personDevices } from '../db/schema'
 import { MacAddress, type WireStation } from '../unifi/endpoints/schemas'
 import { UnifiError } from '../unifi/errors'
 import type { WriteContext } from '../unifi/writes'
 import { liveBus } from '../utils/bus'
+import { ownedBlocks } from '../engine/blocks'
+import { createAccess } from './access'
+import { createSettingsService } from './settings'
 import { createAuditService } from './audit'
 import { rate } from './cache'
 import type { ControllerService } from './controller'
@@ -25,7 +28,8 @@ function indexByMac(rows: WireStation[]) {
   return new Map(rows.map(station => [station.mac, station]))
 }
 
-export function createInventory(db: Db, service: ControllerService, routing?: ReturnType<typeof createRouting>) {
+export function createInventory(db: Db, service: ControllerService, routing?: ReturnType<typeof createRouting>,
+  access = createAccess(db, service)) {
   const audit = createAuditService(db)
   const snapshot = () => service.runtime?.cache.snapshot() ?? EMPTY
   const site = () => service.runtime?.config.site ?? 'default'
@@ -92,15 +96,12 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
     const names = new Map(cache.devices.map(device => [device.mac, device.name]))
     const networks = new Map(cache.networks.map(network => [network._id, network.name]))
     const assignments = new Map(db.select().from(personDevices).all().map(row => [row.mac, row.personId]))
-    const byBlock = new Map<string, (typeof blocks.$inferSelect)[]>()
-    for (const block of db.select().from(blocks).all()) {
-      const entries = byBlock.get(block.mac) ?? []
-      entries.push(block)
-      byBlock.set(block.mac, entries)
-    }
     const routes = listRoutes().filter(route => route.managedRouteId !== null)
     const term = query.q?.trim().toLowerCase()
     const now = Date.now()
+    const today = access.usage.today(now, createSettingsService(db).get().timezone)
+    const desired = access.desired(now)
+    const own = ownedBlocks(db, service.runtime?.scope)
     return Client.array().parse(db.select().from(clients).all().flatMap(row => {
       const online = active.get(row.mac)
       const personId = assignments.get(row.mac) ?? null
@@ -114,13 +115,9 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
       if (term && ![displayName, hostname, row.vendor, row.mac, ip].some(value => value?.toLowerCase().includes(term))) return []
       const networkId = station?.network_id || saved?.network_id || null
       const uplinkMac = MacAddress.safeParse(station?.is_wired ? station.sw_mac : station?.ap_mac).data ?? null
-      const entries = byBlock.get(row.mac) ?? []
-      const physicalBlock = saved?.blocked ?? online?.blocked ?? entries.some(block => block.applied)
-      const blockReasons = entries.filter(block => block.applied || block.source !== 'manual' && (block.until === null || block.until > now))
-        .map(block => ({ source: block.source, refId: block.refId, label: block.label, until: block.until }))
-      if (physicalBlock && !entries.some(block => block.applied)) {
-        blockReasons.push({ source: 'unifi', refId: null, label: 'block.unifi', until: null })
-      }
+      const physicalBlock = saved?.blocked ?? online?.blocked ?? own.has(row.mac)
+      const blockReasons = [...(desired.get(row.mac) ?? [])]
+      if (physicalBlock && !own.has(row.mac)) blockReasons.push({ source: 'unifi', refId: null, label: 'block.unifi', until: null })
       return [{
         mac: row.mac, displayName, unifiName, hostname, vendor: row.vendor, ip,
         fixedIp: saved?.use_fixedip === false ? null : saved?.fixed_ip ?? online?.fixed_ip ?? null,
@@ -131,7 +128,7 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
         randomizedMac: row.randomizedMac, firstSeen: row.firstSeen, lastSeen: row.lastSeen, personId,
         approval: row.approval, blocked: physicalBlock, blockReasons, note: row.note,
         rxRateBps: rate(online?.['rx_bytes-r']), txRateBps: rate(online?.['tx_bytes-r']),
-        today: { activeMinutes: 0, bytes: 0 },
+        today: today.get(row.mac) ?? { activeMinutes: 0, bytes: 0 },
         managedRouteIds: routes.flatMap(route =>
           route.managedRouteId && route.targets.some(target => target.type === 'ALL_CLIENTS'
             || (target.type === 'CLIENT' && target.mac === row.mac)
@@ -170,84 +167,38 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
         messageParams: { mac },
       })
       clientChanged(mac)
+      if (personId !== undefined) access.people.changed([previous.personId, personId].filter((id): id is string => !!id))
     }
     return client(mac)
   }
 
-  async function clientAction(mac: string, { action, minutes }: z.output<typeof ClientActionInput>, context: WriteContext, expiresAt?: number) {
-    const runtime = service.runtime
-    if (!runtime) throw new UnifiError('UNIFI_NOT_CONFIGURED')
+  async function clientAction(mac: string, { action, minutes }: z.output<typeof ClientActionInput>, context: WriteContext) {
     client(mac)
-    const manualId = `manual:${mac}`
-    const remove = () => db.delete(blocks).where(and(eq(blocks.mac, mac), eq(blocks.source, 'manual'))).run()
-    const fresh = async () => {
-      const known = await runtime.api.knownClients()
-      const row = known.find(row => row.mac === mac)
-      if (row?.blocked != null) return row.blocked
-      return (await runtime.api.activeClients()).find(row => row.mac === mac)?.blocked
-    }
-
-    const result = await runtime.writes.clientAction(mac, action, context, async () => {
-      if (action === 'kick') return { send: true }
-      const now = Date.now()
-      const entries = db.select().from(blocks).where(eq(blocks.mac, mac)).all()
-      const manual = entries.find(block => block.source === 'manual')
-      const others = entries.filter(block => block.source !== 'manual')
-      const external = others.some(block => block.source === 'unifi')
-      const otherManagedReason = others.some(block => block.applied || block.until === null || block.until > now)
-      if (expiresAt !== undefined && manual?.until !== expiresAt) return { send: false }
-      const wasBlocked = await fresh()
-      if (wasBlocked == null) throw new UnifiError('UNIFI_CLIENT_STATE_UNKNOWN')
-      const desired = action === 'block'
-      const verify = async () => {
-        if (await fresh() !== desired) throw new UnifiError('UNIFI_VERIFY_FAILED')
-      }
-
-      if (action === 'unblock') {
-        if (!manual?.applied || external) {
-          if (expiresAt === undefined && wasBlocked && !manual?.applied) throw new UnifiError('UNIFI_BLOCK_NOT_OWNED')
-          return { wasBlocked, send: false, commit: remove }
-        }
-        return { wasBlocked, send: wasBlocked && !otherManagedReason, verify, commit: remove }
-      }
-      if (wasBlocked && (external || !manual?.applied && !others.some(block => block.applied))) {
-        // Preserve administrator-owned UniFi blocks.
-        return { wasBlocked, send: false }
-      }
-      return {
-        wasBlocked, send: !wasBlocked, verify,
-        commit() {
-          db.transaction(() => {
-            remove()
-            db.insert(blocks).values({
-              id: manualId, mac, source: 'manual', label: 'block.manual', applied: true,
-              until: minutes === undefined ? null : now + minutes * 60_000,
-            }).run()
-          })
-        },
-      }
-    })
-    if (!result.dryRun) {
-      await Promise.allSettled([runtime.cache.refresh('activeClients'), runtime.cache.refresh('knownClients')])
-      clientChanged(mac)
-    }
+    await access.blocks.action(mac, action, context, access.desired, minutes)
     return client(mac)
   }
 
-  async function expireManualBlocks(now = Date.now()) {
-    if (!service.runtime || service.status().mode !== 'live') return
-    const expired = db.select().from(blocks).where(and(eq(blocks.source, 'manual'), lte(blocks.until, now))).all()
-    for (const block of expired) {
-      if (block.until !== null) {
-        await clientAction(block.mac, { action: 'unblock' }, {
-          actor: { type: 'system', id: null, name: null },
-        }, block.until).catch(() => {})
-      }
-    }
+  function expireManualBlocks(now = Date.now()) {
+    return access.blocks.reconcile(() => access.desired(now), now)
   }
 
   return {
     routes: listRoutes, clients: listClients, client, updateClient, clientAction, expireManualBlocks,
+    clientUsage(mac: string, range: '24h' | '7d' | '30d') {
+      client(mac)
+      return access.usage.history(mac, range, Date.now(), createSettingsService(db).get().timezone)
+    },
+    approvals() {
+      const pending = db.select().from(clients).where(eq(clients.approval, 'pending')).all()
+        .sort((a, b) => (b.detectedAt ?? 0) - (a.detectedAt ?? 0))
+      const views = new Map(listClients().map(row => [row.mac, row]))
+      return pending.map(row => {
+        const view = views.get(row.mac)!
+        return { ...view, detectedAt: row.detectedAt ?? row.firstSeen ?? 0,
+          quarantined: view.blocked && view.blockReasons.some(item => item.source === 'approval')
+            && !view.blockReasons.some(item => item.source === 'unifi') }
+      })
+    },
     egresses: listEgresses, updateEgress,
     networks: () => snapshot().networks.map(network => ({
       id: network._id, name: network.name, purpose: network.purpose, subnet: network.ip_subnet ?? null,
@@ -262,7 +213,7 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
       const cache = service.runtime?.cache
       const gateway = cache?.gateway()
       const routes = [...service.ownership(site()).managed.values()]
-      const peopleRows = db.select().from(people).all()
+      const peopleRows = access.people.rows()
       const at = Date.now()
       const managed = routing?.managed.dashboard(at)
       return DashboardSummary.parse({
@@ -287,8 +238,8 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
         clients: { online: allClients.filter(client => client.online).length, known: allClients.length,
           pendingApproval: allClients.filter(client => client.approval === 'pending').length,
           blocked: allClients.filter(client => client.blocked).length },
-        people: { home: 0, total: peopleRows.length,
-          paused: peopleRows.filter(person => person.paused && (person.pausedUntil === null || person.pausedUntil > Date.now())).length },
+        people: { home: peopleRows.filter(person => person.presence.home).length, total: peopleRows.length,
+          paused: peopleRows.filter(person => person.pause.active).length },
         routes: managed?.routes ?? { managed: routes.length, drift: routes.filter(route => route.state === 'drift').length,
           overrides: 0, unifiTotal: snapshot().routes.length },
         upcoming: managed?.upcoming ?? [], recentSwitches: managed?.recentSwitches ?? [], recentAudit: audit.list({ limit: 10 }).items,

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { ControllerModeT } from '#shared/schemas/controller'
 import type { AuditEventT, SnapshotResourceT } from '#shared/schemas/insight'
 import { digest, fieldDiff, normalize } from '../engine/snapshots/diff'
-import { classifyRoute, PROBE_PREFIX, routeFingerprint } from '../services/ownership'
+import { classifyRoute, PROBE_PREFIX, QUOTA_PREFIX, routeFingerprint } from '../services/ownership'
 import type { createAuditService } from '../services/audit'
 import { type UnifiTransport } from './client'
 import { parseWire, type UnifiEndpoints } from './endpoints'
@@ -35,11 +35,11 @@ export function serializeSite<T>(site: string, work: () => Promise<T> | T): Prom
 }
 
 type Ownership = Parameters<typeof classifyRoute>[1]
-export type WriteContext = { actor: AuditEventT['actor'], dryRun?: boolean, probeBaseline?: string, quietProbe?: boolean }
+export type WriteContext = { actor: AuditEventT['actor'], dryRun?: boolean, probeBaseline?: string, quietProbe?: boolean, quietSuccess?: boolean }
 type RoutePatch = Partial<Pick<WireRoute, 'network_id' | 'description' | 'enabled' | 'kill_switch_enabled'
   | 'target_devices' | 'matching_target' | 'domains' | 'ip_addresses' | 'ip_ranges' | 'regions' | 'next_hop'>>
 export type BeforeWrite = (operation: { action: string, target: NonNullable<AuditEventT['target']> }) => Promise<void> | void
-export type WriteResult = { dryRun: boolean, changed: boolean, verified: boolean, durationMs: number }
+export type WriteResult = { dryRun: boolean, changed: boolean, verified: boolean, durationMs: number, diff: AuditEventT['diff'] }
 type Plan = {
   before?: WireDoc
   after?: WireDoc
@@ -124,12 +124,12 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
         }
         plan.commit?.()
       }
-      return { dryRun, changed, verified, durationMs: duration(start) }
+      return { dryRun, changed, verified, durationMs: duration(start), diff }
     } catch (error) {
       failure = unifiErrorCode(error)
       throw error
     } finally {
-      if (failure || !ctx.quietProbe) options.audit.record({
+      if (failure || (!ctx.quietProbe && !ctx.quietSuccess)) options.audit.record({
         actor: ctx.actor, category, action, target, diff, dryRun,
         severity: failure ? 'error' : dryRun || !changed ? 'info' : 'success',
         messageKey: action.startsWith('restore.') ? failure ? 'audit.snapshot.restoreFailed'
@@ -224,19 +224,27 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
     })
   }
 
-  async function createRoute(document: WireDoc, ctx: WriteContext, executor = run, onCreated?: (id: string) => void, onVerified?: (doc: WireRoute) => void) {
+  type RouteCreateObserver = {
+    created?: (id: string) => void
+    verified?: (doc: WireRoute) => void
+    checkExisting?: (docs: WireRoute[]) => void
+  }
+
+  async function createRoute(document: WireDoc, ctx: WriteContext, executor = run, observer?: RouteCreateObserver) {
     const { _id: _, ...draft } = parseWire(Route, { ...document, _id: 'new' })
     let id: string | null = null
     const result = await executor('routes.create', 'route', { type: 'route', id: 'new', label: draft.description ?? 'new' }, ctx, async () => {
       if (Object.hasOwn(draft, 'origin_type') || draft.predefined === true) throw new UnifiError('ROUTE_NOT_OWNED')
-      const existing = new Set((await api.routes()).map(route => route._id))
+      const docs = await api.routes()
+      observer?.checkExisting?.(docs)
+      const existing = new Set(docs.map(route => route._id))
       return {
         after: draft, apply: () => write('POST', routePath, draft),
         async verify(response) {
           const created = parseWire(z.object({ _id: z.string().min(1) }), Array.isArray(response) ? response[0] : response)
           if (existing.has(created._id)) throw new UnifiError('UNIFI_VERIFY_FAILED')
           id = created._id
-          onCreated?.(id)
+          observer?.created?.(id)
           const route = await findRoute(id)
           if (routeFingerprint(route) !== routeFingerprint({ ...draft, _id: id })
             || route.network_id !== draft.network_id || route.description !== draft.description) {
@@ -244,7 +252,7 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
           }
           options.onRouteWrite?.(route)
           options.onConfigWrite?.('trafficroutes', id, undefined, route)
-          onVerified?.(route)
+          observer?.verified?.(route)
         },
         commit: options.onRoutesChanged,
       }
@@ -265,11 +273,11 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
       }
       let id: string | undefined
       try {
-        await createRoute(document, ctx, executeScratch, created => {
+        await createRoute(document, ctx, executeScratch, { created(created) {
           id = created
           scratch.add(created)
           scratchBaselines.set(created, routeFingerprint(document))
-        })
+        } })
         outcomes.set('routes.create', null)
         if (id) {
           try {
@@ -316,7 +324,8 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
   function assertRestoreRoute(id: string, doc: WireDoc) {
     const route = Route.safeParse({ ...doc, _id: id }).data
     const ownership = options.ownership()
-    if (!route || route.description?.startsWith(PROBE_PREFIX) || ownership.probes.has(id)
+    if (!route || route.description?.startsWith(PROBE_PREFIX) || route.description?.startsWith(QUOTA_PREFIX)
+      || ownership.probes.has(id) || ownership.quotaRoutes?.has(id)
       || classifyRoute(route, ownership) !== 'managed') throw new UnifiError('ROUTE_NOT_OWNED')
   }
 
@@ -381,10 +390,7 @@ export function createWriteGate(transport: Pick<UnifiTransport, 'write' | 'origi
         if (!options.active()) throw new UnifiError('UNIFI_INACTIVE')
         return work(step => restoreMutation(ctx, step))
       }),
-    createRoute: (draft: WireDoc, ctx: WriteContext, observer?: {
-      created?: (id: string) => void
-      verified?: (doc: WireRoute) => void
-    }) => createRoute(draft, ctx, run, observer?.created, observer?.verified),
+    createRoute: (draft: WireDoc, ctx: WriteContext, observer?: RouteCreateObserver) => createRoute(draft, ctx, run, observer),
     updateRoute: (id: string, patch: RoutePatch, ctx: WriteContext, onVerified?: (before: WireRoute, after: WireRoute) => void) =>
       updateRoute(id, patch, ctx, true, run, onVerified),
     repairProbe: (id: string, patch: RoutePatch, ctx: WriteContext) => updateRoute(id, patch, ctx, false, run, undefined, true),

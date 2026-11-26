@@ -117,7 +117,7 @@
 | `errors.routeCreateUnsupported` | UniFi route creation is unavailable. Create the route in UniFi, then adopt it. | None |
 | `errors.routeExternallyAutomated` | Recent external egress changes suggest this route is already automated. | None |
 | `errors.routeShapeUnsupported` | This route uses forwarding criteria that the managed route editor cannot represent. | None |
-| `errors.routeReservedName` | The name is reserved for probe routes. | None |
+| `errors.routeReservedName` | The name is reserved for automatic probe or quota routes. | None |
 | `errors.routeDestinationsRequired` | Add at least one destination for this matching target. | None |
 | `errors.overrideInvalidEnd` | The override must end in the future. | None |
 | `route.unnamed` | Default label for a route without a description. | None |
@@ -158,3 +158,29 @@
 | `errors.snapshotScopeMismatch` | The snapshot belongs to a different controller or site. | None |
 | `errors.invalidSnapshotCron` | The snapshot schedule is not a valid cron expression. | None |
 | `errors.unifiSnapshotIncomplete` | The collection could not be captured before writing to UniFi. | None |
+
+### WP5 access control
+
+| Key | Description | Params |
+|---|---|---|
+| `errors.groupNotFound` | The selected group could not be found. | None |
+| `errors.invalidPresenceDevices` | Presence devices must belong to this person. | None |
+| `errors.quotaNotFound` | The selected quota is unavailable to this user or could not be found. | None |
+| `errors.quotaScopeNotFound` | The person, group, or client selected for the quota could not be found. | None |
+| `errors.approvalNotPending` | This client already has an approval decision. | None |
+| `errors.requestPending` | This person already has an extension request awaiting a decision. | None |
+| `errors.requestNotFound` | The selected extension request could not be found. | None |
+| `errors.requestNotPending` | This request already has a decision or has expired. | None |
+| `block.pause` | Internet access is paused for the person or their group. | None |
+| `block.bedtime` | The person is in a scheduled bedtime window. | None |
+| `block.quota` | The person or client has reached a blocking quota. | None |
+| `block.approval` | This client is waiting for approval in strict mode. | None |
+| `block.rule` | An automation rule blocked this client. | None |
+| `audit.approval.hostnameMatched` | Unifire approved a randomized MAC that matched an approved hostname. | `mac`, `hostname` |
+| `audit.approval.approved` | An administrator approved the client. | `mac` |
+| `audit.approval.blocked` | An administrator selected a persistent block for the client. | `mac` |
+| `audit.approval.ignored` | An administrator dismissed the client's approval request. | `mac` |
+| `audit.block.applied` | Unifire applied a client block. The dry-run flag identifies previews. | `mac` |
+| `audit.block.released` | Unifire released its client block. The dry-run flag identifies previews. | `mac` |
+| `audit.extension.approved` | An administrator approved an extension request. | `requestId` |
+| `audit.extension.denied` | An administrator denied an extension request. | `requestId` |

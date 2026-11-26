@@ -131,7 +131,8 @@ describe('WP4 snapshots and audit with fake UniFi', () => {
     at++
     const partial = await snapshots.create(undefined, ctx)
     expect(partial).toMatchObject({ complete: false, failed: ['static-dns'], changeCount: 0 })
-    expect((await snapshots.diff(original.id, partial.id)).changes).toEqual([])
+    expect(await snapshots.diff(original.id, partial.id)).toMatchObject({ changes: [], unavailableResources: ['static-dns'] })
+    expect(await snapshots.diff(original.id)).toMatchObject({ changes: [], unavailableResources: ['static-dns'] })
     expect((await apply(partial.id, [['static-dns', 'demo-dns']])).steps).toMatchObject([{ supported: false, reason: 'incomplete' }])
     failing.mockRestore()
     for (let i = 0; i < 3; i++) {

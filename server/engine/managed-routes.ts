@@ -1,3 +1,4 @@
+import type { AuditEventT } from '#shared/schemas/insight'
 import { randomUUID } from 'node:crypto'
 import { and, desc, eq, gt, lt, lte, or } from 'drizzle-orm'
 import type { z } from 'zod'
@@ -11,7 +12,7 @@ import type { Db } from '../db'
 import { egressHealth, egresses, managedRoutes, routeOverrides, routeSchedules, routeSwitchLog } from '../db/schema'
 import { createAuditService, decodeCursor } from '../services/audit'
 import { systemContext, type ControllerService } from '../services/controller'
-import { classifyRoute, PROBE_PREFIX, routeFingerprint } from '../services/ownership'
+import { classifyRoute, PROBE_PREFIX, QUOTA_PREFIX, routeFingerprint } from '../services/ownership'
 import { managedRouteShape, routeDraft } from '../services/route-shape'
 import { createSettingsService, validateTimezone } from '../services/settings'
 import { isUnsupported, UnifiError, unifiErrorCode, unifiStatusKey } from '../unifi/errors'
@@ -128,7 +129,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
       run.observations.observe(docs, now(), at)
       const doc = docs.find(route => route._id === input.unifiRouteId)
       if (!doc) throw new UnifiError('UNIFI_ROUTE_NOT_FOUND', 404)
-      if (classifyRoute(doc, service.ownership(run.config.site)) !== 'external' || doc.description?.startsWith(PROBE_PREFIX)) {
+      if (classifyRoute(doc, service.ownership(run.config.site)) !== 'external' || [PROBE_PREFIX, QUOTA_PREFIX].some(prefix => doc.description?.startsWith(prefix))) {
         throw new UnifiError('ROUTE_NOT_OWNED')
       }
       if (run.observations.details(doc._id, at).suspectedAutomation) {
@@ -147,7 +148,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
     }
 
     validateExits([input.defaultEgressId])
-    if (input.name.startsWith(PROBE_PREFIX)) throw apiError(400, 'ROUTE_RESERVED_NAME', 'errors.routeReservedName')
+    if ([PROBE_PREFIX, QUOTA_PREFIX].some(prefix => input.name.startsWith(prefix))) throw apiError(400, 'ROUTE_RESERVED_NAME', 'errors.routeReservedName')
     if (input.matchingTarget !== 'INTERNET' && input.destinations.length === 0) {
       throw apiError(400, 'ROUTE_DESTINATIONS_REQUIRED', 'errors.routeDestinationsRequired')
     }
@@ -323,7 +324,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
   }
 
   function switched(row: Row, from: string | null, to: string, reason: SwitchReasonT, result: {
-    verified: boolean, dryRun: boolean, durationMs: number | null, error: string | null
+    verified: boolean, dryRun: boolean, durationMs: number | null, error: string | null, diff?: AuditEventT['diff']
   }) {
     const ts = now()
     const entry = SwitchLogEntry.parse({ id: randomUUID(), ts, managedRouteId: row.id, routeName: row.name,
@@ -335,7 +336,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
     const labels = new Map(exits().map(exit => [exit.id, exit.name]))
     audit.record({
       actor: systemContext.actor, category: 'route', action: 'route.switched', severity: result.error ? 'error' : result.dryRun ? 'info' : 'success',
-      target: { type: 'route', id: row.id, label: row.name }, messageKey: 'audit.route.switched', dryRun: result.dryRun,
+      target: { type: 'route', id: row.id, label: row.name }, messageKey: 'audit.route.switched', dryRun: result.dryRun, diff: result.diff,
       messageParams: { route: row.name, from: from ? labels.get(from) ?? from : '', to: labels.get(to) ?? to, reason },
     })
     liveBus.emit({ type: 'route.switched', data: entry })
@@ -376,11 +377,8 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
         const reason = row.state === 'pending' && desired.reason === 'default' ? 'initial' : desired.reason
         const intent = JSON.stringify([from, to, reason])
         if (!live && dryIntents.get(row.id) === intent) continue
-        let fromBeforeWrite = from
         try {
-          const result = await run.writes.updateRouteEgress(row.unifiRouteId, to, systemContext, (before) => {
-            fromBeforeWrite = before.network_id || null
-          })
+          const result = await run.writes.updateRouteEgress(row.unifiRouteId, to, { ...systemContext, quietSuccess: true })
           if (!run.active()) return
           if (result.dryRun) dryIntents.set(row.id, intent)
           if (!result.dryRun || reason !== 'recover') set(row.id, latch)
@@ -391,6 +389,9 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
               await run.cache.refresh('routes').catch(() => {})
             }
             if (!run.active()) return
+            const egress = result.diff?.find(change => change.path === 'network_id')
+            const before = egress ? egress.before : from
+            const fromBeforeWrite = typeof before === 'string' && before ? before : null
             switched(row, fromBeforeWrite, to, reason, { ...result, error: null })
           }
         } catch (error) {

@@ -5,7 +5,7 @@ import type { Db } from '../../db'
 import { managedRoutes } from '../../db/schema'
 import { createAuditService } from '../../services/audit'
 import type { ControllerService } from '../../services/controller'
-import { classifyRoute, PROBE_PREFIX, routeFingerprint } from '../../services/ownership'
+import { classifyRoute, PROBE_PREFIX, QUOTA_PREFIX, routeFingerprint } from '../../services/ownership'
 import { managedRouteShape } from '../../services/route-shape'
 import { Route, type WireDoc } from '../../unifi/endpoints/schemas'
 import { UnifiError, unifiErrorCode } from '../../unifi/errors'
@@ -23,8 +23,9 @@ const userFields = ['name', 'fixed_ip', 'use_fixedip', 'network_id']
 export function restoreReason(resource: SnapshotResourceT, id: string, before: WireDoc | undefined,
   after: WireDoc | undefined, ownership: ReturnType<ControllerService['ownership']> | undefined) {
   if (resource === 'trafficroutes') {
-    if (ownership?.excluded.has(id) || ownership?.probes.has(id)
-      || [before, after].some(doc => typeof doc?.description === 'string' && doc.description.startsWith(PROBE_PREFIX))) return 'excluded'
+    if (ownership?.excluded.has(id) || ownership?.probes.has(id) || ownership?.quotaRoutes?.has(id)
+      || [before, after].some(doc => typeof doc?.description === 'string'
+        && (doc.description.startsWith(PROBE_PREFIX) || doc.description.startsWith(QUOTA_PREFIX)))) return 'excluded'
     for (const doc of [before, after]) {
       if (!doc) continue
       const route = Route.safeParse({ ...doc, _id: id }).data

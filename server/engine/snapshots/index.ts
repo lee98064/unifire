@@ -80,16 +80,26 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
   async function diff(fromId: string, toId?: string) {
     const from = store.get(fromId)
     const runtime = toId === undefined ? requireRuntime(service) : service.runtime
-    const source = store.documents(fromId)
+    const unavailable = new Set(from.failed)
+    function stored(row: typeof from) {
+      for (const resource of row.failed) unavailable.add(resource)
+      const collections = store.documents(row.id, unavailable)
+      for (const resource of SnapshotResource.options) {
+        if ((collections.get(resource)?.size ?? 0) !== (row.counts[resource] ?? 0)) unavailable.add(resource)
+      }
+      return collections
+    }
+    const source = stored(from)
     let target: Capture
     if (toId !== undefined) {
       const to = store.get(toId)
       if (from.controllerScope !== to.controllerScope) throw apiError(409, 'SNAPSHOT_SCOPE_MISMATCH', 'errors.snapshotScopeMismatch')
-      target = { collections: store.documents(toId), failed: to.failed, networkVersion: to.networkVersion }
+      target = { collections: stored(to), failed: to.failed, networkVersion: to.networkVersion }
     } else {
       assertScope(from.controllerScope, runtime!.scope)
       target = await serializeSite(runtime!.key, () => capture(runtime!))
     }
+    for (const resource of target.failed) unavailable.add(resource)
     const sameRuntime = runtime?.scope === from.controllerScope ? runtime : undefined
     const owner = sameRuntime && service.ownership(sameRuntime.config.site)
     const names = sameRuntime ? new Map(db.select({ mac: clients.mac, name: clients.alias }).from(clients).all()
@@ -108,7 +118,7 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
     const newLabel = labels(target.collections)
     const changes: DiffChangeT[] = []
     for (const resource of SnapshotResource.options) {
-      if (from.failed.includes(resource) || target.failed.includes(resource)) continue
+      if (unavailable.has(resource)) continue
       for (const { id, left, right, kind } of compareMaps(source.get(resource) ?? new Map(), target.collections.get(resource) ?? new Map())) {
         const itemLabel = right?.label ?? left!.label
         const fields = fieldDiff(left?.doc ?? {}, right?.doc ?? {}, oldLabel, newLabel)
@@ -121,7 +131,7 @@ export function createSnapshots(db: Db, service: ControllerService, now = Date.n
             && !restoreReason(resource, targetId, left?.doc, right?.doc ?? liveReplacement?.doc, owner) })
       }
     }
-    return SnapshotDiff.parse({ fromId, toId: toId ?? null, changes })
+    return SnapshotDiff.parse({ fromId, toId: toId ?? null, changes, unavailableResources: SnapshotResource.options.filter(resource => unavailable.has(resource)) })
   }
 
   function apply(id: string, input: z.output<typeof RestoreInput>, ctx: WriteContext) {
