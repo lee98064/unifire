@@ -4,11 +4,13 @@ import { Client, ClientActionInput, ClientUpdateInput } from '#shared/schemas/ac
 import { Wlan } from '#shared/schemas/automation'
 import { Id } from '#shared/schemas/common'
 import { Egress, EgressUpdateInput } from '#shared/schemas/egress'
-import { RouteTarget, UnifiRoute, type UnifiRouteTargetT } from '#shared/schemas/routes'
+import { UnifiRoute } from '#shared/schemas/routes'
 import { DashboardSummary } from '#shared/schemas/system'
+import type { createRouting } from '../engine'
+import { latestPublicIp, readHealth, unknownHealth, wanStatus } from '../engine/probes/health'
 import type { Db } from '../db'
 import { blocks, clients, egresses, people, personDevices } from '../db/schema'
-import { MacAddress, type WireRoute, type WireStation } from '../unifi/endpoints/schemas'
+import { MacAddress, type WireStation } from '../unifi/endpoints/schemas'
 import { UnifiError } from '../unifi/errors'
 import type { WriteContext } from '../unifi/writes'
 import { liveBus } from '../utils/bus'
@@ -16,38 +18,14 @@ import { createAuditService } from './audit'
 import { rate } from './cache'
 import type { ControllerService } from './controller'
 import { classifyRoute } from './ownership'
+import { routeDestinations, routeTargets } from './route-shape'
 
 const EMPTY = { networks: [], routes: [], activeClients: [], knownClients: [], devices: [], wlans: [] }
-const text = z.string()
-
-function targets(route: WireRoute) {
-  return route.target_devices.map((value): UnifiRouteTargetT => {
-    const mac = MacAddress.safeParse(value.client_mac).data
-    const result = RouteTarget.safeParse({ type: value.type, mac, networkId: value.network_id })
-    return result.success ? result.data : { type: 'OTHER', raw: JSON.stringify(value) }
-  })
-}
-
-function destinations(route: WireRoute): string[] {
-  if (route.matching_target === 'REGION') return route.regions ?? []
-  if (route.matching_target === 'DOMAIN') {
-    return (route.domains ?? []).flatMap(value => typeof value === 'string' ? [value] : text.safeParse(value.domain).data ?? [])
-  }
-  if (route.matching_target === 'IP') {
-    return [
-      ...(route.ip_addresses ?? []).flatMap(value => typeof value === 'string' ? [value] : text.safeParse(value.ip_or_subnet).data ?? []),
-      ...(route.ip_ranges ?? []).flatMap(value => typeof value.ip_start === 'string' && typeof value.ip_stop === 'string'
-        ? [`${value.ip_start}–${value.ip_stop}`] : []),
-    ]
-  }
-  return []
-}
-
 function indexByMac(rows: WireStation[]) {
   return new Map(rows.map(station => [station.mac, station]))
 }
 
-export function createInventory(db: Db, service: ControllerService) {
+export function createInventory(db: Db, service: ControllerService, routing?: ReturnType<typeof createRouting>) {
   const audit = createAuditService(db)
   const snapshot = () => service.runtime?.cache.snapshot() ?? EMPTY
   const site = () => service.runtime?.config.site ?? 'default'
@@ -61,10 +39,10 @@ export function createInventory(db: Db, service: ControllerService) {
       const owner = classifyRoute(route, ownership)
       return [UnifiRoute.parse({
         id: route._id, description: route.description ?? '', enabled: route.enabled,
-        matchingTarget: route.matching_target ?? 'UNKNOWN', targets: targets(route), destinations: destinations(route),
+        matchingTarget: route.matching_target ?? 'UNKNOWN', targets: routeTargets(route), destinations: routeDestinations(route),
         egressId: egressId.success ? egressId.data : null, nextHop, killSwitch: route.kill_switch_enabled ?? false, ownership: owner,
         managedRouteId: owner === 'managed' ? ownership.managed.get(route._id)?.id ?? null : null,
-        suspectedAutomation: false, lastExternalChangeAt: null,
+        suspectedAutomation: false, lastExternalChangeAt: null, ...service.runtime?.observations.details(route._id),
       })]
     })
   }
@@ -78,13 +56,17 @@ export function createInventory(db: Db, service: ControllerService) {
     }
     return Egress.array().parse(db.select().from(egresses).where(eq(egresses.site, site())).all()
       .filter(row => present.has(row.id)).sort((a, b) => Number(b.kind === 'wan') - Number(a.kind === 'wan')
-        || a.id.localeCompare(b.id, 'en', { numeric: true })).map(row => ({
-        ...row,
-        health: { status: 'unknown', latencyMs: null, lossPct: null, jitterMs: null, lastCheckAt: null, since: null, source: 'none' },
-        probe: { enabled: row.probeEnabled, ip: row.probeIp, routeId: row.probeRouteId,
-          state: !row.probeEnabled ? 'disabled' : row.probeRouteId && routes.some(route => route._id === row.probeRouteId) ? 'ok' : 'missing' },
-        publicIp: null, routeCount: counts.get(row.id) ?? 0,
-      })))
+        || a.id.localeCompare(b.id, 'en', { numeric: true })).map(row => {
+        const probe = routing?.probes.probeState(row)
+        const wan = row.kind === 'wan' ? wanStatus(service.runtime?.cache.gateway() ?? null, [], row.wanGroup) : null
+        const health = readHealth(db, row.id)?.value ?? (wan === null ? unknownHealth
+          : { ...unknownHealth, status: wan ? 'healthy' : 'down', source: 'unifi' })
+        return {
+          ...row, health, publicIp: latestPublicIp(db, row.id), routeCount: counts.get(row.id) ?? 0,
+          probe: { enabled: row.probeEnabled, ip: probe?.ip ?? row.probeIp, routeId: probe?.routeId ?? null,
+            state: probe?.state ?? (row.probeEnabled ? 'missing' : 'disabled') },
+        }
+      }))
   }
 
   function updateEgress(id: string, input: z.output<typeof EgressUpdateInput>, context: WriteContext) {
@@ -98,6 +80,7 @@ export function createInventory(db: Db, service: ControllerService) {
         target: { type: 'egress', id, label: old.name }, messageKey: 'audit.egress.updated',
         messageParams: { egress: old.name },
       })
+      if (input.probeEnabled !== undefined) service.engine.emit('event', { type: 'routing.settings' })
     }
     return listEgresses().find(row => row.id === id)!
   }
@@ -280,28 +263,35 @@ export function createInventory(db: Db, service: ControllerService) {
       const gateway = cache?.gateway()
       const routes = [...service.ownership(site()).managed.values()]
       const peopleRows = db.select().from(people).all()
+      const at = Date.now()
+      const managed = routing?.managed.dashboard(at)
       return DashboardSummary.parse({
-        generatedAt: Date.now(),
+        generatedAt: at,
         wans: exits.filter(egress => egress.kind === 'wan').map(egress => {
           const group = egress.wanGroup?.toLowerCase()
           const wan = group === 'wan' || group === 'wan1' ? gateway?.wan1
             : group === 'wan2' ? gateway?.wan2 : group === 'wan3' ? gateway?.wan3 : undefined
           return {
             egressId: egress.id, name: egress.name,
-            status: wan?.up === true ? 'healthy' : wan?.up === false ? 'down' : 'unknown',
-            latencyMs: null, publicIp: typeof wan?.public_ip === 'string' ? wan.public_ip : null,
+            status: egress.health.status, latencyMs: egress.health.latencyMs,
+            publicIp: egress.publicIp?.ip ?? (typeof wan?.public_ip === 'string' ? wan.public_ip : null),
             rxBps: rate(wan?.['rx_bytes-r']), txBps: rate(wan?.['tx_bytes-r']),
           }
         }),
-        egresses: { healthy: 0, degraded: 0, down: 0, unknown: exits.length },
+        egresses: {
+          healthy: exits.filter(exit => exit.health.status === 'healthy').length,
+          degraded: exits.filter(exit => exit.health.status === 'degraded').length,
+          down: exits.filter(exit => exit.health.status === 'down').length,
+          unknown: exits.filter(exit => exit.health.status === 'unknown').length,
+        },
         clients: { online: allClients.filter(client => client.online).length, known: allClients.length,
           pendingApproval: allClients.filter(client => client.approval === 'pending').length,
           blocked: allClients.filter(client => client.blocked).length },
         people: { home: 0, total: peopleRows.length,
           paused: peopleRows.filter(person => person.paused && (person.pausedUntil === null || person.pausedUntil > Date.now())).length },
-        routes: { managed: routes.length, drift: routes.filter(route => route.state === 'drift').length,
+        routes: managed?.routes ?? { managed: routes.length, drift: routes.filter(route => route.state === 'drift').length,
           overrides: 0, unifiTotal: snapshot().routes.length },
-        upcoming: [], recentSwitches: [], recentAudit: audit.list({ limit: 10 }).items,
+        upcoming: managed?.upcoming ?? [], recentSwitches: managed?.recentSwitches ?? [], recentAudit: audit.list({ limit: 10 }).items,
         throughput: cache?.throughput() ?? [],
       })
     },

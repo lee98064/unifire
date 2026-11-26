@@ -103,3 +103,29 @@
 | `capability.scratchUnavailable` | A verified scratch route was unavailable for this step. | None |
 | `capability.requiresAction` | Verification requires running the actual controller command. | None |
 | `capability.speedtestStatusOnly` | The controller supports querying speed-test status. | None |
+
+## WP3 managed routes and egress health
+
+| Key | English description | Params |
+|---|---|---|
+| `audit.route.managedChanged` | A managed route was created, adopted, updated, released, scheduled, overridden, or resumed. | `route`, `action` |
+| `audit.route.drift` | Unifire suspended writes after detecting a change to a managed route's forwarding criteria. | `route` |
+| `audit.route.switched` | Unifire evaluated a switch between egresses. The audit severity and dry-run flag indicate the outcome. | `route`, `from`, `to`, `reason` |
+| `audit.egress.ipChanged` | A sweep verified a different public IP for the egress. | `egress`, `from`, `to` |
+| `audit.egress.sweepDryRun` | Dry run skipped the public IP sweep. | `total` |
+| `errors.managedRouteNotFound` | The managed route could not be found. | None |
+| `errors.routeCreateUnsupported` | UniFi route creation is unavailable. Create the route in UniFi, then adopt it. | None |
+| `errors.routeExternallyAutomated` | Recent external egress changes suggest this route is already automated. | None |
+| `errors.routeShapeUnsupported` | This route uses forwarding criteria that the managed route editor cannot represent. | None |
+| `errors.routeReservedName` | The name is reserved for probe routes. | None |
+| `errors.routeDestinationsRequired` | Add at least one destination for this matching target. | None |
+| `errors.overrideInvalidEnd` | The override must end in the future. | None |
+| `route.unnamed` | Default label for a route without a description. | None |
+| `route.state.drift` | This route's forwarding criteria have changed. Review them before resuming. | None |
+| `route.state.missing` | UniFi no longer lists this route. | None |
+| `route.state.dryRun` | This route is a dry-run preview. | None |
+| `probe.detail.drift` | The UniFi probe route differs from its expected configuration. | None |
+| `probe.detail.ipPoolExhausted` | No unused IPv4 probe destination is available. | None |
+| `probe.detail.selfMacRequired` | Detect or enter the Unifire host MAC to use probe routes. | None |
+| `probe.detail.dryRun` | Dry run skipped the live sweep. | None |
+| `probe.detail.traceTimeout` | The trace did not confirm a stable distinct public IP within 20 seconds. | None |

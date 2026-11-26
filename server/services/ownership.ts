@@ -26,6 +26,10 @@ function canonical(value: unknown): unknown {
   return value
 }
 
+export function documentFingerprint(route: WireRoute) {
+  return createHash('sha256').update(JSON.stringify(canonical(route))).digest('hex')
+}
+
 export function routeFingerprint(route: WireRoute) {
   // Only guard membership and forwarding semantics. Egress is deliberately mutable.
   const criteria = {

@@ -80,6 +80,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
   engine: EngineEvents
   onPoll: (result: PollResult) => void
   active: () => boolean
+  observeRoutes?: (routes: Snapshot['routes'], at: number, startedAt: number) => void
   bus?: typeof liveBus
   now?: () => number
 }) {
@@ -130,10 +131,12 @@ export function createSyncCache(api: UnifiEndpoints, options: {
 
   async function update<K extends Resource>(resource: K, load: () => Promise<Snapshot[K]>) {
     try {
+      const startedAt = now()
       const before = snapshot[resource]
       const next = await load()
       if (stopped || !options.active()) return
       const at = now()
+      if (resource === 'routes') options.observeRoutes?.(next as Snapshot['routes'], at, startedAt)
       if (resource === 'networks') syncEgresses(options.db, options.site, next as Snapshot['networks'])
       if (resource === 'activeClients' || resource === 'knownClients') {
         syncClients(next as WireStation[], resource === 'activeClients', at)
@@ -183,7 +186,7 @@ export function createSyncCache(api: UnifiEndpoints, options: {
       case 'device.updated': wsRefreshes.add('devices'); break
       case 'user.updated': wsRefreshes.add('knownClients'); break
       case 'controller.reconnected':
-        for (const resource of ['activeClients', 'knownClients', 'devices'] as const) wsRefreshes.add(resource)
+        for (const resource of ['activeClients', 'knownClients', 'devices', 'routes', 'networks'] as const) wsRefreshes.add(resource)
         break
       case 'controller.event':
         if (/Route|Policy/.test(event.key)) wsRefreshes.add('routes')

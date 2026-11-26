@@ -27,7 +27,7 @@ const defaults: SettingsT = {
   excludedRouteIds: [],
 }
 
-function validateTimezone(timezone: string) {
+export function validateTimezone(timezone: string) {
   try {
     if (/^[+-]/.test(timezone)) throw new Error('Expected a named time zone')
     new Intl.DateTimeFormat('en', { timeZone: timezone })

@@ -3,10 +3,10 @@ import { blob, check, index, integer, primaryKey, real, sqliteTable, text, uniqu
 import type { LocaleT, RoleT } from '#shared/schemas/auth'
 import type { CapabilityT, ControllerModeT, ControllerStatusT } from '#shared/schemas/controller'
 import type { ApprovalStateT, BlockSourceT, ExtensionRequestT, QuotaT } from '#shared/schemas/access'
-import type { EgressKindT, HealthStatusT } from '#shared/schemas/egress'
+import type { EgressHealthT, EgressKindT, HealthStatusT } from '#shared/schemas/egress'
 import type { GuestWifiT, PoeWatchdogT, RuleT, RuleRunT, WatchdogEventT, WolTargetT } from '#shared/schemas/automation'
 import type { AuditEventT, SnapshotResourceT, SnapshotT } from '#shared/schemas/insight'
-import type { FailoverPolicyT, ManagedRouteStateT, RotationGeneratorT, ScheduleGridT, SwitchReasonT } from '#shared/schemas/routes'
+import type { FailoverPolicyT, ManagedRouteStateT, ManagedRouteT, RotationGeneratorT, ScheduleGridT, SwitchReasonT } from '#shared/schemas/routes'
 import type { ChannelTypeT, NotificationEventT } from '#shared/schemas/system'
 
 export const people = sqliteTable('people', {
@@ -85,6 +85,7 @@ export const egresses = sqliteTable('egresses', {
   probeEnabled: integer('probe_enabled', { mode: 'boolean' }).notNull().default(false),
   probeIp: text('probe_ip'),
   probeRouteId: text('probe_route_id'),
+  probeRouteScope: text('probe_route_scope'),
 }, t => [index('egresses_controller_site').on(t.controllerId, t.site)])
 
 export const egressSamples = sqliteTable('egress_samples', {
@@ -93,8 +94,32 @@ export const egressSamples = sqliteTable('egress_samples', {
   latencyMs: real('latency_ms'),
   lossPct: real('loss_pct'),
   jitterMs: real('jitter_ms'),
+  source: text('source').$type<EgressHealthT['source']>().notNull().default('probe'),
   status: text('status').$type<HealthStatusT>().notNull(),
 }, t => [primaryKey({ columns: [t.egressId, t.ts] }), index('egress_samples_ts').on(t.ts)])
+
+export const egressHealth = sqliteTable('egress_health', {
+  egressId: text('egress_id').primaryKey().references(() => egresses.id, { onDelete: 'cascade' }),
+  value: text('value', { mode: 'json' }).$type<EgressHealthT>().notNull(),
+  failedRounds: integer('failed_rounds').notNull(),
+})
+
+export const egressSampleRollups = sqliteTable('egress_sample_rollups', {
+  egressId: text('egress_id').notNull().references(() => egresses.id, { onDelete: 'cascade' }),
+  resolution: integer('resolution').notNull(),
+  ts: integer('ts').notNull(),
+  latencyTotal: real('latency_total').notNull(),
+  latencyCount: integer('latency_count').notNull(),
+  lossTotal: real('loss_total').notNull(),
+  lossCount: integer('loss_count').notNull(),
+  status: text('status').$type<HealthStatusT>().notNull(),
+}, t => [primaryKey({ columns: [t.egressId, t.resolution, t.ts] })])
+
+export const egressHealthTransitions = sqliteTable('egress_health_transitions', {
+  egressId: text('egress_id').notNull().references(() => egresses.id, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  status: text('status').$type<HealthStatusT>().notNull(),
+}, t => [primaryKey({ columns: [t.egressId, t.ts] })])
 
 export const egressIpChecks = sqliteTable('egress_ip_checks', {
   egressId: text('egress_id').notNull().references(() => egresses.id, { onDelete: 'cascade' }),
@@ -113,7 +138,12 @@ export const managedRoutes = sqliteTable('managed_routes', {
   site: text('site').notNull().default('default'),
   unifiRouteId: text('unifi_route_id').notNull(),
   name: text('name').notNull(),
+  controllerScope: text('controller_scope'),
   baselineFingerprint: text('baseline_fingerprint').notNull(),
+  routeShape: text('route_shape', { mode: 'json' }).$type<Pick<ManagedRouteT, 'targets' | 'matchingTarget' | 'destinations' | 'killSwitch'>>(),
+  failoverPrimary: text('failover_primary'),
+  failoverEgress: text('failover_egress'),
+  failoverRecoverSince: integer('failover_recover_since'),
   defaultEgressId: text('default_egress_id').notNull(),
   failover: text('failover', { mode: 'json' }).$type<FailoverPolicyT>().notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
@@ -154,6 +184,20 @@ export const routeSwitchLog = sqliteTable('route_switch_log', {
   durationMs: integer('duration_ms'),
   error: text('error'),
 }, t => [index('route_switch_log_route_ts').on(t.managedRouteId, t.ts), index('route_switch_log_ts').on(t.ts)])
+
+export const routeObservations = sqliteTable('route_observations', {
+  scope: text('scope').notNull(),
+  routeId: text('route_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  egressId: text('egress_id'),
+}, t => [primaryKey({ columns: [t.scope, t.routeId] })])
+
+export const routeExternalChanges = sqliteTable('route_external_changes', {
+  scope: text('scope').notNull(),
+  routeId: text('route_id').notNull(),
+  ts: integer('ts').notNull(),
+  egressChanged: integer('egress_changed', { mode: 'boolean' }).notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.routeId, t.ts] }), index('route_external_changes_ts').on(t.ts)])
 
 export const groups = sqliteTable('groups', {
   id: text('id').primaryKey(),

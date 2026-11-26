@@ -20,13 +20,14 @@ import { decrypt, encrypt } from '../utils/crypto'
 import { createAuditService } from './audit'
 import { createSyncCache } from './cache'
 import { createSettingsService } from './settings'
+import { createRouteObservations } from './route-observations'
 import { seedMockDemo } from './seed'
 
 const MOCK_ROW = 'mock://unifire'
 const MOCK_MODE = 'wp2.mockMode'
 const QUALIFIED_CONTROLLER = 'wp2.qualifiedController'
 const AUTH_LOCK = 'wp2.controllerAuthLock'
-const systemContext: WriteContext = { actor: { type: 'system', id: null, name: null } }
+export const systemContext: WriteContext = { actor: { type: 'system', id: null, name: null } }
 type Row = typeof controller.$inferSelect
 type Endpoints = ReturnType<typeof createUnifiEndpoints>
 
@@ -89,7 +90,9 @@ export async function createControllerService(db: Db, options: {
   const settingsService = createSettingsService(db)
   const engine = new EventEmitter<{ event: [ControllerEvent] }>()
   const beforeWrite = new Set<BeforeWrite>()
+  const beforeRoutingChange = new Set<() => Promise<void>>()
   let stopped = false
+  let routingChange = false
   let mock: MockController | undefined
   let background: Promise<unknown> | undefined
   let activeRuntime: ReturnType<typeof createRuntime> | undefined
@@ -106,13 +109,16 @@ export async function createControllerService(db: Db, options: {
     }).onConflictDoNothing().run()
   }
 
-  function ownership(site: string) {
+  function ownership(site: string, scope = activeRuntime?.scope) {
     const managed = db.select().from(managedRoutes).where(and(eq(managedRoutes.controllerId, 1), eq(managedRoutes.site, site))).all()
-    const probeRows = db.select({ id: egresses.probeRouteId }).from(egresses).where(eq(egresses.site, site)).all()
+      .filter(row => row.controllerScope === null || row.controllerScope === scope)
+    const probeRows = db.select({ id: egresses.probeRouteId }).from(egresses)
+      .where(and(eq(egresses.site, site), scope ? eq(egresses.probeRouteScope, scope) : undefined)).all()
+    const sweepId = scope && db.select().from(settings).where(eq(settings.key, `routing.sweepRoute:${scope}`)).get()?.value
     return {
       managed: new Map(managed.map(row => [row.unifiRouteId, row])),
       excluded: new Set(settingsService.get().excludedRouteIds),
-      probes: new Set(probeRows.flatMap(row => row.id ? [row.id] : [])),
+      probes: new Set([...probeRows.flatMap(row => row.id ? [row.id] : []), ...(typeof sweepId === 'string' ? [sweepId] : [])]),
     }
   }
 
@@ -145,6 +151,8 @@ export async function createControllerService(db: Db, options: {
     const state = initialStatus(options.mock, config, row)
     const live = () => canRun() && activeRuntime?.status === state
     const key = siteKey(new URL(config.url).origin, config.site)
+    const scope = options.mock ? 'mock:default' : key
+    const observations = createRouteObservations(db, scope)
     const authLocked = !options.mock && db.select().from(settings).where(eq(settings.key, AUTH_LOCK)).get()?.value === key
 
     function persistAuthLock() {
@@ -186,8 +194,9 @@ export async function createControllerService(db: Db, options: {
     }
 
     const cache = createSyncCache(api, {
-      db, site: config.site, engine, active: live,
+      db, site: config.site, engine, active: live, observeRoutes: observations.observe,
       onPoll(result) {
+        const wasConnected = state.connected
         if (result.error === null) {
           state.lastSyncAt = result.at
           if (result.resource === 'activeClients') {
@@ -209,19 +218,25 @@ export async function createControllerService(db: Db, options: {
           }
         }
         publish()
+        if (!wasConnected && state.connected) engine.emit('event', { type: 'controller.reconnected' })
       },
     })
 
     const writes = createWriteGate(transport, api, {
-      site: config.site, mode, ownership: () => ownership(config.site),
+      site: config.site, mode, ownership: () => ownership(config.site, scope),
       baseline: id => {
-        const row = ownership(config.site).managed.get(id)
+        const row = ownership(config.site, scope).managed.get(id)
         return row?.baselineFingerprint
       },
       active: live,
       qualified: () => options.mock || db.select().from(settings)
         .where(eq(settings.key, QUALIFIED_CONTROLLER)).get()?.value === key,
       preWrite: () => settingsService.get().snapshots.preWrite, audit, hooks: beforeWrite,
+      onRouteWrite: observations.recordWrite,
+      onRoutesChanged() {
+        // A poll started before the mutation may still be in flight.
+        void cache.refresh('routes').catch(() => {}).then(() => cache.refresh('routes')).catch(() => {})
+      },
     })
 
     async function qualify(context: WriteContext) {
@@ -289,14 +304,14 @@ export async function createControllerService(db: Db, options: {
       cache.start()
       await Promise.allSettled([cache.sync(), inspectVersion(true)])
       if (!live()) return
-      if (options.mock) seedMockDemo(db)
+      if (options.mock) seedMockDemo(db, cache.snapshot().routes)
       connectEvents()
       // Boot only qualifies read endpoints. An explicit admin probe authorizes the live scratch route.
       await qualify({ ...systemContext, dryRun: true })
     }
 
     return {
-      config, transport, status: state, api, cache, writes, key, qualify, inspectVersion, connectEvents, start,
+      config, transport, status: state, api, cache, writes, key, scope, observations, active: live, qualify, inspectVersion, connectEvents, start,
       resetEvents() { disconnect?.(); disconnect = undefined; state.wsConnected = false },
       async close() { disconnect?.(); cache.stop(); await transport.close() },
     }
@@ -415,8 +430,12 @@ export async function createControllerService(db: Db, options: {
         if (test) testRuntime = undefined
         launch(config, savedController(db), test?.transport)
       }
-      if (activeRuntime) await serializeSite(activeRuntime.key, change)
-      else await change()
+      routingChange = true
+      try {
+        if (activeRuntime && !options.mock) for (const hook of beforeRoutingChange) await hook()
+        if (activeRuntime) await serializeSite(activeRuntime.key, change)
+        else await change()
+      } finally { routingChange = false }
     })
     await background
     return status()
@@ -425,26 +444,33 @@ export async function createControllerService(db: Db, options: {
   async function setMode(value: ControllerModeT, context: WriteContext) {
     return serializeSite(configQueue, async () => {
       const runtime = requireRuntime()
-      return serializeSite(runtime.key, () => {
-        assertActive()
-        if (mode() === value) return status()
-        if (options.mock) db.insert(settings).values({ key: MOCK_MODE, value })
-          .onConflictDoUpdate({ target: settings.key, set: { value } }).run()
-        else db.update(controller).set({ mode: value }).where(eq(controller.id, 1)).run()
-        audit.record({
-          actor: context.actor, action: 'config.controllerModeChanged', category: 'config', severity: 'success',
-          target: { type: 'controller', id: '1', label: runtime.config.url },
-          messageKey: 'audit.config.controllerModeChanged', messageParams: { mode: value }, dryRun: value === 'dry-run',
-        })
-        for (const capability of runtime.status.capabilities) {
-          if (capability.key === 'routes.create' || capability.key === 'routes.update' || capability.key === 'routes.delete') {
-            capability.status = 'skipped'
-            capability.detail = value === 'dry-run' ? 'capability.dryRun' : 'capability.reprobeRequired'
-            capability.checkedAt = null
+      routingChange = true
+      try {
+        if (mode() !== value) for (const hook of beforeRoutingChange) await hook()
+        const result = await serializeSite(runtime.key, () => {
+          assertActive()
+          if (mode() === value) return status()
+          if (options.mock) db.insert(settings).values({ key: MOCK_MODE, value })
+            .onConflictDoUpdate({ target: settings.key, set: { value } }).run()
+          else db.update(controller).set({ mode: value }).where(eq(controller.id, 1)).run()
+          audit.record({
+            actor: context.actor, action: 'config.controllerModeChanged', category: 'config', severity: 'success',
+            target: { type: 'controller', id: '1', label: runtime.config.url },
+            messageKey: 'audit.config.controllerModeChanged', messageParams: { mode: value }, dryRun: value === 'dry-run',
+          })
+          for (const capability of runtime.status.capabilities) {
+            if (capability.key === 'routes.create' || capability.key === 'routes.update' || capability.key === 'routes.delete') {
+              capability.status = 'skipped'
+              capability.detail = value === 'dry-run' ? 'capability.dryRun' : 'capability.reprobeRequired'
+              capability.checkedAt = null
+            }
           }
-        }
-        return status()
-      })
+          return status()
+        })
+        routingChange = false
+        engine.emit('event', { type: 'controller.mode' })
+        return result
+      } finally { routingChange = false }
     })
   }
 
@@ -471,8 +497,9 @@ export async function createControllerService(db: Db, options: {
   }
 
   return {
-    engine, beforeWrite, status, ownership, test, save, setMode, probe,
+    engine, beforeWrite, beforeRoutingChange, routingLocked: () => routingChange, status, ownership, test, save, setMode, probe,
     get mockProbe() { return mock?.probe },
+    get mockTrace() { return mock?.trace },
     get runtime() { return activeRuntime },
     async ready() { await background },
     async sync() {
@@ -496,6 +523,8 @@ export async function createControllerService(db: Db, options: {
 export type ControllerService = {
   engine: EventEmitter<{ event: [ControllerEvent] }>
   beforeWrite: Set<BeforeWrite>
+  beforeRoutingChange: Set<() => Promise<void>>
+  routingLocked: () => boolean
   status: () => ControllerStatusT
   ownership: (site: string) => {
     managed: Map<string, typeof managedRoutes.$inferSelect>, excluded: Set<string>, probes: Set<string>
@@ -505,7 +534,9 @@ export type ControllerService = {
   setMode: (value: ControllerModeT, context: WriteContext) => Promise<ControllerStatusT>
   probe: (context: WriteContext) => Promise<ControllerStatusT>
   mockProbe: MockController['probe'] | undefined
-  runtime: { config: UnifiConfig, api: Endpoints, cache: ReturnType<typeof createSyncCache>, writes: ReturnType<typeof createWriteGate> } | undefined
+  mockTrace: MockController['trace'] | undefined
+  runtime: { config: UnifiConfig, api: Endpoints, cache: ReturnType<typeof createSyncCache>, writes: ReturnType<typeof createWriteGate>,
+    scope: string, active: () => boolean, observations: ReturnType<typeof createRouteObservations> } | undefined
   ready: () => Promise<void>
   sync: () => Promise<void>
   stop: () => Promise<void>

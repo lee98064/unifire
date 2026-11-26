@@ -1,7 +1,9 @@
 import type Database from 'better-sqlite3'
 import { initialSql } from './0001-initial'
 
-const migrations = [{ version: 1, sql: initialSql }]
+import { routingSql } from './0002-routing'
+
+const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }]
 
 export function migrateDatabase(sqlite: Database.Database) {
   sqlite.transaction(() => {

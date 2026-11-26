@@ -12,7 +12,12 @@ export type ControllerEvent =
   | { type: 'client.updated' | 'device.updated' | 'user.updated', mac: string | null, data: WireDoc }
   | { type: 'controller.event', key: string, data: WireDoc }
   | { type: 'cache.changed', resource: string }
-  | { type: 'controller.reconnected' }
+  | { type: 'controller.reconnected' | 'controller.mode' | 'routing.settings' }
+  | { type: 'routing.changed', managedRouteId: string }
+  | { type: 'egress.healthChanged', egressId: string }
+  | { type: 'egress.down' | 'egress.up', egressId: string }
+  | { type: 'egress.ip_changed', egressId: string, previousIp: string, ip: string }
+  | { type: 'notification', event: 'route_drift', managedRouteId: string }
 
 export type EngineEvents = EventEmitter<{ event: [ControllerEvent] }>
 

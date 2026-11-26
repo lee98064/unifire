@@ -29,6 +29,10 @@ const endpoints = [
   ['studio-sensor', '24:0a:c4'], ['glade-pi', 'b8:27:eb'],
 ] as const
 
+export const DEMO_ROUTES = {
+  proxy: 'demo-route-4', kids: 'demo-route-5', nas: 'demo-route-6', external: 'demo-route-15',
+}
+
 export function buildFixtures(now: number, selfIp: string) {
   const networks = [
     ...wanNames.map((name, index) => ({
@@ -101,6 +105,20 @@ export function buildFixtures(now: number, selfIp: string) {
       demo_extension: { index, behavior: 'preserve-on-update' },
     }
   })
+  const demoRoutes = [
+    { id: DEMO_ROUTES.proxy, name: 'Proxy host hourly rotation', egress: 'demo-wan-1', clients: [7] },
+    { id: DEMO_ROUTES.kids, name: 'Kids tablets', egress: 'demo-wan-2', clients: [2, 29] },
+    { id: DEMO_ROUTES.nas, name: 'Lab NAS', egress: 'demo-wan-1', clients: [5] },
+    { id: DEMO_ROUTES.external, name: 'proxy hourly egress (external script)', egress: 'demo-wan-1', clients: [21] },
+  ]
+  for (const demo of demoRoutes) {
+    const route = routes.find(route => route._id === demo.id)!
+    Object.assign(route, {
+      description: demo.name, matching_target: 'INTERNET', network_id: demo.egress, enabled: true,
+      target_devices: demo.clients.map(index => ({ type: 'CLIENT', client_mac: clients[index]!.mac })),
+      domains: [], ip_addresses: [], ip_ranges: [], regions: [],
+    })
+  }
   const wlans = ['Home', 'IoT', 'Guest'].map((name, index) => ({
     _id: `demo-wlan-${index}`, name, enabled: true, security: index === 2 ? 'open' : 'wpapsk', is_guest: index === 2,
     networkconf_id: `demo-lan-${index}`, ...(index < 2 && { x_passphrase: 'fixture-only' }),

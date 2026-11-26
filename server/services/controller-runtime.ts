@@ -1,17 +1,26 @@
 import { randomUUID } from 'node:crypto'
 import type { Db } from '../db'
+import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
 import { createControllerService, type ControllerService } from './controller'
 import { createInventory } from './inventory'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
 let current: ControllerService | undefined
+let routing: ReturnType<typeof createRouting> | undefined
 let starting: Promise<() => Promise<void>> | undefined
 
 export async function useController() {
   if (!current) await starting
   if (!current) throw new UnifiError('UNIFI_INACTIVE')
   return current
+}
+
+export async function useRouting() {
+  const service = await useController()
+  await service.ready()
+  if (!routing) throw new UnifiError('UNIFI_INACTIVE')
+  return routing
 }
 
 const TTL = 45_000
@@ -26,6 +35,7 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
   let expiresAt = 0
   let stopping = false
   let maintenance: Promise<void> | undefined
+  let stopRouting: (() => Promise<void>) | undefined
   let inventory: ReturnType<typeof createInventory> | undefined
   let expiry: Promise<void> | undefined
 
@@ -39,15 +49,19 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
     if (current) {
       const stale = current
       current = undefined
+      routing = undefined
       inventory = undefined
       expiresAt = 0
+      await stopRouting?.()
       await stale.stop()
     }
     if (stopping || !acquireLease(ENGINE_LEASE, owner, TTL, db, now)) return
     expiresAt = now + TTL
     try {
       current = await createControllerService(db, { mock, lively, active: () => Date.now() < expiresAt })
-      inventory = createInventory(db, current)
+      routing = createRouting(db, current)
+      stopRouting = routing.start()
+      inventory = createInventory(db, current, routing)
     } catch (error) {
       expiresAt = 0
       releaseLease(ENGINE_LEASE, owner, db)
@@ -74,6 +88,8 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
     await maintenance
     const service = current
     current = undefined
+    routing = undefined
+    await stopRouting?.()
     await service?.stop()
     await expiry
     releaseLease(ENGINE_LEASE, owner, db)

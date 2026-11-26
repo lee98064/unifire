@@ -6,6 +6,7 @@ import { SetupStatus } from '../../shared/schemas/auth'
 import { Client } from '../../shared/schemas/access'
 import { CertificateInfo, ControllerStatus } from '../../shared/schemas/controller'
 import { Egress } from '../../shared/schemas/egress'
+import { UnifiRoute } from '../../shared/schemas/routes'
 import { DashboardSummary } from '../../shared/schemas/system'
 import { startMockController } from '../../server/unifi/mock'
 
@@ -83,7 +84,8 @@ async function smoke() {
     '/api/egresses/demo-wan-1', Egress)
   assert.equal(updatedEgress?.color, '#123456')
   assert.equal(updatedEgress.probe.enabled, true)
-  await call(api.unifiRoutes)
+  const routes = await call(api.unifiRoutes, undefined, undefined, UnifiRoute.array())
+  assert.equal(routes?.filter(route => route.ownership !== 'probe').length, 20)
   await call(api.wlans)
   const list = await call(api.clients, undefined, '/api/clients?online=true', Client.array())
   const target = list?.find(client => client.online && client.mac !== synced.selfMac)
@@ -105,7 +107,7 @@ async function smoke() {
   assert.equal((await action('kick'))?.online, false)
   const dashboard = await call(api.dashboard, undefined, undefined, DashboardSummary)
   assert.equal(dashboard?.wans.length, 3)
-  assert.equal(dashboard.routes.unifiTotal, 20)
+  assert.ok(dashboard.routes.unifiTotal >= 20)
   assert.ok(dashboard.throughput.length)
   console.log('WP2 mock HTTP smoke passed for all 17 endpoints.')
 }

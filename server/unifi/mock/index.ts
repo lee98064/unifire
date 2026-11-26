@@ -4,7 +4,7 @@ import { createServer as createSecureServer, type ServerOptions } from 'node:htt
 import { WebSocket, WebSocketServer } from 'ws'
 import { Doc, Route, Station } from '../endpoints/schemas'
 import { osPaths } from '../paths'
-import { buildFixtures, createRandom, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
+import { buildFixtures, createRandom, DEMO_ROUTES, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
 
 type Failure = 'html' | '401' | 'loginRequired' | '403' | '404' | '429'
 type Outage = { start: number, end: number }
@@ -53,10 +53,10 @@ export async function startMockController(options: {
   const timers = new Set<ReturnType<typeof setTimeout>>()
   let logins = 0
   let mutations = 0
-  let scratchIndex = 0
   let unfamiliarIndex = 0
   let speedtestAt: number | null = null
   let simulatedTicks = 0
+  let externalRotation = 0
   const log: Record<string, unknown>[] = []
 
   function emit(message: string, data: unknown[]) {
@@ -92,6 +92,14 @@ export async function startMockController(options: {
       client.last_seen = Math.floor(now() / 1000)
     }
     simulatedTicks++
+    const rotation = Math.floor((now() - started) / 300_000)
+    if (rotation > externalRotation) {
+      const route = routes.get(DEMO_ROUTES.external)!
+      const ids = ['demo-wan-1', 'demo-vpn-1', 'demo-vpn-2', 'demo-vpn-3']
+      routes.set(route._id, { ...route, network_id: ids[rotation % ids.length]! })
+      externalRotation = rotation
+      event('EVT_RouteUpdated', SELF_MAC)
+    }
     const candidates = [...clients.values()].filter(client => client.mac !== SELF_MAC && !client.blocked)
     const client = candidates[Math.floor(random() * candidates.length)]
     if (client && simulatedTicks % 2 === 0) setOnline(client.mac, !client.online)
@@ -207,7 +215,7 @@ export async function startMockController(options: {
 
     const routeBase = paths.v2('trafficroutes')
     if (path === routeBase && method === 'POST') {
-      const id = `demo-scratch-${++scratchIndex}`
+      const id = `demo-route-${randomUUID()}`
       const route = Route.parse({ ...await readBody(req), _id: id })
       routes.set(id, route)
       rotate(res, session)
@@ -325,6 +333,16 @@ export async function startMockController(options: {
   const simulation = options.lively ? setInterval(tick, 10_000) : undefined
   simulation?.unref()
 
+  function probe(id: string, at = now()) {
+    const profile = profiles.get(id)
+    if (!profile) return null
+    const scriptedDown = outages.get(id)?.some(outage => at >= outage.start && at < outage.end)
+    const devFlap = options.lively && id === 'demo-vpn-4' && (at - started) % 480_000 >= 420_000
+    const up = !scriptedDown && !devFlap
+    const jitter = Math.abs(Math.floor(at / 1000) % 7) - 3
+    return { up, latencyMs: up ? profile.latency + jitter : null, publicIp: profile.ip, country: profile.country }
+  }
+
   return {
     config: { url, username: MOCK_USERNAME, password: MOCK_PASSWORD, site: MOCK_SITE, verifyMode: 'insecure' as const },
     paths, emit, tick, setOnline,
@@ -346,14 +364,11 @@ export async function startMockController(options: {
       schedule.push(outage)
       outages.set(id, schedule)
     },
-    probe(id: string, at = now()) {
-      const profile = profiles.get(id)
-      if (!profile) return null
-      const scriptedDown = outages.get(id)?.some(outage => at >= outage.start && at < outage.end)
-      const devFlap = options.lively && id === 'demo-vpn-4' && (at - started) % 480_000 >= 420_000
-      const up = !scriptedDown && !devFlap
-      const jitter = Math.abs(Math.floor(at / 1000) % 7) - 3
-      return { up, latencyMs: up ? profile.latency + jitter : null, publicIp: profile.ip, country: profile.country }
+    probe,
+    trace() {
+      const route = [...routes.values()].find(route => route.description === '[unifire-probe] sweep' && route.enabled)
+      const answer = route?.network_id ? probe(route.network_id) : null
+      return answer?.up ? `ip=${answer.publicIp}\nloc=${answer.country}\ncolo=TPE\n` : null
     },
     async close() {
       clearInterval(simulation)

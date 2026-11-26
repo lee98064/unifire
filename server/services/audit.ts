@@ -24,7 +24,7 @@ function redactDiff(diff: AuditEventT['diff']): AuditEventT['diff'] {
   }) ?? null
 }
 
-function decodeCursor(cursor: string) {
+export function decodeCursor(cursor: string) {
   try {
     if (cursor.length > 512 || !/^[\da-z_-]+$/i.test(cursor)) throw new Error('Invalid encoding')
     return Cursor.parse(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')))
