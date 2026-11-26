@@ -122,7 +122,7 @@ onMounted(() => nextTick(measure))
         <g v-for="p in paths" :key="p.key">
           <path :d="p.d" fill="none" :stroke="p.color" :stroke-opacity="p.active ? 0.38 : 0.14" stroke-width="1.75" :stroke-dasharray="p.dashed ? '5 5' : undefined" />
           <circle v-if="p.active && reduceMotion !== 'reduce'" r="2.6" :fill="p.color">
-            <animateMotion :dur="`${2.6 + (p.delay % 1.2)}s`" :begin="`${p.delay}s`" repeatCount="indefinite" :path="p.d" />
+            <animateMotion :dur="`${2.6 + (p.delay % 1.2)}s`" :begin="`-${p.delay}s`" repeatCount="indefinite" :path="p.d" />
           </circle>
         </g>
       </svg>

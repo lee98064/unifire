@@ -13,7 +13,22 @@ const icons: Record<string, string> = {
 const actorIcon: Record<string, string> = {
   unifire: 'i-lucide-flame', user: 'i-lucide-user-round', external: 'i-lucide-user-round-search', 'unifi-log': 'i-lucide-router', system: 'i-lucide-cpu', rule: 'i-lucide-workflow',
 }
-const message = computed(() => te(props.event.messageKey) ? t(props.event.messageKey, props.event.messageParams) : `${props.event.action} ${props.event.target?.label ?? ''}`)
+// Params arrive as raw identifiers (action "route.adopted", reason "failover", error keys) — localise them first.
+const params = computed(() => {
+  const p: Record<string, unknown> = { ...(props.event.messageParams ?? {}) }
+  const action = typeof p.action === 'string' ? `audit.actionName.${p.action.replace(/-/g, '_')}` : null
+  if (action && te(action)) p.action = t(action)
+  if (typeof p.reason === 'string' && te(`routes.reason.${p.reason}`)) p.reason = t(`routes.reason.${p.reason}`)
+  if (typeof p.error === 'string') {
+    // Error codes are SCREAMING_CASE (UNIFI_ROUTE_DRIFT → errors.unifiRouteDrift); keys pass through.
+    const key = /^[A-Z0-9_]+$/.test(p.error) ? `errors.${p.error.toLowerCase().replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())}` : p.error
+    if (te(key)) p.error = t(key)
+  }
+  if (typeof p.method === 'string' && te(`audit.method.${p.method}`)) p.method = t(`audit.method.${p.method}`)
+  if (p.from === '') p.from = '—'
+  return p
+})
+const message = computed(() => te(props.event.messageKey) ? t(props.event.messageKey, params.value) : `${props.event.action} ${props.event.target?.label ?? ''}`)
 const tone = computed(() => ({ info: 'text-primary bg-primary/10', success: 'text-success bg-success/10', warning: 'text-warning bg-warning/10', error: 'text-error bg-error/10' })[props.event.severity])
 </script>
 

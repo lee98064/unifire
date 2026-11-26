@@ -61,7 +61,31 @@
     "webAuthnBusy": "Wait before starting another passkey attempt",
     "webAuthnChallengeInvalid": "The challenge expired; start again",
     "webAuthnRegistrationFailed": "The passkey could not be registered",
-    "webAuthnAlreadyRegistered": "This passkey is already registered"
+    "webAuthnAlreadyRegistered": "This passkey is already registered",
+    "unifiInvalidUrl": "Enter an HTTPS controller origin with no path or credentials",
+    "unifiInvalidSite": "Enter a valid UniFi site ID",
+    "unifiInvalidFingerprint": "Enter a valid SHA-256 certificate fingerprint",
+    "unifiCaRequired": "Provide a CA certificate in PEM format",
+    "unifiPasswordRequired": "Enter the controller account password",
+    "unifiInactive": "The controller service is temporarily unavailable",
+    "unifiNotConfigured": "Configure a UniFi controller first",
+    "unifiTimeout": "Controller request timed out",
+    "unifiNotFound": "UniFi couldn’t find that resource",
+    "routeNotOwned": "This route isn’t owned by Unifire",
+    "unifiRouteDrift": "The route differs from its baseline — review it first",
+    "unifiBlockNotOwned": "This block was set in UniFi — lift it there",
+    "unifiQualificationRequired": "Run the live capability probe before writing",
+    "unifiClientStateUnknown": "UniFi didn’t report this client’s block state",
+    "clientNotFound": "Client not found",
+    "egressNotFound": "Egress not found",
+    "unifiRequestFailed": "Controller request failed",
+    "managedRouteNotFound": "Managed route not found",
+    "routeCreateUnsupported": "Route creation isn’t available — create it in UniFi, then adopt it",
+    "routeExternallyAutomated": "Recent outside egress changes suggest something else automates this route",
+    "routeShapeUnsupported": "This route uses criteria the editor can’t represent",
+    "routeReservedName": "That name is reserved for probe routes",
+    "routeDestinationsRequired": "Add at least one destination",
+    "overrideInvalidEnd": "The override must end in the future"
   },
   "fmt": {
     "h": "{h}h",
@@ -149,7 +173,8 @@
       "admin": "Admin",
       "controller": "Connect",
       "review": "Check",
-      "done": "Done"
+      "done": "Done",
+      "protect": "Protect"
     },
     "admin": {
       "title": "Create the administrator",
@@ -203,6 +228,15 @@
       "next2": "Schedule an egress",
       "next3": "Add people & quotas",
       "go": "Go to dashboard"
+    },
+    "protect": {
+      "title": "Which routes must Unifire never touch?",
+      "desc": "Tick routes that another script already automates (e.g. an hourly go-gost egress switch). Unifire will only ever read them and they can’t be adopted.",
+      "suggested": "Suggested",
+      "empty": "No routes to configure",
+      "hint": "You can change this later in Settings → General → Never-touch routes.",
+      "count": "{n} protected",
+      "save": "Save & finish"
     }
   },
   "caps": {
@@ -472,7 +506,11 @@
       "lossHint": "Loss above this counts as failure",
       "recover": "Recover after",
       "recoverHint": "How long the primary must stay healthy"
-    }
+    },
+    "dryRunCreated": "Dry run: evaluated, nothing created",
+    "dryRunCreatedDesc": "Unifire is in dry-run mode, so UniFi was not changed. Switch to live mode to create it.",
+    "dryRunReleased": "Dry run: nothing deleted",
+    "dryRunReleasedDesc": "In dry-run the delete is only evaluated; the route stays in UniFi and managed."
   },
   "egresses": {
     "desc": "Live health, latency and real public IP of every WAN and VPN client.",
@@ -1074,7 +1112,65 @@
       "passkeyRegistered": "{username} registered a passkey"
     },
     "config": {
-      "settingsChanged": "Settings updated: {keys}"
+      "settingsChanged": "Settings updated: {keys}",
+      "controllerSaved": "Controller settings saved (site {site})",
+      "controllerModeChanged": "Controller write mode set to {mode}"
+    },
+    "unifi": {
+      "writeApplied": "Applied in UniFi: {action} · {target}",
+      "writeUnchanged": "No write needed: {action} · {target}",
+      "writeDryRun": "Dry run: {action} · {target}",
+      "writeFailed": "Write failed: {action} · {target} ({error})"
+    },
+    "egress": {
+      "updated": "Updated egress “{egress}”",
+      "ipChanged": "Egress “{egress}” public IP changed: {from} → {to}",
+      "sweepDryRun": "Dry run: skipped the IP sweep of {total} egresses"
+    },
+    "client": {
+      "updated": "Updated client {mac}"
+    },
+    "route": {
+      "managedChanged": "Managed route “{route}”: {action}",
+      "drift": "“{route}” was changed in UniFi; management paused",
+      "switched": "“{route}” switched {from} → {to} ({reason})"
+    },
+    "actionName": {
+      "route": {
+        "created": "created",
+        "adopted": "adopted",
+        "updated": "updated",
+        "released": "released",
+        "scheduleChanged": "schedule changed",
+        "overrideSet": "override set",
+        "overrideCleared": "override cleared",
+        "resumed": "resumed"
+      },
+      "routes": {
+        "create": "create route",
+        "update": "update route",
+        "delete": "delete route"
+      },
+      "user": {
+        "update": "update client"
+      },
+      "wlanconf": {
+        "update": "update Wi-Fi"
+      },
+      "client": {
+        "block": "block",
+        "unblock": "unblock",
+        "kick": "reconnect"
+      },
+      "device": {
+        "restart": "restart device",
+        "power_cycle": "PoE power cycle",
+        "speedtest": "speed test"
+      }
+    },
+    "method": {
+      "password": "password",
+      "passkey": "passkey"
     }
   },
   "presence": {
@@ -1141,6 +1237,57 @@
     },
     "devices": "My devices",
     "today": "Today {time} · {data}"
+  },
+  "block": {
+    "manual": "Blocked by an admin in Unifire",
+    "unifi": "Blocked directly in UniFi (Unifire won’t lift it)"
+  },
+  "capability": {
+    "empty": "The controller returned an empty result",
+    "authRequired": "Connect to the controller first",
+    "dryRun": "Needs a write — skipped in dry-run mode",
+    "reprobeRequired": "Re-run the probe to confirm write support",
+    "selfMacRequired": "Detect or enter the Unifire host MAC first",
+    "wanRequired": "The scratch route needs an enabled WAN",
+    "routesRequired": "Route listing must work for the scratch test",
+    "scratchUnavailable": "No verified scratch route for this step",
+    "requiresAction": "Only verifiable by running the actual command",
+    "speedtestStatusOnly": "Speed-test status can be queried"
+  },
+  "controllerError": {
+    "authRequired": "The controller rejected the session or credentials",
+    "authLocked": "Auto-login stopped after 3 rejected attempts",
+    "loginBackoff": "Waiting before the next login (avoids UDM lockout)",
+    "loginResponse": "Login response had no session cookie or CSRF token",
+    "forbidden": "The controller refused this (insufficient role?)",
+    "rateLimited": "The controller is rate limiting",
+    "fingerprintMismatch": "Certificate doesn’t match the trusted fingerprint",
+    "tls": "Couldn’t establish a TLS connection",
+    "html": "The controller returned an HTML page (wrong URL?)",
+    "http": "Unexpected HTTP status from the controller",
+    "timeout": "Controller request timed out",
+    "notFound": "Endpoint or resource not found on the controller",
+    "invalidResponse": "Unexpected controller response format",
+    "api": "The controller API rejected the request",
+    "websocket": "Couldn’t open the controller event stream",
+    "verifyFailed": "Read-back did not confirm the change"
+  },
+  "route": {
+    "unnamed": "Unnamed route",
+    "state": {
+      "drift": "This route’s criteria changed — review before resuming",
+      "missing": "UniFi no longer lists this route",
+      "dryRun": "Dry-run preview — not created in UniFi"
+    }
+  },
+  "probe": {
+    "detail": {
+      "drift": "Probe route differs from its expected config",
+      "ipPoolExhausted": "No unused probe IP left in the pool",
+      "selfMacRequired": "Detect or enter the Unifire host MAC",
+      "dryRun": "Live sweep skipped in dry-run mode",
+      "traceTimeout": "No stable distinct public IP within 20 s"
+    }
   },
   "settings": {
     "tab": {

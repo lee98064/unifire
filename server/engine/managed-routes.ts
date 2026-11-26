@@ -139,7 +139,7 @@ export function createManagedRoutes(db: Db, service: ControllerService, now = Da
       if (!defaultEgressId) throw new UnifiError('EGRESS_NOT_FOUND', 404)
       validateExits([defaultEgressId])
       const row = db.insert(managedRoutes).values({ ...common, unifiRouteId: doc._id, defaultEgressId,
-        name: input.name ?? (doc.description || 'route.unnamed'), routeShape, state: 'active',
+        name: input.name ?? (doc.description || `UniFi ${doc._id.slice(-6)}`), routeShape, state: 'active',
         baselineFingerprint: routeFingerprint(doc) }).returning().get()
       record(row, 'route.adopted', ctx)
       changed(row.id)

@@ -5,6 +5,7 @@ import type { ClientT } from '#shared/schemas/access'
 const props = defineProps<{ unifiRoutes: UnifiRouteT[], preselect?: string | null }>()
 const open = defineModel<boolean>('open', { default: false })
 const { t, te } = useI18n()
+const toast = useToast()
 const matchLabel = (v: string) => (te(`routes.match.${v}`) ? t(`routes.match.${v}`) : v)
 const api = useApi()
 const { egresses } = useEgresses()
@@ -59,8 +60,14 @@ async function submit() {
           killSwitch: form.killSwitch,
           defaultEgressId: form.defaultEgressId,
         }
-    const r = await api.post<ManagedRouteT>('/api/managed-routes', body, { success: t('routes.addDone') })
+    const r = await api.post<ManagedRouteT>('/api/managed-routes', body)
     open.value = false
+    // Dry-run creates return a transient preview (unifiRouteId "dry-run:…") that is never persisted.
+    if (r.unifiRouteId.startsWith('dry-run:')) {
+      toast.add({ title: t('routes.dryRunCreated'), description: t('routes.dryRunCreatedDesc'), color: 'warning', icon: 'i-lucide-flask-conical' })
+      return
+    }
+    toast.add({ title: t('routes.addDone'), color: 'success', icon: 'i-lucide-check-circle-2' })
     refreshNuxtData(['managed-routes', 'routes'])
     await navigateTo(`/routes/${r.id}`)
   }

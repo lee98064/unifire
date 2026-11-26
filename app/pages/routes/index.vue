@@ -4,6 +4,7 @@ import type { TableColumn } from '@nuxt/ui'
 import { wallClock } from '#shared/utils/schedule'
 
 const { t, te } = useI18n()
+const msg = useMsg()
 const matchLabel = (v: string) => (te(`routes.match.${v}`) ? t(`routes.match.${v}`) : v)
 const fmt = useFormat()
 const route = useRoute()
@@ -194,7 +195,7 @@ const stateUi: Record<string, { color: 'success' | 'warning' | 'error' | 'neutra
         </template>
         <template #reason-cell="{ row }"><span class="text-[12.5px] text-toned">{{ t(`routes.reason.${row.original.reason}`) }}</span></template>
         <template #result-cell="{ row }">
-          <UBadge v-if="row.original.error" color="error" variant="subtle" size="sm" icon="i-lucide-circle-x">{{ row.original.error }}</UBadge>
+          <UBadge v-if="row.original.error" color="error" variant="subtle" size="sm" icon="i-lucide-circle-x">{{ msg(row.original.error) }}</UBadge>
           <UBadge v-else-if="row.original.dryRun" color="warning" variant="subtle" size="sm" icon="i-lucide-flask-conical">dry-run</UBadge>
           <UBadge v-else-if="row.original.verified" color="success" variant="subtle" size="sm" icon="i-lucide-badge-check">{{ t('routes.verified') }} · {{ row.original.durationMs }} ms</UBadge>
           <UBadge v-else color="neutral" variant="subtle" size="sm">{{ t('routes.unverified') }}</UBadge>

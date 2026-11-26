@@ -2,6 +2,7 @@
 import type { ControllerStatusT } from '#shared/schemas/controller'
 
 const { t } = useI18n()
+const msg = useMsg()
 const api = useApi()
 const confirm = useConfirm()
 const { status, refresh } = useControllerStatus()
@@ -33,7 +34,7 @@ async function sync() { await api.post('/api/controller/sync', undefined, { succ
           </div>
           <div class="text-[12.5px] text-muted mt-0.5">Network {{ status.networkVersion ?? '—' }} · UniFi OS {{ status.consoleVersion ?? '—' }} · {{ status.timezone ?? '' }}</div>
           <div class="text-[12px] text-dimmed mt-1 uf-mono truncate">{{ status.url }} · site {{ status.site }} · {{ status.username }}</div>
-          <div v-if="status.lastError" class="mt-2 text-[12px] text-error flex items-center gap-1.5"><UIcon name="i-lucide-circle-alert" class="size-3.5" />{{ status.lastError }}</div>
+          <div v-if="status.lastError" class="mt-2 text-[12px] text-error flex items-center gap-1.5"><UIcon name="i-lucide-circle-alert" class="size-3.5" />{{ msg(status.lastError) }}</div>
         </div>
         <div class="flex gap-2">
           <UButton color="neutral" variant="outline" size="sm" icon="i-lucide-refresh-cw" @click="sync">{{ t('settings.controller.sync') }}</UButton>

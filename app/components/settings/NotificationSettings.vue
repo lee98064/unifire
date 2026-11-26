@@ -2,6 +2,7 @@
 import type { NotificationChannelT, NotificationEventT, ChannelTypeT } from '#shared/schemas/system'
 
 const { t } = useI18n()
+const msg = useMsg()
 const api = useApi()
 const confirm = useConfirm()
 const push = usePush()
@@ -107,7 +108,7 @@ async function toggle(c: NotificationChannelT, enabled: boolean) { await api.pat
             <div class="text-[13.5px] font-medium text-highlighted">{{ c.name }}</div>
             <div class="text-[11.5px] text-dimmed truncate">
               {{ t('settings.notify.eventsN', { n: c.events.length }) }}
-              <template v-if="c.lastError"> · <span class="text-error">{{ c.lastError }}</span></template>
+              <template v-if="c.lastError"> · <span class="text-error">{{ msg(c.lastError) }}</span></template>
               <template v-else-if="c.lastSentAt"> · {{ t('settings.notify.lastSent') }} <TimeAgo :ts="c.lastSentAt" /></template>
             </div>
           </div>

@@ -3,6 +3,8 @@ import type { ManagedRouteT, RoutePreviewT, SwitchLogEntryT, FailoverPolicyT, Ro
 import { emptyGrid, cloneGrid, type Grid } from '#shared/utils/schedule'
 
 const { t } = useI18n()
+const toast = useToast()
+const msg = useMsg()
 const fmt = useFormat()
 const api = useApi()
 const route = useRoute()
@@ -83,7 +85,15 @@ async function resumeDrift() {
 }
 const releaseOpen = ref(false)
 const releaseDelete = ref(false)
+const { isDryRun } = useControllerStatus()
 async function release() {
+  // In dry-run a "delete from UniFi" is only evaluated: the server keeps the managed record.
+  if (releaseDelete.value && isDryRun.value) {
+    await api.del(`/api/managed-routes/${id.value}?deleteFromUnifi=true`)
+    releaseOpen.value = false
+    toast.add({ title: t('routes.dryRunReleased'), description: t('routes.dryRunReleasedDesc'), color: 'warning', icon: 'i-lucide-flask-conical' })
+    return
+  }
   await api.del(`/api/managed-routes/${id.value}?deleteFromUnifi=${releaseDelete.value}`, undefined, { success: t('routes.released') })
   refreshNuxtData(['managed-routes', 'routes'])
   await navigateTo('/routes')
@@ -121,7 +131,7 @@ const copyFrom = ref(0)
       variant="subtle"
       icon="i-lucide-triangle-alert"
       :title="r.state === 'drift' ? t('routes.driftTitle') : t('routes.errorTitle')"
-      :description="r.stateDetail ?? (r.state === 'drift' ? t('routes.driftDesc') : '')"
+      :description="r.stateDetail ? msg(r.stateDetail) : (r.state === 'drift' ? t('routes.driftDesc') : '')"
       class="mb-4"
       :actions="r.state === 'drift' ? [{ label: t('routes.driftAccept'), color: 'warning', variant: 'solid', onClick: resumeDrift }] : []"
     />
@@ -249,7 +259,7 @@ const copyFrom = ref(0)
             <UIcon name="i-lucide-arrow-right" class="size-3 text-dimmed" />
             <EgressChip :id="s.toEgressId" size="xs" />
           </div>
-          <UBadge v-if="s.error" color="error" variant="subtle" size="sm">{{ s.error }}</UBadge>
+          <UBadge v-if="s.error" color="error" variant="subtle" size="sm">{{ msg(s.error) }}</UBadge>
           <UBadge v-else-if="s.dryRun" color="warning" variant="subtle" size="sm">dry-run</UBadge>
           <UBadge v-else-if="s.verified" color="success" variant="subtle" size="sm" icon="i-lucide-badge-check">{{ s.durationMs }} ms</UBadge>
         </div>

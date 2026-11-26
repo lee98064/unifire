@@ -5,6 +5,7 @@ import type { SettingsT } from '#shared/schemas/system'
 const settings = defineModel<SettingsT>({ required: true })
 const emit = defineEmits<{ save: [] }>()
 const { t } = useI18n()
+const msg = useMsg()
 const api = useApi()
 const confirm = useConfirm()
 const { data: probes, refresh } = useFetch<ProbeOverviewT>('/api/probes', { key: 'probes' })
@@ -42,7 +43,7 @@ const stateColor = { ok: 'success', missing: 'warning', provisioning: 'primary',
           <EgressChip :id="r.egressId" size="sm" class="min-w-0" />
           <UIcon name="i-lucide-arrow-right" class="size-3 text-dimmed" />
           <span class="uf-mono text-[12px] text-toned w-32">{{ r.ip ?? '—' }}</span>
-          <span class="text-[11.5px] text-dimmed truncate flex-1">{{ r.detail }}</span>
+          <span class="text-[11.5px] text-dimmed truncate flex-1">{{ msg(r.detail) }}</span>
           <UBadge :color="stateColor[r.state]" variant="subtle" size="sm">{{ t(`egresses.probe.${r.state}`) }}</UBadge>
         </div>
       </div>

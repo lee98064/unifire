@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import type { SetupStatusT } from '#shared/schemas/auth'
 import type { CertificateInfoT, ControllerStatusT, ControllerInputT } from '#shared/schemas/controller'
+import type { UnifiRouteT } from '#shared/schemas/routes'
 
 definePageMeta({ layout: 'auth' })
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const msg = useMsg()
 const api = useApi()
 const setup = useState<SetupStatusT | null>('setup-status')
 const { fetch: refreshSession, loggedIn } = useUserSession()
 
-type Step = 'admin' | 'controller' | 'review' | 'done'
+type Step = 'admin' | 'controller' | 'review' | 'protect' | 'done'
 const steps: { key: Step, icon: string }[] = [
   { key: 'admin', icon: 'i-lucide-user-round-plus' },
   { key: 'controller', icon: 'i-lucide-router' },
   { key: 'review', icon: 'i-lucide-list-checks' },
+  { key: 'protect', icon: 'i-lucide-shield-ban' },
   { key: 'done', icon: 'i-lucide-party-popper' },
 ]
 const step = ref<Step>(setup.value?.needsAdmin ? 'admin' : 'controller')
@@ -30,7 +33,7 @@ const adminValid = computed(() => admin.username.length >= 2 && admin.displayNam
 async function createAdmin() {
   adminBusy.value = true
   try {
-    await api.post('/api/setup/admin', { username: admin.username, displayName: admin.displayName, password: admin.password, locale: useI18n().locale.value })
+    await api.post('/api/setup/admin', { username: admin.username, displayName: admin.displayName, password: admin.password, locale: locale.value })
     await refreshSession()
     await reloadStatus()
     step.value = setup.value?.mock ? 'review' : 'controller'
@@ -79,9 +82,41 @@ async function save() {
   try {
     if (!setup.value?.mock) await api.put('/api/controller', ctl)
     await reloadStatus()
-    step.value = 'done'
+    await loadProtect()
+    step.value = 'protect'
   }
   finally { saving.value = false }
+}
+
+/* ── Step 4: never-touch routes ──
+ * Routes another script already automates (e.g. a go-gost hourly egress) must never be written.
+ * The "suspected automation" detector needs hours of observation, so ask up front and pre-select likely candidates. */
+const protectRoutes = ref<UnifiRouteT[]>([])
+const protectSel = ref<string[]>([])
+const protectBusy = ref(false)
+const isSuggested = (r: UnifiRouteT) => r.suspectedAutomation || /gost|hourly|auto[- ]?(switch|egress)/i.test(r.description)
+async function loadProtect() {
+  try {
+    const all = await api.get<UnifiRouteT[]>('/api/routes', { silent: true })
+    protectRoutes.value = all
+      .filter(r => r.ownership === 'external' || r.ownership === 'excluded')
+      .sort((a, b) => Number(isSuggested(b) || b.ownership === 'excluded') - Number(isSuggested(a) || a.ownership === 'excluded') || a.description.localeCompare(b.description))
+    protectSel.value = protectRoutes.value.filter(r => r.ownership === 'excluded' || isSuggested(r)).map(r => r.id)
+  }
+  catch { protectRoutes.value = [] }
+}
+function toggleProtect(id: string) {
+  protectSel.value = protectSel.value.includes(id) ? protectSel.value.filter(x => x !== id) : [...protectSel.value, id]
+}
+async function saveProtect() {
+  protectBusy.value = true
+  try {
+    const current = await api.get<{ excludedRouteIds: string[] }>('/api/settings', { silent: true })
+    const keep = current.excludedRouteIds.filter(id => !protectRoutes.value.some(r => r.id === id))
+    await api.patch('/api/settings', { excludedRouteIds: [...new Set([...keep, ...protectSel.value])] })
+    step.value = 'done'
+  }
+  finally { protectBusy.value = false }
 }
 
 const capLabels = computed(() => Object.fromEntries((result.value?.capabilities ?? []).map(c => [c.key, t(`caps.k.${c.key}`)])) as Record<string, string>)
@@ -217,7 +252,7 @@ onMounted(async () => {
             <h2 class="text-base font-semibold text-highlighted">{{ result?.connected ? t('setup.review.connected') : t('setup.review.failed') }}</h2>
             <p class="text-[13px] text-muted mt-0.5">
               <template v-if="result?.connected">{{ result.model }} · Network {{ result.networkVersion }} · UniFi OS {{ result.consoleVersion }}</template>
-              <template v-else>{{ result?.lastError }}</template>
+              <template v-else>{{ msg(result?.lastError) }}</template>
             </p>
           </div>
           <UBadge v-if="result?.mock" color="secondary" variant="subtle" icon="i-lucide-flask-conical">{{ t('topbar.mock') }}</UBadge>
@@ -251,7 +286,40 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- 4. Done -->
+      <!-- 4. Never-touch routes -->
+      <div v-else-if="step === 'protect'" class="space-y-4">
+        <div class="flex items-start gap-3">
+          <span class="size-10 rounded-full flex items-center justify-center bg-error/10 text-error shrink-0"><UIcon name="i-lucide-shield-ban" class="size-5" /></span>
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-highlighted">{{ t('setup.protect.title') }}</h2>
+            <p class="text-[13px] text-muted mt-0.5">{{ t('setup.protect.desc') }}</p>
+          </div>
+        </div>
+
+        <div v-if="protectRoutes.length" class="rounded-lg ring-1 ring-(--ui-border) divide-y divide-(--ui-border-muted) max-h-[340px] overflow-y-auto">
+          <label v-for="r in protectRoutes" :key="r.id" class="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-(--uf-surface-2) transition-colors">
+            <UCheckbox :model-value="protectSel.includes(r.id)" @update:model-value="toggleProtect(r.id)" />
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[13px] font-medium text-highlighted truncate">{{ r.description || r.id }}</span>
+                <UBadge v-if="isSuggested(r)" color="warning" variant="subtle" size="xs" icon="i-lucide-sparkles">{{ t('setup.protect.suggested') }}</UBadge>
+              </div>
+              <div class="text-[11.5px] text-dimmed">{{ t(`routes.match.${r.matchingTarget}`, r.matchingTarget) }}<template v-if="!r.enabled"> · {{ t('common.disabled') }}</template></div>
+            </div>
+            <EgressChip v-if="r.egressId" :id="r.egressId" size="sm" />
+          </label>
+        </div>
+        <EmptyState v-else icon="i-lucide-route-off" :title="t('setup.protect.empty')" />
+
+        <p class="text-[12px] text-dimmed flex items-center gap-1.5"><UIcon name="i-lucide-info" class="size-3.5 shrink-0" />{{ t('setup.protect.hint') }}</p>
+
+        <div class="flex justify-between items-center pt-1">
+          <span class="text-[12.5px] text-muted">{{ t('setup.protect.count', { n: protectSel.length }) }}</span>
+          <UButton size="lg" trailing-icon="i-lucide-arrow-right" :loading="protectBusy" @click="saveProtect">{{ t('setup.protect.save') }}</UButton>
+        </div>
+      </div>
+
+      <!-- 5. Done -->
       <div v-else class="text-center py-6">
         <div class="relative mx-auto size-16 mb-5">
           <div class="absolute inset-0 rounded-full bg-success/25 blur-xl" />

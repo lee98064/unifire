@@ -61,7 +61,31 @@
     "webAuthnBusy": "請稍候再進行下一次 Passkey 驗證",
     "webAuthnChallengeInvalid": "驗證已過期，請重新開始",
     "webAuthnRegistrationFailed": "Passkey 註冊失敗",
-    "webAuthnAlreadyRegistered": "此 Passkey 已經註冊過"
+    "webAuthnAlreadyRegistered": "此 Passkey 已經註冊過",
+    "unifiInvalidUrl": "請輸入不含路徑或帳密的控制器 HTTPS 網址",
+    "unifiInvalidSite": "請輸入有效的 UniFi 站點代號",
+    "unifiInvalidFingerprint": "請輸入有效的 SHA-256 憑證指紋",
+    "unifiCaRequired": "請提供 PEM 格式的 CA 憑證",
+    "unifiPasswordRequired": "請輸入控制器帳號密碼",
+    "unifiInactive": "Unifire 控制器服務暫時無法使用",
+    "unifiNotConfigured": "請先設定 UniFi 控制器",
+    "unifiTimeout": "控制器請求逾時",
+    "unifiNotFound": "UniFi 找不到指定資源",
+    "routeNotOwned": "這條路由不歸 Unifire 管理，無法寫入",
+    "unifiRouteDrift": "路由與基準不一致（在 UniFi 被改過），請先檢查",
+    "unifiBlockNotOwned": "這個封鎖是在 UniFi 設定的，請到 UniFi 解除",
+    "unifiQualificationRequired": "寫入前請先在設定頁執行即時能力檢測",
+    "unifiClientStateUnknown": "UniFi 沒有回報這台裝置目前的封鎖狀態",
+    "clientNotFound": "找不到這台裝置",
+    "egressNotFound": "找不到這個出口",
+    "unifiRequestFailed": "控制器請求失敗",
+    "managedRouteNotFound": "找不到這條受管路由",
+    "routeCreateUnsupported": "此控制器無法經 API 建立路由，請先在 UniFi 建立再認領",
+    "routeExternallyAutomated": "這條路由近期常被外部改變出口，疑似已有其他自動化在管理",
+    "routeShapeUnsupported": "這條路由的條件超出受管路由編輯器能表示的範圍",
+    "routeReservedName": "此名稱保留給探測路由",
+    "routeDestinationsRequired": "請至少加入一個目的地",
+    "overrideInvalidEnd": "臨時出口的結束時間必須在未來"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -149,7 +173,8 @@
       "admin": "管理員",
       "controller": "連線 UniFi",
       "review": "能力檢測",
-      "done": "完成"
+      "done": "完成",
+      "protect": "保護清單"
     },
     "admin": {
       "title": "建立管理員帳號",
@@ -203,6 +228,15 @@
       "next2": "為裝置設定出口排程",
       "next3": "建立家人與配額",
       "go": "前往總覽"
+    },
+    "protect": {
+      "title": "哪些路由 Unifire 永遠不能動？",
+      "desc": "已由其他腳本自動管理的路由（例如 go-gost 每小時切換出口）請勾選。勾選後 Unifire 只讀不寫，也無法被認領。",
+      "suggested": "建議保護",
+      "empty": "沒有可設定的路由",
+      "hint": "之後可以在「設定 → 一般 → 永不寫入的路由」修改。",
+      "count": "已保護 {n} 條",
+      "save": "儲存並完成"
     }
   },
   "caps": {
@@ -472,7 +506,11 @@
       "lossHint": "丟包率超過即視為失敗",
       "recover": "切回前觀察",
       "recoverHint": "主出口需穩定多久才切回"
-    }
+    },
+    "dryRunCreated": "Dry-run：已試算，未實際建立",
+    "dryRunCreatedDesc": "目前為 Dry-run 模式，UniFi 沒有任何變更。切到寫入模式後再建立即可。",
+    "dryRunReleased": "Dry-run：未實際刪除",
+    "dryRunReleasedDesc": "Dry-run 模式下只試算刪除，路由仍在 UniFi 且由 Unifire 管理。"
   },
   "egresses": {
     "desc": "每個 WAN 與 VPN Client 的即時健康、延遲與實際公網出口。",
@@ -1074,7 +1112,65 @@
       "passkeyRegistered": "{username} 已註冊 Passkey"
     },
     "config": {
-      "settingsChanged": "已更新設定：{keys}"
+      "settingsChanged": "已更新設定：{keys}",
+      "controllerSaved": "已儲存控制器設定（站點 {site}）",
+      "controllerModeChanged": "控制器寫入模式改為 {mode}"
+    },
+    "unifi": {
+      "writeApplied": "UniFi 已套用：{action} · {target}",
+      "writeUnchanged": "無需寫入：{action} · {target}",
+      "writeDryRun": "Dry-run 試算：{action} · {target}",
+      "writeFailed": "寫入失敗：{action} · {target}（{error}）"
+    },
+    "egress": {
+      "updated": "已更新出口「{egress}」的設定",
+      "ipChanged": "出口「{egress}」公網 IP 變更：{from} → {to}",
+      "sweepDryRun": "Dry-run：略過 {total} 個出口的 IP 掃描"
+    },
+    "client": {
+      "updated": "已更新裝置 {mac}"
+    },
+    "route": {
+      "managedChanged": "受管路由「{route}」：{action}",
+      "drift": "路由「{route}」的條件在 UniFi 被修改，已暫停管理",
+      "switched": "路由「{route}」出口切換：{from} → {to}（{reason}）"
+    },
+    "actionName": {
+      "route": {
+        "created": "建立",
+        "adopted": "認領",
+        "updated": "更新",
+        "released": "釋出",
+        "scheduleChanged": "排程變更",
+        "overrideSet": "設定臨時出口",
+        "overrideCleared": "結束臨時出口",
+        "resumed": "恢復管理"
+      },
+      "routes": {
+        "create": "建立路由",
+        "update": "更新路由",
+        "delete": "刪除路由"
+      },
+      "user": {
+        "update": "更新裝置"
+      },
+      "wlanconf": {
+        "update": "更新 Wi-Fi"
+      },
+      "client": {
+        "block": "封鎖",
+        "unblock": "解除封鎖",
+        "kick": "重新連線"
+      },
+      "device": {
+        "restart": "重啟設備",
+        "power_cycle": "PoE 斷電重啟",
+        "speedtest": "測速"
+      }
+    },
+    "method": {
+      "password": "密碼",
+      "passkey": "Passkey"
     }
   },
   "presence": {
@@ -1141,6 +1237,57 @@
     },
     "devices": "我的裝置",
     "today": "今天 {time} · {data}"
+  },
+  "block": {
+    "manual": "由管理員在 Unifire 封鎖",
+    "unifi": "直接在 UniFi 封鎖（Unifire 不會解除）"
+  },
+  "capability": {
+    "empty": "控制器回傳空結果",
+    "authRequired": "請先連線控制器再檢測",
+    "dryRun": "此項需要寫入，Dry-run 模式已略過",
+    "reprobeRequired": "請重新檢測以確認寫入能力",
+    "selfMacRequired": "請先偵測或填寫 Unifire 主機 MAC",
+    "wanRequired": "測試路由需要至少一個啟用中的 WAN",
+    "routesRequired": "需要能讀取路由清單才能做寫入測試",
+    "scratchUnavailable": "此步驟沒有可用的測試路由",
+    "requiresAction": "需要實際執行該指令才能確認",
+    "speedtestStatusOnly": "可查詢測速狀態"
+  },
+  "controllerError": {
+    "authRequired": "控制器拒絕登入或工作階段已失效",
+    "authLocked": "連續 3 次登入被拒，已停止自動登入",
+    "loginBackoff": "稍候再嘗試登入（避免觸發 UDM 鎖定）",
+    "loginResponse": "登入回應缺少 Cookie 或 CSRF Token",
+    "forbidden": "控制器拒絕此操作（帳號權限不足？）",
+    "rateLimited": "控制器正在限流",
+    "fingerprintMismatch": "憑證指紋與信任的不符",
+    "tls": "無法建立 TLS 連線",
+    "html": "控制器回傳了 HTML 頁面（網址錯誤？）",
+    "http": "控制器回傳非預期的 HTTP 狀態",
+    "timeout": "控制器請求逾時",
+    "notFound": "控制器上找不到此端點或資源",
+    "invalidResponse": "控制器回應格式不符預期",
+    "api": "控制器 API 拒絕了請求",
+    "websocket": "無法開啟控制器事件串流",
+    "verifyFailed": "寫入後讀回無法確認變更"
+  },
+  "route": {
+    "unnamed": "未命名路由",
+    "state": {
+      "drift": "這條路由的條件已被修改，請檢查後再恢復管理",
+      "missing": "UniFi 已找不到這條路由",
+      "dryRun": "Dry-run 預覽，尚未在 UniFi 建立"
+    }
+  },
+  "probe": {
+    "detail": {
+      "drift": "探測路由與預期設定不符",
+      "ipPoolExhausted": "探測 IP 池已用完",
+      "selfMacRequired": "請先偵測或填寫 Unifire 主機 MAC",
+      "dryRun": "Dry-run 模式略過實際掃描",
+      "traceTimeout": "20 秒內無法確認穩定的新公網 IP"
+    }
   },
   "settings": {
     "tab": {
