@@ -1,3 +1,5 @@
+import { digest } from '../engine/snapshots/diff'
+import { createWriteLedger } from '../unifi/write-ledger'
 import { createHash } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { and, eq } from 'drizzle-orm'
@@ -153,6 +155,7 @@ export async function createControllerService(db: Db, options: {
     const key = siteKey(new URL(config.url).origin, config.site)
     const scope = options.mock ? 'mock:default' : key
     const observations = createRouteObservations(db, scope)
+    const ledger = createWriteLedger()
     const authLocked = !options.mock && db.select().from(settings).where(eq(settings.key, AUTH_LOCK)).get()?.value === key
 
     function persistAuthLock() {
@@ -233,6 +236,10 @@ export async function createControllerService(db: Db, options: {
         .where(eq(settings.key, QUALIFIED_CONTROLLER)).get()?.value === key,
       preWrite: () => settingsService.get().snapshots.preWrite, audit, hooks: beforeWrite,
       onRouteWrite: observations.recordWrite,
+      onConfigWrite(resource, id, before, after) {
+        ledger.record(resource, id, before ? digest(before) : undefined, after ? digest(after) : undefined)
+        engine.emit('event', { type: 'config.unifire_write' })
+      },
       onRoutesChanged() {
         // A poll started before the mutation may still be in flight.
         void cache.refresh('routes').catch(() => {}).then(() => cache.refresh('routes')).catch(() => {})
@@ -311,7 +318,7 @@ export async function createControllerService(db: Db, options: {
     }
 
     return {
-      config, transport, status: state, api, cache, writes, key, scope, observations, active: live, qualify, inspectVersion, connectEvents, start,
+      config, transport, status: state, api, cache, writes, key, scope, observations, ledger, active: live, qualify, inspectVersion, connectEvents, start,
       resetEvents() { disconnect?.(); disconnect = undefined; state.wsConnected = false },
       async close() { disconnect?.(); cache.stop(); await transport.close() },
     }
@@ -536,7 +543,7 @@ export type ControllerService = {
   mockProbe: MockController['probe'] | undefined
   mockTrace: MockController['trace'] | undefined
   runtime: { config: UnifiConfig, api: Endpoints, cache: ReturnType<typeof createSyncCache>, writes: ReturnType<typeof createWriteGate>,
-    scope: string, active: () => boolean, observations: ReturnType<typeof createRouteObservations> } | undefined
+    scope: string, key: string, status: ControllerStatusT, ledger: ReturnType<typeof createWriteLedger>, active: () => boolean, observations: ReturnType<typeof createRouteObservations> } | undefined
   ready: () => Promise<void>
   sync: () => Promise<void>
   stop: () => Promise<void>

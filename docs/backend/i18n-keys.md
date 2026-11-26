@@ -129,3 +129,32 @@
 | `probe.detail.selfMacRequired` | Detect or enter the Unifire host MAC to use probe routes. | None |
 | `probe.detail.dryRun` | Dry run skipped the live sweep. | None |
 | `probe.detail.traceTimeout` | The trace did not confirm a stable distinct public IP within 20 seconds. | None |
+
+## WP4 snapshots and configuration audit
+
+| Key | English description | Params |
+|---|---|---|
+| `snapshots.summary.routeEgress` | A traffic route changed egress. | `route`, `from`, `to` |
+| `snapshots.summary.routeToggled` | A traffic route was enabled or disabled. | `route`, `state` (boolean string) |
+| `snapshots.summary.added` | An item was added. | `resource`, `label` |
+| `snapshots.summary.removed` | An item was removed. | `resource`, `label` |
+| `snapshots.summary.modified` | One or more fields were modified. | `resource`, `label`, `fields` (count) |
+| `snapshots.summary.wifiPassword` | A Wi-Fi credential changed. | `ssid` |
+| `snapshots.summary.firewallToggled` | A firewall policy was enabled or disabled. | `name`, `state` (boolean string) |
+| `audit.snapshot.created` | A configuration snapshot was captured. | `trigger`, `failed` (empty) |
+| `audit.snapshot.incomplete` | Some collections were unavailable during capture. | `trigger`, `failed` (resource ids) |
+| `audit.snapshot.deleted` | A snapshot was deleted. | None |
+| `audit.snapshot.restoreApplied` | A restore step was applied and verified. | `action`, `target` |
+| `audit.snapshot.restoreFailed` | A restore step failed. | `action`, `target`, `error` (error code) |
+| `audit.snapshot.restoreSkipped` | A restore step was skipped. | `action`, `target`, optional `reason` (reason code) |
+| `audit.snapshot.restoreCompensated` | The original DNS record was recreated after its replacement failed. | `target` |
+| `audit.config.externalChange` | A controller configuration item changed outside Unifire. | `resource`, `label` |
+| `audit.unifi.log` | A UniFi system event was recorded. | `message` (safe event code or redaction marker), `key` (UniFi event code) |
+| `audit.egress.sweepDone` | An egress public-IP sweep finished. | `total`, `ok`, `changed`, `failed` |
+| `audit.egress.probesProvisioned` | Probe routes were created, repaired, or removed. | `created`, `repaired`, `removed` |
+| `audit.egress.probeOverlap` | An unowned route overlaps the requested probe. | `egress` |
+| `errors.snapshotNotFound` | The snapshot could not be found. | None |
+| `errors.snapshotItemNotFound` | The item could not be found in the snapshot. | None |
+| `errors.snapshotScopeMismatch` | The snapshot belongs to a different controller or site. | None |
+| `errors.invalidSnapshotCron` | The snapshot schedule is not a valid cron expression. | None |
+| `errors.unifiSnapshotIncomplete` | The collection could not be captured before writing to UniFi. | None |

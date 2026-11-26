@@ -36,6 +36,7 @@ export function createUnifiEndpoints({ paths, read, postRead }: UnifiTransport) 
   }
 
   return {
+    configCollection: (path: string, isV2: boolean) => (isV2 ? v2 : classic)(path, Docs),
     sysinfo: () => classic('stat/sysinfo', z.array(Sysinfo)),
     sites: () => get(paths.sites, z.array(Site)),
     networks: () => classic('rest/networkconf', z.array(Network)),

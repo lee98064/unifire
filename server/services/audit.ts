@@ -19,7 +19,7 @@ function redactDiff(diff: AuditEventT['diff']): AuditEventT['diff'] {
   return diff?.map(change => {
     const secret = change.secret || change.path.split(/[.\[\]'"]+/).some(isSecretKey)
     return secret
-      ? { ...change, before: REDACTED, after: REDACTED, beforeLabel: null, afterLabel: null, secret }
+      ? { ...change, before: change.secret ? null : REDACTED, after: change.secret ? null : REDACTED, beforeLabel: null, afterLabel: null, secret }
       : { ...change, before: redactSecrets(change.before), after: redactSecrets(change.after) }
   }) ?? null
 }
@@ -34,11 +34,11 @@ export function decodeCursor(cursor: string) {
 }
 
 export function createAuditService(db = useDb(), bus = liveBus, now = Date.now) {
-  function record(input: AuditInput) {
+  function record(input: AuditInput, ts = now()) {
     const entry = AuditEvent.parse({
       ...input,
       id: randomUUID(),
-      ts: now(),
+      ts,
       target: input.target ?? null,
       messageParams: redactSecrets(input.messageParams ?? {}),
       diff: redactDiff(input.diff ?? null),

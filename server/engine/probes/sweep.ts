@@ -116,6 +116,7 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
       egressId, ok: !!answer, ip: answer?.ip ?? null, country: answer?.country ?? null, error,
     }] }
     publish()
+    return changed
   }
 
   async function disable(ctx: WriteContext) {
@@ -128,11 +129,11 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
         pendingDisable = undefined
         return
       }
-      const outcome = await run.writes.updateRoute(id, { enabled: false }, { ...ctx, probeBaseline: baseline })
+      const outcome = await run.writes.updateRoute(id, { enabled: false }, { ...ctx, probeBaseline: baseline, quietProbe: true })
         .catch(async error => {
           if (unifiErrorCode(error) !== 'UNIFI_ROUTE_DRIFT') throw error
           // Shut off our registered sweep even if it drifted while activated.
-          return run.writes.repairProbe(id, { enabled: false }, ctx)
+          return run.writes.repairProbe(id, { enabled: false }, { ...ctx, quietProbe: true })
         })
       if (!outcome.dryRun) pendingDisable = undefined
     } catch (error) {
@@ -143,6 +144,8 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
 
   async function runSweep(run: Runtime, mac: string, ids: string[], ctx: WriteContext, signal: AbortSignal) {
     let previous: string | null = null
+    let changed = 0
+    let cleanupFailed = false
     try {
       if (pendingDisable) await disable(ctx)
       const { id, draft } = await routes.ensureSweep(run, mac, ids[0]!, ctx)
@@ -161,7 +164,7 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
           if (!route) throw new UnifiError('UNIFI_ROUTE_NOT_FOUND')
           const expected = route.enabled && pendingDisable ? enabled : disabled
           pendingDisable = { run, id, baseline: enabled }
-          const applied = await run.writes.updateRoute(id, { network_id: egressId, enabled: true }, { ...ctx, probeBaseline: expected })
+          const applied = await run.writes.updateRoute(id, { network_id: egressId, enabled: true }, { ...ctx, probeBaseline: expected, quietProbe: true })
           if (applied.dryRun) throw new UnifiError('SWEEP_DRY_RUN')
           answer = await readStable(previous, signal)
           if (answer) previous = answer.ip
@@ -171,7 +174,7 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
           error = unifiErrorCode(cause) === 'SWEEP_DRY_RUN' ? 'probe.detail.dryRun' : unifiStatusKey(unifiErrorCode(cause))
         }
         if (signal.aborted || !run.active()) break
-        result(egressId, answer, Math.round(performance.now() - started), error, ctx.actor)
+        if (result(egressId, answer, Math.round(performance.now() - started), error, ctx.actor)) changed++
       }
     } catch (error) {
       if (!signal.aborted && run.active()) {
@@ -179,10 +182,16 @@ export function createSweep(db: Db, service: ControllerService, routes: ReturnTy
       }
     } finally {
       try { await disable(ctx) } catch {
+        cleanupFailed = true
         // Keep the pending route for a later live retry or an explicit cleanup.
       }
+      const ok = current.results.filter(row => row.ok).length
+      const failed = current.total - ok
       current = { ...current, running: false, current: null, finishedAt: now() }
       publish()
+      audit.record({ actor: ctx.actor, category: 'egress', action: 'egress.sweepDone',
+        severity: failed || cleanupFailed ? 'warning' : 'success', messageKey: 'audit.egress.sweepDone',
+        messageParams: { total: String(current.total), ok: String(ok), changed: String(changed), failed: String(failed) } })
     }
   }
 

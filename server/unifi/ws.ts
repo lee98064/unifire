@@ -3,6 +3,7 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import WebSocket from 'ws'
 import { z } from 'zod'
+import type { SnapshotResourceT } from '#shared/schemas/insight'
 import type { UnifiTransport } from './client'
 import { Doc, MacAddress, type WireDoc } from './endpoints/schemas'
 import { UnifiError } from './errors'
@@ -11,6 +12,8 @@ export type ControllerEvent =
   | { type: 'client.connected' | 'client.disconnected' | 'client.roam', mac: string, data: WireDoc }
   | { type: 'client.updated' | 'device.updated' | 'user.updated', mac: string | null, data: WireDoc }
   | { type: 'controller.event', key: string, data: WireDoc }
+  | { type: 'config.unifire_write' }
+  | { type: 'config.external_change', resource: SnapshotResourceT, itemId: string, label: string }
   | { type: 'cache.changed', resource: string }
   | { type: 'controller.reconnected' | 'controller.mode' | 'routing.settings' }
   | { type: 'routing.changed', managedRouteId: string }
@@ -40,6 +43,9 @@ export function parseControllerEvents(raw: string): ControllerEvent[] {
       if (kind === 'events' && typeof data.key === 'string') {
         const type = clientEvents.get(data.key)
         return [type && mac ? { type, mac, data } : { type: 'controller.event', key: data.key, data }]
+      }
+      if (/^(?:networkconf|wlanconf|trafficroutes?|portforward|firewall|static-dns|object)(?::|$)/i.test(kind)) {
+        return [{ type: 'controller.event', key: kind, data }]
       }
       if (kind === 'sta:sync') return [{ type: 'client.updated', mac, data }]
       if (kind === 'device:sync') return [{ type: 'device.updated', mac, data }]

@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { ProbeOverview } from '#shared/schemas/egress'
 import type { Db } from '../../db'
 import { egresses, settings } from '../../db/schema'
+import { createAuditService } from '../../services/audit'
 import { systemContext, type ControllerService } from '../../services/controller'
 import { classifyRoute, PROBE_PREFIX, routeFingerprint } from '../../services/ownership'
 import { routeDraft } from '../../services/route-shape'
@@ -24,6 +25,13 @@ function draftFor(mac: string, name: string, egressId: string, ips: string[], en
 }
 
 export function createProbeRoutes(db: Db, service: ControllerService) {
+  const audit = createAuditService(db)
+  function report(ctx: WriteContext, created: number, repaired: number, removed: number) {
+    if (!created && !repaired && !removed) return
+    audit.record({ actor: ctx.actor, category: 'egress', action: 'egress.probesProvisioned', severity: 'info',
+      messageKey: 'audit.egress.probesProvisioned',
+      messageParams: { created: String(created), repaired: String(repaired), removed: String(removed) } })
+  }
   const config = createSettingsService(db)
   const errors = new Map<string, string>()
   const provisioning = new Set<string>()
@@ -93,6 +101,9 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
         return overview()
       }
       const status = service.status()
+      const quiet = { ...ctx, quietProbe: true }
+      let created = 0
+      let repaired = 0
       if (!repair && (!status.connected || status.mode !== 'live')) return overview()
       const rows = exits(run)
       if (!rows.some(row => row.probeEnabled && row.enabled || row.probeRouteScope === run.scope && row.probeRouteId)) return overview()
@@ -114,7 +125,9 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
         const doc = docs.find(route => row.probeRouteScope === run.scope && route._id === row.probeRouteId)
         if (!row.enabled || !row.probeEnabled) {
           if (doc?.enabled) {
-            await run.writes.repairProbe(doc._id, { enabled: false }, ctx).catch(error => {
+            await run.writes.repairProbe(doc._id, { enabled: false }, quiet).then(result => {
+              if (!result.dryRun && result.changed) repaired++
+            }).catch(error => {
               errors.set(row.id, unifiStatusKey(unifiErrorCode(error)) ?? 'errors.unifiRequestFailed')
             })
           }
@@ -132,16 +145,24 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
         provisioning.add(row.id)
         try {
           if (doc) {
-            if (!matches(doc, draft)) await run.writes.repairProbe(doc._id, draft, ctx)
+            if (!matches(doc, draft)) {
+              const result = await run.writes.repairProbe(doc._id, draft, quiet)
+              if (!result.dryRun && result.changed) repaired++
+            }
           } else {
             // An unregistered rule at this exact source and destination could capture probe traffic.
             const overlap = docs.some(route => route.description?.startsWith(PROBE_PREFIX)
               && route.target_devices.some(target => target.client_mac === mac)
               && route.ip_addresses?.some(address => (typeof address === 'string' ? address : address.ip_or_subnet) === ip))
-            if (overlap) throw new UnifiError('ROUTE_NOT_OWNED')
-            await run.writes.createRoute(draft, ctx, { created: id => {
+            if (overlap) {
+              audit.record({ actor: ctx.actor, category: 'egress', action: 'egress.probeOverlap', severity: 'warning',
+                messageKey: 'audit.egress.probeOverlap', messageParams: { egress: row.name } })
+              throw new UnifiError('ROUTE_NOT_OWNED')
+            }
+            const result = await run.writes.createRoute(draft, quiet, { created: id => {
               if (run.active()) setExit(row, { probeRouteId: id, probeRouteScope: run.scope })
             } })
+            if (!result.dryRun && result.changed) created++
           }
           errors.delete(row.id)
         } catch (error) {
@@ -153,6 +174,7 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
         }
       }
       await run.cache.refresh('routes').catch(() => {})
+      report(ctx, created, repaired, 0)
       return overview()
     })
   }
@@ -164,13 +186,15 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
       const docs = await run.api.routes()
       const rows = db.select().from(egresses).where(and(eq(egresses.site, run.config.site), eq(egresses.probeRouteScope, run.scope))).all()
       const targets = new Set([...rows.map(row => row.probeRouteId), sweepId(run)])
+      let removed = 0
       let failure: unknown
       for (const id of targets) {
         if (!id) continue
         try {
-          const result = docs.some(route => route._id === id) ? await run.writes.deleteRoute(id, ctx)
-            : { dryRun: service.status().mode === 'dry-run' || ctx.dryRun === true }
+          const result = docs.some(route => route._id === id) ? await run.writes.deleteRoute(id, { ...ctx, quietProbe: true })
+            : { changed: false, dryRun: service.status().mode === 'dry-run' || ctx.dryRun === true }
           if (result.dryRun || !run.active()) continue
+          if (result.changed) removed++
           const row = rows.find(row => row.probeRouteId === id)
           if (row) {
             setExit(row, { probeRouteId: null })
@@ -179,6 +203,7 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
         } catch (error) { failure ??= error }
       }
       await run.cache.refresh('routes').catch(() => {})
+      report(ctx, 0, 0, removed)
       if (failure) throw failure
       return overview()
     })
@@ -190,12 +215,12 @@ export function createProbeRoutes(db: Db, service: ControllerService) {
     const draft = draftFor(mac, SWEEP_NAME, current?.network_id || egressId, SWEEP_IPS.map(ip => `${ip}/32`), false)
     if (current) {
       if (!matches(current, draft) || classifyRoute(current, service.ownership(run.config.site)) !== 'probe') {
-        await run.writes.repairProbe(current._id, draft, ctx)
+        await run.writes.repairProbe(current._id, draft, { ...ctx, quietProbe: true })
       }
       return { id: current._id, draft }
     }
     if (docs.some(doc => doc.description === SWEEP_NAME)) throw new UnifiError('ROUTE_NOT_OWNED')
-    const result = await run.writes.createRoute(draft, ctx, { created: id => {
+    const result = await run.writes.createRoute(draft, { ...ctx, quietProbe: true }, { created: id => {
       if (run.active()) saveSweep(run, id)
     } })
     if (result.id === null) throw new UnifiError('SWEEP_DRY_RUN')

@@ -11,6 +11,7 @@ import { createProbeRunner } from '../../server/engine/probes/runner'
 import { createSweep } from '../../server/engine/probes/sweep'
 import { nextHourBoundary, startReconciler } from '../../server/engine/reconciler'
 import { clearFailover, previewSegments, resolveEgress, type HealthReading } from '../../server/engine/route-desired'
+import { createAuditService } from '../../server/services/audit'
 import { createControllerService, systemContext } from '../../server/services/controller'
 import { createInventory } from '../../server/services/inventory'
 import { createSettingsService } from '../../server/services/settings'
@@ -295,6 +296,13 @@ describe('WP3 with fake UniFi', () => {
     const removed = await probes.cleanup(ctx)
     expect(removed.routes.every(row => row.state === 'missing')).toBe(true)
     expect(removed.routes.map(row => row.ip)).toEqual(provisioned.map(row => row.ip))
+    expect(createAuditService(db).list({ category: 'egress', q: 'probesProvisioned' }).items.map(row => row.messageParams))
+      .toEqual(expect.arrayContaining([
+        { created: String(provisioned.length), repaired: '0', removed: '0' },
+        { created: '0', repaired: '1', removed: '0' },
+        { created: '0', repaired: '0', removed: String(provisioned.length) },
+      ]))
+    expect(createAuditService(db).list({ category: 'route', q: '[unifire-probe]' }).items).toEqual([])
   })
 
   it('compacts raw data into minute and ten-minute buckets and caps history at 360 points', () => {
@@ -336,6 +344,12 @@ describe('WP3 with fake UniFi', () => {
     expect(timedOut.get().results).toMatchObject([{ ok: true }, { ok: false, error: 'probe.detail.traceTimeout' }])
     expect(await document(probes.sweepId(service.runtime!)!)).toMatchObject({ enabled: false })
     expect(db.select().from(egressIpChecks).where(eq(egressIpChecks.egressId, vpn)).all()).toHaveLength(2)
+    const audit = createAuditService(db)
+    expect(audit.list({ category: 'egress', q: 'sweepDone' }).items.map(row => row.messageParams)).toEqual([
+      { total: '2', ok: '1', changed: '0', failed: '1' }, { total: '2', ok: '2', changed: '1', failed: '0' },
+    ])
+    expect(audit.list({ category: 'egress', q: 'ipChanged' }).items).toHaveLength(1)
+    expect(audit.list({ category: 'route', q: '[unifire-probe]' }).items).toEqual([])
   })
 
   it('stops an active sweep and disables its route before switching to dry-run', async () => {

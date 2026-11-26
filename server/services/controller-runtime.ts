@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Db } from '../db'
+import { createAuditWatch } from '../engine/audit-watch'
+import { createSnapshots } from '../engine/snapshots'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
 import { createControllerService, type ControllerService } from './controller'
@@ -8,6 +10,8 @@ import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
 let current: ControllerService | undefined
 let routing: ReturnType<typeof createRouting> | undefined
+let snapshots: ReturnType<typeof createSnapshots> | undefined
+let snapshotsReady: Promise<void> | undefined
 let starting: Promise<() => Promise<void>> | undefined
 
 export async function useController() {
@@ -23,6 +27,13 @@ export async function useRouting() {
   return routing
 }
 
+export async function useSnapshots() {
+  await useController()
+  await snapshotsReady
+  if (!snapshots) throw new UnifiError('UNIFI_INACTIVE')
+  return snapshots
+}
+
 const TTL = 45_000
 
 export function startControllerRuntime(db: Db, mock: boolean, lively: boolean) {
@@ -35,6 +46,7 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
   let expiresAt = 0
   let stopping = false
   let maintenance: Promise<void> | undefined
+  let stopInsights: (() => Promise<unknown>) | undefined
   let stopRouting: (() => Promise<void>) | undefined
   let inventory: ReturnType<typeof createInventory> | undefined
   let expiry: Promise<void> | undefined
@@ -51,14 +63,22 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
       current = undefined
       routing = undefined
       inventory = undefined
+      snapshots = undefined
+      snapshotsReady = undefined
       expiresAt = 0
       await stopRouting?.()
+      await stopInsights?.()
       await stale.stop()
     }
     if (stopping || !acquireLease(ENGINE_LEASE, owner, TTL, db, now)) return
     expiresAt = now + TTL
     try {
       current = await createControllerService(db, { mock, lively, active: () => Date.now() < expiresAt })
+      snapshots = createSnapshots(db, current)
+      const snapshotJob = snapshots.start()
+      snapshotsReady = snapshotJob.ready.catch(() => {})
+      const stopWatch = createAuditWatch(db, current).start()
+      stopInsights = () => Promise.allSettled([snapshotJob.stop(), stopWatch()])
       routing = createRouting(db, current)
       stopRouting = routing.start()
       inventory = createInventory(db, current, routing)
@@ -89,7 +109,10 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean) {
     const service = current
     current = undefined
     routing = undefined
+    snapshots = undefined
+    snapshotsReady = undefined
     await stopRouting?.()
+    await stopInsights?.()
     await service?.stop()
     await expiry
     releaseLease(ENGINE_LEASE, owner, db)

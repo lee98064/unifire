@@ -12,6 +12,7 @@ const errorKeys: Record<string, [number, string]> = {
   UNIFI_PASSWORD_REQUIRED: [400, 'errors.unifiPasswordRequired'],
   UNIFI_INACTIVE: [503, 'errors.unifiInactive'],
   UNIFI_NOT_CONFIGURED: [409, 'errors.unifiNotConfigured'],
+  UNIFI_SNAPSHOT_INCOMPLETE: [409, 'errors.unifiSnapshotIncomplete'],
   UNIFI_TIMEOUT: [504, 'errors.unifiTimeout'],
   UNIFI_ROUTE_NOT_FOUND: [404, 'errors.unifiNotFound'],
   ROUTE_NOT_OWNED: [409, 'errors.routeNotOwned'],

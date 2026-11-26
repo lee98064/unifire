@@ -1,3 +1,4 @@
+import { Cron } from 'croner'
 import { Settings, SettingsInput, type SettingsT } from '#shared/schemas/system'
 import { useDb } from '../db'
 import { settings } from '../db/schema'
@@ -50,6 +51,10 @@ export function createSettingsService(db = useDb()) {
   function patch(input: Partial<SettingsT>): SettingsT {
     const changes = SettingsInput.parse(input)
     if (changes.timezone !== undefined) validateTimezone(changes.timezone)
+    if (changes.snapshots?.cron) {
+      try { new Cron(changes.snapshots.cron, { paused: true, timezone: changes.timezone ?? get().timezone }).stop() }
+      catch { throw apiError(400, 'INVALID_SNAPSHOT_CRON', 'errors.invalidSnapshotCron') }
+    }
     const rows = settingsKeys.flatMap(key => {
       const value = changes[key]
       return value === undefined ? [] : [{ key, value }]

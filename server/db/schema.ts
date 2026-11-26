@@ -393,6 +393,7 @@ export const wolTargets = sqliteTable('wol_targets', {
 export const snapshots = sqliteTable('snapshots', {
   id: text('id').primaryKey(),
   ts: integer('ts').notNull(),
+  controllerScope: text('controller_scope'),
   trigger: text('trigger').$type<SnapshotT['trigger']>().notNull(),
   note: text('note'),
   networkVersion: text('network_version'),
@@ -401,7 +402,7 @@ export const snapshots = sqliteTable('snapshots', {
   counts: text('counts', { mode: 'json' }).$type<SnapshotT['counts']>().notNull(),
   changeCount: integer('change_count'),
   sizeBytes: integer('size_bytes').notNull(),
-}, t => [index('snapshots_ts_id').on(t.ts, t.id)])
+}, t => [index('snapshots_ts_id').on(t.ts, t.id), index('snapshots_scope_ts_id').on(t.controllerScope, t.ts, t.id)])
 
 export const snapshotItems = sqliteTable('snapshot_items', {
   snapshotId: text('snapshot_id').notNull().references(() => snapshots.id, { onDelete: 'cascade' }),
@@ -411,6 +412,19 @@ export const snapshotItems = sqliteTable('snapshot_items', {
   hash: text('hash').notNull(),
   label: text('label').notNull(),
 }, t => [primaryKey({ columns: [t.snapshotId, t.resource, t.itemId] })])
+
+export const snapshotRestoreIds = sqliteTable('snapshot_restore_ids', {
+  scope: text('scope').notNull(),
+  resource: text('resource').$type<SnapshotResourceT>().notNull(),
+  originalId: text('original_id').notNull(),
+  currentId: text('current_id').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.resource, t.originalId] })])
+
+export const unifiLogEntries = sqliteTable('unifi_log_entries', {
+  scope: text('scope').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  ts: integer('ts').notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.fingerprint] }), index('unifi_log_entries_ts').on(t.ts)])
 
 export const auditEvents = sqliteTable('audit_events', {
   id: text('id').primaryKey(),

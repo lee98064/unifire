@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createServer as createSecureServer, type ServerOptions } from 'node:https'
 import { WebSocket, WebSocketServer } from 'ws'
-import { Doc, Route, Station } from '../endpoints/schemas'
+import { Doc, Route, Station, type WireDoc } from '../endpoints/schemas'
 import { osPaths } from '../paths'
 import { buildFixtures, createRandom, DEMO_ROUTES, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
 
@@ -45,6 +45,17 @@ export async function startMockController(options: {
   const clients = new Map(fixtures.clients.map(raw => [raw.mac, { ...Station.parse(raw), online: raw.online }]))
   const wlans = new Map(fixtures.wlans.map(wlan => [wlan._id, Doc.parse(wlan)]))
   const devices = fixtures.devices
+  const portForwards = new Map<string, WireDoc>([['demo-forward', { _id: 'demo-forward', name: 'Demo port forward',
+    enabled: true, src: 'any', dst_port: '8443', fwd: '10.235.0.25', fwd_port: '443', proto: 'tcp' }]])
+  const staticDns = new Map<string, WireDoc>([['demo-dns', { _id: 'demo-dns',
+    key: 'nas.example.test', value: '10.235.0.25', record_type: 'A', enabled: true }]])
+  const firewallPolicies = new Map<string, WireDoc>([['demo-policy', { _id: 'demo-policy', name: 'Demo isolation',
+    enabled: true, index: 10000, action: 'BLOCK', source: { zone_id: 'demo-zone-core' }, predefined: false }]])
+  const objects = new Map<string, WireDoc>(Array.from({ length: 3 }, (_, index) => {
+    const id = `demo-object-${index}`
+    return [id, { id, name: `Demo object ${index + 1}`, enabled: true, target_type: 'CLIENT', targets: [],
+      route: { enabled: true, network_id: 'demo-wan-1' } }]
+  }))
   const wss = new WebSocketServer({ noServer: true })
   const sessions = new Map<string, { csrf: string, until: number }>()
   const profiles = probeProfiles()
@@ -80,6 +91,13 @@ export async function startMockController(options: {
     event(`EVT_${prefix}_${active ? 'Connected' : 'Disconnected'}`, mac)
   }
 
+  function togglePortForward() {
+    const rule = portForwards.get('demo-forward')
+    if (!rule) return
+    rule.enabled = !rule.enabled
+    event('EVT_PortForwardUpdated', SELF_MAC)
+  }
+
   function tick() {
     for (const client of clients.values()) {
       if (!client.online || client.blocked) continue
@@ -92,6 +110,7 @@ export async function startMockController(options: {
       client.last_seen = Math.floor(now() / 1000)
     }
     simulatedTicks++
+    if (simulatedTicks % 9 === 0) togglePortForward()
     const rotation = Math.floor((now() - started) / 300_000)
     if (rotation > externalRotation) {
       const route = routes.get(DEMO_ROUTES.external)!
@@ -160,29 +179,35 @@ export async function startMockController(options: {
     [paths.classic('stat/gateway'), () => devices.slice(0, 1)],
     [paths.classic('stat/health'), () => [{ subsystem: 'wan', status: 'ok' }]],
     [paths.classic('rest/wlanconf'), () => [...wlans.values()]],
-    [paths.classic('rest/portforward'), () => []],
+    [paths.classic('rest/portforward'), () => [...portForwards.values()]],
     [paths.classic('rest/routing'), () => []],
     [paths.classic('rest/portconf'), () => [{ _id: 'demo-port-poe', name: 'PoE access', poe_mode: 'auto' }]],
   ])
   const readV2 = new Map<string, () => unknown>([
     [paths.v2('trafficroutes'), () => [...routes.values()]],
-    [paths.v2('object-oriented-network-configs'), () => Array.from({ length: 3 }, (_, index) => ({
-      id: `demo-object-${index}`, name: `Demo object ${index + 1}`, enabled: true,
-      target_type: 'CLIENT', targets: [], route: { enabled: true, network_id: 'demo-wan-1' },
-    }))],
+    [paths.v2('object-oriented-network-configs'), () => [...objects.values()]],
     [paths.v2('clients/active'), () => [...clients.values()].filter(client => client.online).map(client => {
       const { rx_bytes, tx_bytes, ...fields } = client
       return { ...fields, trafficUsage: { rxBytes: rx_bytes, txBytes: tx_bytes } }
     })],
     [paths.v2('firewall/zone'), () => [{ _id: 'demo-zone-core', name: 'Core', default_zone: true, network_ids: ['demo-lan-0'] }]],
-    [paths.v2('firewall-policies'), () => []],
-    [paths.v2('static-dns'), () => [{ _id: 'demo-dns', key: 'nas.example.test', value: '10.235.0.25', record_type: 'A', enabled: true }]],
+    [paths.v2('firewall-policies'), () => [...firewallPolicies.values()]],
+    [paths.v2('static-dns'), () => [...staticDns.values()]],
     [paths.v2('qos-rules'), () => []],
     [paths.stats('schemas'), () => ['activityBySiteByClient']],
     [paths.stats('recent/series'), () => ({
       data: [{ ts: Math.floor(now() / 60000) * 60000, values: { rxBytes: 1_260_000, txBytes: 442_500 } }],
     })],
   ])
+
+  const configurable = [
+    { collection: paths.v2('object-oriented-network-configs'), items: paths.v2('object-oriented-network-config'),
+      docs: objects, key: 'id', classic: false },
+    { collection: paths.v2('firewall-policies'), docs: firewallPolicies, key: '_id', classic: false },
+    { collection: paths.classic('rest/portforward'), docs: portForwards, key: '_id', classic: true },
+    { collection: paths.v2('static-dns'), docs: staticDns, key: '_id', classic: false },
+    { collection: paths.classic('rest/wlanconf'), docs: wlans, key: '_id', classic: true },
+  ]
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -286,24 +311,59 @@ export async function startMockController(options: {
       rotate(res, session)
       return json(res, classic())
     }
-    for (const resource of ['user', 'wlanconf'] as const) {
-      const base = paths.classic(`rest/${resource}/`)
-      if (!path.startsWith(base)) continue
-      const id = decodeURIComponent(path.slice(base.length))
-      const doc = resource === 'user' ? [...clients.values()].find(client => client._id === id) : wlans.get(id)
+    for (const config of configurable) {
+      const prefix = `${config.items ?? config.collection}/`
+      const response = (doc: WireDoc) => config.classic ? classic([doc]) : doc
+      if (path === config.collection && method === 'POST') {
+        const id = `demo-config-${randomUUID()}`
+        const doc = { ...await readBody(req), [config.key]: id }
+        config.docs.set(id, doc)
+        rotate(res, session)
+        return json(res, response(doc))
+      }
+      if (!path.startsWith(prefix)) continue
+      const id = decodeURIComponent(path.slice(prefix.length))
+      const doc = config.docs.get(id)
+      if (!doc) return failure(res, '404')
+      if (method === 'GET') return json(res, response(doc))
+      if (method === 'PUT' && config.docs !== staticDns) {
+        const next = { ...await readBody(req), [config.key]: id }
+        config.docs.set(id, next)
+        rotate(res, session)
+        return json(res, response(next))
+      }
+      if (method === 'DELETE') {
+        config.docs.delete(id)
+        rotate(res, session)
+        res.writeHead(204)
+        return res.end()
+      }
+    }
+    const userBase = paths.classic('rest/user')
+    if (path === userBase && method === 'POST') {
+      const client = Station.parse({ ...await readBody(req), _id: `demo-user-${randomUUID()}` })
+      if (clients.has(client.mac)) return json(res, { error: 'client already exists' }, 409)
+      clients.set(client.mac, { ...client, online: false })
+      rotate(res, session)
+      return json(res, classic([client]))
+    }
+    if (path.startsWith(`${userBase}/`)) {
+      const id = decodeURIComponent(path.slice(userBase.length + 1))
+      const doc = [...clients.values()].find(client => client._id === id)
       if (!doc) return failure(res, '404')
       if (method === 'GET') return json(res, classic([doc]))
       if (method === 'PUT') {
-        const next = { ...await readBody(req), _id: id }
-        if (resource === 'wlanconf') wlans.set(id, next)
-        else {
-          const client = Station.parse(next)
-          if (client.mac !== doc.mac) return json(res, { error: 'invalid client' }, 400)
-          clients.set(client.mac, { ...client, online: doc.online === true })
-          emit('user:sync', [client])
-        }
+        const client = Station.parse({ ...await readBody(req), _id: id })
+        if (client.mac !== doc.mac) return json(res, { error: 'invalid client' }, 400)
+        clients.set(client.mac, { ...client, online: doc.online })
+        emit('user:sync', [client])
         rotate(res, session)
-        return json(res, classic([next]))
+        return json(res, classic([client]))
+      }
+      if (method === 'DELETE') {
+        clients.delete(doc.mac)
+        rotate(res, session)
+        return json(res, classic())
       }
     }
     return failure(res, '404')
