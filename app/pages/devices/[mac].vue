@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { EChartsOption } from 'echarts'
-import type { DeviceEventsT, DeviceSeriesT, InfraDeviceDetailT, InfraDeviceT, PortViewT, SeriesRangeT } from '#shared/schemas/infra'
+import type { DeviceEventsT, DeviceSeriesT, InfraDeviceDetailT, InfraDeviceT, PortViewT, RoomT, SeriesRangeT } from '#shared/schemas/infra'
 import type { SettingsT } from '#shared/schemas/system'
 import { portName, speedColor, speedLabel, speedTier, uptimeShort } from '~/utils/devices'
 
@@ -28,6 +28,15 @@ const thresholds = computed(() => ({
 }))
 const offline = computed(() => dev.value?.state === 'offline')
 const issueText = (k: string, p: Record<string, string>) => (te(k) ? t(k, p) : k)
+
+/* ── room (APs) ── */
+const { data: rooms } = useFetch<RoomT[]>('/api/rooms', { key: 'rooms', default: () => [], dedupe: 'defer' })
+const roomItems = computed(() => [{ label: t('rooms.none'), value: '__none' }, ...rooms.value.map(r => ({ label: r.floor ? `${r.name} · ${r.floor}` : r.name, value: r.id, icon: `i-lucide-${r.icon ?? 'house'}` }))])
+async function setRoom(v: string) {
+  await api.patch<InfraDeviceT>(`/api/devices/${encodeURIComponent(mac.value)}`, { roomId: v === '__none' ? null : v }, { success: t('common.saved') })
+  await refresh()
+  refreshNuxtData(['rooms', 'devices'])
+}
 
 /* ── tabs ── */
 const tabs = computed(() => {
@@ -122,6 +131,7 @@ const trafficChart = computed<EChartsOption>(() => {
 
 /* ── ports ── */
 const selectedPort = ref<number | null>(Number(route.query.port) || null)
+const portDrawer = ref(false)
 const port = computed<PortViewT | null>(() => dev.value?.ports.find(p => p.idx === selectedPort.value) ?? null)
 const portsSorted = computed(() => [...(dev.value?.ports ?? [])].sort((a, b) => a.idx - b.idx))
 const { get: person } = usePeople()
@@ -178,6 +188,7 @@ const poeMax = computed(() => Math.max(1, ...poePorts.value.map(p => p.poe?.powe
           </div>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu v-if="dev.type === 'ap' && rooms.length" :model-value="dev.roomId ?? '__none'" :items="roomItems" value-key="value" icon="i-lucide-door-open" class="w-44" @update:model-value="setRoom" />
           <UButton :color="dev.locating ? 'primary' : 'neutral'" :variant="dev.locating ? 'soft' : 'outline'" icon="i-lucide-locate-fixed" :loading="locating" :disabled="offline" @click="toggleLocate">
             {{ dev.locating ? t('devices.stopLocate') : t('devices.locate') }}
           </UButton>
@@ -342,8 +353,9 @@ const poeMax = computed(() => Math.max(1, ...poePorts.value.map(p => p.poe?.powe
                 <div class="text-dimmed">PoE</div>
                 <div class="font-medium uf-num text-toned">{{ !port.poe?.capable ? '—' : port.poe.mode === 'off' ? t('ports.poeOff') : `${(port.poe.powerW ?? 0).toFixed(1)} W` }}</div>
               </div>
-              <div v-if="port.issues.length" class="sm:col-span-4 flex flex-wrap gap-1.5">
+              <div class="sm:col-span-4 flex flex-wrap items-center gap-1.5">
                 <UBadge v-for="i in port.issues" :key="i" color="warning" variant="soft" size="sm" icon="i-lucide-triangle-alert">{{ t(`ports.issue.${i}`) }}</UBadge>
+                <UButton size="xs" color="neutral" variant="outline" icon="i-lucide-chart-line" class="ml-auto" @click="portDrawer = true">{{ t('ports.viewHistory') }}</UButton>
               </div>
             </div>
           </Transition>
@@ -407,6 +419,8 @@ const poeMax = computed(() => Math.max(1, ...poePorts.value.map(p => p.poe?.powe
           </div>
         </UCard>
       </div>
+
+      <PortDrawer v-model:open="portDrawer" :mac="dev.mac" :idx="selectedPort" :device-name="dev.name" />
 
       <!-- wireless -->
       <div v-else-if="tab === 'wireless'" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4">

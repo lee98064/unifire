@@ -44,6 +44,14 @@ function openSchedule(s: PoeScheduleT | null) {
   editorOpen.value = true
 }
 const qualifyOpen = ref(false)
+// deep link from a port drawer: /devices/poe?port=<mac>|<idx>
+watch(poe, (v) => {
+  const q = typeof route.query.port === 'string' ? route.query.port.split('|') : null
+  if (!v || !q || editorOpen.value) return
+  swMac.value = q[0] ?? swMac.value
+  openFor(q[0]!, Number(q[1]))
+  navigateTo({ query: { ...route.query, port: undefined } }, { replace: true })
+}, { immediate: true })
 
 const statusUi: Record<PoeScheduleStatusT, { color: 'success' | 'warning' | 'error' | 'neutral' | 'info' | 'primary', icon: string }> = {
   ok: { color: 'success', icon: 'i-lucide-check' },

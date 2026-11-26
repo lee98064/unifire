@@ -18,6 +18,8 @@ const tabs = [
   { value: 'general', icon: 'i-lucide-sliders-horizontal' },
   { value: 'controller', icon: 'i-lucide-router' },
   { value: 'probes', icon: 'i-lucide-radio-tower' },
+  { value: 'infra', icon: 'i-lucide-server-cog' },
+  { value: 'rooms', icon: 'i-lucide-door-open' },
   { value: 'notifications', icon: 'i-lucide-bell' },
   { value: 'users', icon: 'i-lucide-users-round' },
   { value: 'account', icon: 'i-lucide-user-round-cog' },
@@ -44,6 +46,8 @@ const tabs = [
         <GeneralSettings v-if="tab === 'general' && local" v-model="local" @save="save" />
         <ControllerSettings v-else-if="tab === 'controller'" />
         <ProbeSettings v-else-if="tab === 'probes' && local" v-model="local" @save="save" />
+        <InfraSettings v-else-if="tab === 'infra' && local" v-model="local" @save="save" />
+        <RoomsSettings v-else-if="tab === 'rooms' && local" v-model="local" @save="save" />
         <NotificationSettings v-else-if="tab === 'notifications'" />
         <UsersSettings v-else-if="tab === 'users'" />
         <AccountSettings v-else-if="tab === 'account'" />

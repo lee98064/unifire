@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ClientT, ClientUsageT } from '#shared/schemas/access'
+import type { StickyClientT } from '#shared/schemas/infra'
 import type { TableColumn } from '@nuxt/ui'
 import type { EChartsOption } from 'echarts'
 
@@ -73,6 +74,8 @@ const selectedMac = computed({
   set: v => router.replace({ query: { ...route.query, mac: v ?? undefined } }),
 })
 const selected = computed(() => clients.value.find(c => c.mac === selectedMac.value) ?? null)
+const { data: sticky } = useFetch<StickyClientT[]>('/api/roaming/sticky', { key: 'sticky', default: () => [] })
+const stickyByMac = computed(() => new Map(sticky.value.filter(s => s.status !== 'recovered').map(s => [s.mac, s])))
 const usageRange = ref<'24h' | '7d' | '30d'>('24h')
 const { data: usage, execute: loadUsage } = useFetch<ClientUsageT>(() => `/api/clients/${selectedMac.value}/usage`, { query: { range: usageRange }, immediate: false, watch: false })
 watch([selectedMac, usageRange], () => { if (selectedMac.value) loadUsage() }, { immediate: true })
@@ -207,6 +210,7 @@ async function assign(macs: string[], personId: string | null) {
             <UBadge v-if="row.original.blocked" color="error" variant="subtle" size="sm" icon="i-lucide-ban">{{ t('clients.blocked') }}</UBadge>
             <UBadge v-if="row.original.approval === 'pending'" color="warning" variant="subtle" size="sm" icon="i-lucide-shield-question">{{ t('clients.pending') }}</UBadge>
             <UBadge v-if="row.original.managedRouteIds.length" color="primary" variant="subtle" size="sm" icon="i-lucide-waypoints">{{ row.original.managedRouteIds.length }}</UBadge>
+            <UTooltip v-if="stickyByMac.get(row.original.mac)" :text="t('roaming.stickyShort', { ap: stickyByMac.get(row.original.mac)!.apName, dbm: stickyByMac.get(row.original.mac)!.signal })"><UBadge color="warning" variant="subtle" size="sm" icon="i-lucide-magnet">{{ t('roaming.stickyBadge') }}</UBadge></UTooltip>
           </div>
         </template>
       </UTable>
@@ -244,6 +248,8 @@ async function assign(macs: string[], personId: string | null) {
             </div>
             <UfChart :option="usageChart" height="180px" />
           </div>
+
+          <ClientRoaming v-if="!selected.wired" :mac="selected.mac" :sticky="stickyByMac.get(selected.mac) ?? null" class="pt-4 border-t border-(--ui-border-muted)" />
 
           <div class="space-y-3 pt-4 border-t border-(--ui-border-muted)">
             <h3 class="text-[13px] font-semibold text-highlighted">{{ t('clients.identity') }}</h3>

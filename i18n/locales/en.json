@@ -1445,7 +1445,16 @@
     "now": "now",
     "empty": "No people yet",
     "emptyDesc": "Assign presence devices on the People page.",
-    "hint": "Phones drop Wi-Fi while sleeping; a grace period (configurable) avoids false “left”."
+    "hint": "Phones drop Wi-Fi while sleeping; a grace period (configurable) avoids false “left”.",
+    "modeHome": "Home",
+    "modeRooms": "Rooms",
+    "noRooms": "No rooms set up",
+    "noRoomsDesc": "Assign APs to rooms in Settings to see who is in which room.",
+    "setupRooms": "Set up rooms",
+    "emptyRoom": "Empty",
+    "away": "Away",
+    "since": "since",
+    "roomsHint": "Derived from the AP each phone is on, with a short dwell before switching rooms. Grey = home, room unknown."
   },
   "reports": {
     "desc": "Long-term history kept by Unifire: ISP uptime, latency, speed tests and per-client usage.",
@@ -1470,7 +1479,29 @@
     "dailyUsage": "Daily usage",
     "whenBusy": "When it’s busiest",
     "topClients": "Top clients",
-    "byPerson": "By person"
+    "byPerson": "By person",
+    "tabInfra": "Device availability",
+    "infra": {
+      "coverage": "Only {pct}% of this month has data (time Unifire was down isn't counted)",
+      "unavailable": "Device report isn't available yet",
+      "unavailableDesc": "It appears once some device history has been collected",
+      "incidents": "Incidents",
+      "criticalN": "{n} critical",
+      "mttr": "Mean time to recover",
+      "mttrHint": "Average length of resolved incidents",
+      "downtime": "Total incident time",
+      "energy": "PoE energy",
+      "devices": "By device",
+      "availability": "Availability",
+      "outages": "Outages",
+      "reboots": "Unexpected reboots",
+      "load": "CPU / memory avg",
+      "tempMax": "Max temp",
+      "portEvents": "Port events",
+      "byRoot": "Incidents by root cause",
+      "longest": "Longest incidents",
+      "noIncidents": "No incidents this month"
+    }
   },
   "me": {
     "hi": "Hi",
@@ -1660,7 +1691,9 @@
       "probes": "Probe routes",
       "notifications": "Notifications",
       "users": "Users",
-      "account": "My account"
+      "account": "My account",
+      "infra": "Devices & incidents",
+      "rooms": "Rooms"
     },
     "general": {
       "excluded": "Never-touch routes",
@@ -1830,6 +1863,42 @@
       "currentPw": "Current password",
       "newPw": "New password",
       "pwChanged": "Password changed"
+    },
+    "infra": {
+      "health": "Device health thresholds",
+      "healthDesc": "Devices above these are flagged “needs attention”, and rules can trigger on them.",
+      "tempWarn": "Temperature warning (°C)",
+      "cpuWarn": "CPU warning (%)",
+      "memWarn": "Memory warning (%)",
+      "ports": "Port & cable guard",
+      "portsDesc": "Detects speed downgrades, high error rates and link flapping — usually a cable or connector problem.",
+      "errorRate": "Error rate threshold",
+      "flaps": "Link drops per hour",
+      "downgradePolls": "Downgrade persistence",
+      "downgradePollsHint": "checked every minute",
+      "ignored": "Ignored ports",
+      "ignoredNone": "No ignored ports. Choose “ignore this port” on a port event.",
+      "incidents": "Incident correlation",
+      "incidentsDesc": "Related problems in the same window become one incident and notify once.",
+      "window": "Merge window",
+      "quiet": "Quiet time after recovery",
+      "notifyFrom": "Notify from",
+      "never": "Never",
+      "massMin": "Mass disconnect: at least",
+      "massPct": "Mass disconnect: share",
+      "sticky": "Sticky client detection",
+      "stickyDesc": "Finds phones and laptops that cling to a distant AP with poor signal although a better AP is nearby.",
+      "stickySignal": "Signal threshold",
+      "stickyMinutes": "For at least",
+      "nudge": "Nudge automatically",
+      "nudgeDesc": "Disconnect sticky clients so they can re-associate with a closer AP. Clients moving a lot of data (e.g. in a video call) are left alone.",
+      "nudgeMax": "Max per client per day",
+      "nudgeSkip": "Leave alone above",
+      "energy": "Electricity price",
+      "retention": "Data retention",
+      "retentionDesc": "UniFi keeps only short-term history; Unifire stores device history in its own database.",
+      "retainRaw": "Per-minute raw data",
+      "retainRollup": "Hourly rollups"
     }
   },
   "devices": {
@@ -2007,7 +2076,26 @@
       "speed": "Speed",
       "traffic": "Traffic",
       "health": "Health"
-    }
+    },
+    "viewHistory": "History",
+    "history": "History",
+    "historyUnavailable": "Port history isn't available yet",
+    "historyUnavailableDesc": "It appears after a few minutes of data",
+    "max": "max {s}",
+    "baseline": "baseline {s}",
+    "errorRate": "Error rate",
+    "lastHour": "Last hour",
+    "flaps": "Link drops",
+    "errors": "Errors",
+    "drops": "Drops",
+    "peersHistory": "Devices seen on this port",
+    "noPeers": "Nothing recorded yet",
+    "ack": "Dismiss",
+    "ignore": "Ignore issues on this port",
+    "unignore": "Watch this port again",
+    "ignoredToast": "Port ignored",
+    "unignored": "Watching this port again",
+    "schedulePoe": "Create PoE schedule"
   },
   "incidents": {
     "severity": {
@@ -2256,5 +2344,47 @@
     "openDevice": "Open device page",
     "openEgresses": "View egresses",
     "clientsN": "{n} clients"
+  },
+  "rooms": {
+    "title": "Rooms",
+    "desc": "Assign APs to rooms and Unifire works out which room each person is in from the AP their phone uses.",
+    "add": "Add room",
+    "edit": "Edit room",
+    "dwell": "Stay before switching rooms",
+    "dwellHint": "minutes, so phones bouncing between two APs don't flap",
+    "unavailable": "Rooms aren't available yet",
+    "unassigned": "Unassigned APs",
+    "moveTo": "Move to…",
+    "allAssigned": "All APs are assigned",
+    "noAps": "No APs yet",
+    "apsN": "{n} APs",
+    "unassign": "Remove from room",
+    "dropHere": "Drop APs here",
+    "empty": "No rooms yet",
+    "emptyDesc": "For example: living room, bedroom, study. A room can have one or more APs.",
+    "deleteConfirm": "Delete room “{name}”?",
+    "deleteDesc": "Its APs become unassigned.",
+    "name": "Name",
+    "namePh": "Living room",
+    "floor": "Floor",
+    "floorPh": "1F",
+    "icon": "Icon",
+    "color": "Colour",
+    "unknownRoom": "Home (room unknown)",
+    "none": "No room"
+  },
+  "roaming": {
+    "title": "Wi-Fi roaming (24 h)",
+    "unavailable": "Roaming data isn't available yet",
+    "noRoams": "No roaming in this period",
+    "sticky": {
+      "sticky": "Sticky",
+      "nudged": "Nudged",
+      "recovered": "Recovered"
+    },
+    "stickyTitle": "Clinging to “{ap}” at only {dbm} dBm",
+    "stickyDesc": "{n} other APs broadcast the same SSID; nudged {nudges} times today.",
+    "stickyShort": "Stuck on {ap} ({dbm} dBm)",
+    "stickyBadge": "Sticky"
   }
 }

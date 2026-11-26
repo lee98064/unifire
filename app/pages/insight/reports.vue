@@ -78,7 +78,7 @@ const { get: getPerson } = usePeople()
       </template>
     </PageHeader>
 
-    <UTabs v-model="tab" :content="false" variant="link" class="mb-5 uf-no-print" :items="[{ value: 'isp', label: t('reports.tabIsp'), icon: 'i-lucide-cable' }, { value: 'usage', label: t('reports.tabUsage'), icon: 'i-lucide-chart-column' }]" />
+    <UTabs v-model="tab" :content="false" variant="link" class="mb-5 uf-no-print" :items="[{ value: 'isp', label: t('reports.tabIsp'), icon: 'i-lucide-cable' }, { value: 'usage', label: t('reports.tabUsage'), icon: 'i-lucide-chart-column' }, { value: 'infra', label: t('reports.tabInfra'), icon: 'i-lucide-server' }]" />
 
     <!-- ISP -->
     <div v-if="tab === 'isp'" class="space-y-4">
@@ -135,6 +135,8 @@ const { get: getPerson } = usePeople()
         </UCard>
       </template>
     </div>
+
+    <InfraReportView v-else-if="tab === 'infra'" :months="months" />
 
     <!-- Usage -->
     <div v-else class="space-y-4">

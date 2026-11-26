@@ -1445,7 +1445,16 @@
     "now": "現在",
     "empty": "還沒有人員",
     "emptyDesc": "在人員頁指定用來判斷在家的手機。",
-    "hint": "手機休眠時 Wi-Fi 會短暫斷線，系統有寬限期避免誤判，可在設定調整。"
+    "hint": "手機休眠時 Wi-Fi 會短暫斷線，系統有寬限期避免誤判，可在設定調整。",
+    "modeHome": "在家",
+    "modeRooms": "房間",
+    "noRooms": "還沒有設定房間",
+    "noRoomsDesc": "先到設定把 AP 指派到房間，就能看到每個人在哪個房間。",
+    "setupRooms": "設定房間",
+    "emptyRoom": "沒人",
+    "away": "不在家",
+    "since": "從",
+    "roomsHint": "依手機連線的 AP 推算，換房間前需停留一段時間；房間不明的時段以灰色顯示。"
   },
   "reports": {
     "desc": "長期保存在 Unifire 的歷史資料：ISP 可用率、延遲、測速與每台裝置的用量。",
@@ -1470,7 +1479,29 @@
     "dailyUsage": "每日用量",
     "whenBusy": "什麼時候最忙",
     "topClients": "用量排行",
-    "byPerson": "依人員"
+    "byPerson": "依人員",
+    "tabInfra": "設備可用率",
+    "infra": {
+      "coverage": "本月只有 {pct}% 的時間有資料（Unifire 停機的時段不計）",
+      "unavailable": "設備報表尚未就緒",
+      "unavailableDesc": "累積一段時間的設備資料後就會出現",
+      "incidents": "事故",
+      "criticalN": "{n} 起嚴重",
+      "mttr": "平均恢復時間",
+      "mttrHint": "已解除事故的平均時長",
+      "downtime": "事故總時長",
+      "energy": "PoE 用電",
+      "devices": "各設備",
+      "availability": "可用率",
+      "outages": "離線次數",
+      "reboots": "非預期重開機",
+      "load": "CPU／記憶體平均",
+      "tempMax": "最高溫",
+      "portEvents": "埠事件",
+      "byRoot": "事故根因分布",
+      "longest": "最久的事故",
+      "noIncidents": "這個月沒有任何事故"
+    }
   },
   "me": {
     "hi": "嗨",
@@ -1660,7 +1691,9 @@
       "probes": "探測路由",
       "notifications": "通知",
       "users": "使用者",
-      "account": "我的帳號"
+      "account": "我的帳號",
+      "infra": "設備與事故",
+      "rooms": "房間"
     },
     "general": {
       "excluded": "永不寫入的路由",
@@ -1830,6 +1863,42 @@
       "currentPw": "目前密碼",
       "newPw": "新密碼",
       "pwChanged": "密碼已變更"
+    },
+    "infra": {
+      "health": "設備健康門檻",
+      "healthDesc": "超過門檻時，設備卡片會標示「需要注意」，規則也可以據此觸發。",
+      "tempWarn": "溫度警戒（°C）",
+      "cpuWarn": "CPU 警戒（%）",
+      "memWarn": "記憶體警戒（%）",
+      "ports": "連接埠與線材守衛",
+      "portsDesc": "偵測降速、錯誤率偏高與反覆斷線，這些通常是網路線或接頭出了問題。",
+      "errorRate": "錯誤率門檻",
+      "flaps": "每小時斷線次數",
+      "downgradePolls": "降速持續次數",
+      "downgradePollsHint": "每分鐘檢查一次",
+      "ignored": "忽略的連接埠",
+      "ignoredNone": "沒有忽略的連接埠。可以在連接埠事件上選擇「忽略這個埠」。",
+      "incidents": "事故關聯",
+      "incidentsDesc": "同一段時間內彼此相關的異常會合併成一起事故，只通知一次。",
+      "window": "合併視窗",
+      "quiet": "恢復後靜默時間",
+      "notifyFrom": "通知門檻",
+      "never": "不通知",
+      "massMin": "大量斷線：至少幾台",
+      "massPct": "大量斷線：至少佔比",
+      "sticky": "黏滯裝置偵測",
+      "stickyDesc": "找出明明附近有更好的 AP，卻一直黏在遠處 AP、訊號很差的手機或筆電。",
+      "stickySignal": "訊號門檻",
+      "stickyMinutes": "持續多久",
+      "nudge": "自動推一下",
+      "nudgeDesc": "讓黏滯裝置斷線重連，讓它有機會連到較近的 AP。正在大量傳輸（例如視訊中）的裝置不會被打擾。",
+      "nudgeMax": "每台每天最多",
+      "nudgeSkip": "傳輸超過多少就不打擾",
+      "energy": "電價",
+      "retention": "資料保留",
+      "retentionDesc": "UniFi 只保留短期資料，Unifire 會把設備歷史存在自己的資料庫裡。",
+      "retainRaw": "每分鐘原始資料",
+      "retainRollup": "每小時彙總"
     }
   },
   "devices": {
@@ -2007,7 +2076,26 @@
       "speed": "速率",
       "traffic": "流量",
       "health": "健康"
-    }
+    },
+    "viewHistory": "查看歷史",
+    "history": "歷史",
+    "historyUnavailable": "連接埠歷史尚未就緒",
+    "historyUnavailableDesc": "資料累積幾分鐘後就會出現",
+    "max": "最高 {s}",
+    "baseline": "基準 {s}",
+    "errorRate": "錯誤率",
+    "lastHour": "最近 1 小時",
+    "flaps": "斷線次數",
+    "errors": "錯誤",
+    "drops": "丟包",
+    "peersHistory": "曾經接過的裝置",
+    "noPeers": "還沒有紀錄",
+    "ack": "已讀",
+    "ignore": "忽略這個埠的異常",
+    "unignore": "恢復偵測這個埠",
+    "ignoredToast": "已忽略這個連接埠",
+    "unignored": "已恢復偵測",
+    "schedulePoe": "建立 PoE 排程"
   },
   "incidents": {
     "severity": {
@@ -2256,5 +2344,47 @@
     "openDevice": "開啟設備頁",
     "openEgresses": "查看出口",
     "clientsN": "{n} 台裝置"
+  },
+  "rooms": {
+    "title": "房間",
+    "desc": "把 AP 指派到房間後，Unifire 會依每個人手機連到哪台 AP，推算他目前在哪個房間。",
+    "add": "新增房間",
+    "edit": "編輯房間",
+    "dwell": "換房間前需停留",
+    "dwellHint": "分鐘，避免手機在兩台 AP 之間來回跳",
+    "unavailable": "房間功能尚未就緒",
+    "unassigned": "尚未指派的 AP",
+    "moveTo": "移到…",
+    "allAssigned": "所有 AP 都已指派",
+    "noAps": "還沒有 AP",
+    "apsN": "{n} 台 AP",
+    "unassign": "移出房間",
+    "dropHere": "把 AP 拖到這裡",
+    "empty": "還沒有房間",
+    "emptyDesc": "例如：客廳、主臥、書房。每個房間可以放一台或多台 AP。",
+    "deleteConfirm": "刪除房間「{name}」？",
+    "deleteDesc": "裡面的 AP 會變回未指派。",
+    "name": "名稱",
+    "namePh": "客廳",
+    "floor": "樓層",
+    "floorPh": "1F",
+    "icon": "圖示",
+    "color": "顏色",
+    "unknownRoom": "在家（房間不明）",
+    "none": "未指派房間"
+  },
+  "roaming": {
+    "title": "Wi-Fi 漫遊（24 小時）",
+    "unavailable": "漫遊資料尚未就緒",
+    "noRoams": "這段期間沒有漫遊",
+    "sticky": {
+      "sticky": "黏滯中",
+      "nudged": "已推一下",
+      "recovered": "已恢復"
+    },
+    "stickyTitle": "一直黏在「{ap}」，訊號只有 {dbm} dBm",
+    "stickyDesc": "附近還有 {n} 台廣播同一個 SSID 的 AP；今天已推了 {nudges} 次。",
+    "stickyShort": "黏在 {ap}（{dbm} dBm）",
+    "stickyBadge": "黏滯"
   }
 }
