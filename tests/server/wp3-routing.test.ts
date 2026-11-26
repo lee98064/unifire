@@ -267,6 +267,26 @@ describe('WP3 with fake UniFi', () => {
     expect(next.items[0]!.id).not.toBe(first.items[0]!.id)
   })
 
+  it('keeps a slower but stable egress healthy even when its first sample was unusually fast', async () => {
+    const db = database.db
+    const probes = createProbeRoutes(db, service)
+    await service.setMode('live', ctx)
+    await probes.provision()
+    let latency = 30
+    const runner = createProbeRunner(db, service, probes, () => at, { supports: async () => true, attempt: async () => latency })
+    await runner.round()
+    latency = 160
+    for (let i = 0; i < 8; i++) { at += 30_000; await runner.round() }
+    const statuses = egressHistory(db, vpn, true, '1h', at).samples.map(row => row.status)
+    expect(statuses).toHaveLength(9)
+    expect(statuses).not.toContain('degraded')
+    // A real spike against that history is still flagged.
+    latency = 900
+    at += 30_000
+    await runner.round()
+    expect(egressHistory(db, vpn, true, '1h', at).samples.at(-1)?.status).toBe('degraded')
+  })
+
   it('does not attempt probe writes until the live write check passed', async () => {
     const probes = createProbeRoutes(database.db, service)
     await service.setMode('live', ctx)

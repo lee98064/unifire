@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm'
 import type { Db } from '../../db'
 import { egressHealth, egressHealthTransitions, egressSamples } from '../../db/schema'
 import { isGateway } from '../../services/cache'
@@ -8,6 +8,8 @@ import { liveBus } from '../../utils/bus'
 import { classifyHealth, compactSamples, median, readHealth, wanStatus } from './health'
 import type { createProbeRoutes } from './routes'
 import { mockProbeTransport, realProbeTransport, type ProbeTransport } from './transport'
+
+const MIN_BASELINE_SAMPLES = 5
 
 export function createProbeRunner(db: Db, service: ControllerService, routes: ReturnType<typeof createProbeRoutes>,
   now = Date.now, transport: ProbeTransport = service.mockProbe ? mockProbeTransport(service.mockProbe) : realProbeTransport()) {
@@ -42,12 +44,14 @@ export function createProbeRunner(db: Db, service: ControllerService, routes: Re
       const canMeasure = capable && info.state === 'ok' && info.ip !== null
       const attempts = canMeasure ? await Promise.all([0, 1, 2].map(attempt =>
         transport.attempt(info.ip!, probe.method, row.id, at, attempt).catch(() => null))) : null
-      const baseline = attempts && db.select({ latency: egressSamples.latencyMs }).from(egressSamples).where(and(
-        eq(egressSamples.egressId, row.id), eq(egressSamples.status, 'healthy'), isNotNull(egressSamples.latencyMs),
-      )).orderBy(desc(egressSamples.ts)).limit(31).all()
+      // Baseline = recent typical latency. Degraded samples count too: excluding them let a single low first sample
+      // pin the baseline forever, so a slower-but-stable egress stayed "degraded". Judge latency only with enough history.
+      const recent = attempts ? db.select({ latency: egressSamples.latencyMs }).from(egressSamples).where(and(
+        eq(egressSamples.egressId, row.id), inArray(egressSamples.status, ['healthy', 'degraded']), isNotNull(egressSamples.latencyMs),
+      )).orderBy(desc(egressSamples.ts)).limit(31).all().flatMap(sample => sample.latency === null ? [] : [sample.latency]) : []
       const wan = row.kind !== 'wan' ? null : row.enabled ? wanStatus(gateway, health, row.wanGroup) : false
       const measured = classifyHealth({ attempts, priorFailures: prior?.failedRounds ?? 0, failThreshold: probe.failThreshold,
-        baseline: median((baseline || []).flatMap(sample => sample.latency === null ? [] : [sample.latency])), wan })
+        baseline: recent.length >= MIN_BASELINE_SAMPLES ? median(recent) : null, wan })
       const previous = last?.value.status
       const { status, latencyMs, lossPct, jitterMs, source } = measured.value
       const changed = previous !== status
