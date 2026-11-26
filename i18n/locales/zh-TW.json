@@ -810,7 +810,7 @@
     "anyQuota": "任何配額",
     "cronHint": "cron 格式：分 時 日 月 星期",
     "minutesUnit": "分鐘",
-    "placeholderHint": "可使用 {{name}}、{{mac}}、{{egress}}、{{person}} 等變數",
+    "placeholderHint": "可使用 {examples} 等變數",
     "allChannelsIfEmpty": "留空表示所有啟用中的通知管道",
     "cron": {
       "everyHour": "每小時",

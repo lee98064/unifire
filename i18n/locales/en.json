@@ -810,7 +810,7 @@
     "anyQuota": "Any quota",
     "cronHint": "cron: min hour day month weekday",
     "minutesUnit": "min",
-    "placeholderHint": "Use {{name}}, {{mac}}, {{egress}}, {{person}} placeholders",
+    "placeholderHint": "Placeholders: {examples}",
     "allChannelsIfEmpty": "Leave empty for all enabled channels",
     "cron": {
       "everyHour": "Every hour",

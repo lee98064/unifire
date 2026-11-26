@@ -101,7 +101,7 @@ const times = Array.from({ length: 96 }, (_, k) => `${String(Math.floor(k / 4)).
       <UFormField v-else-if="f.kind === 'text' || f.kind === 'url'" :label="label(f)" :class="f.kind === 'url' ? 'sm:col-span-2' : 'sm:col-span-2'">
         <UInput :model-value="block[f.key]" class="w-full" :class="f.kind === 'url' ? 'uf-mono' : ''" @update:model-value="set(f.key, $event)" />
       </UFormField>
-      <UFormField v-else-if="f.kind === 'textarea'" :label="label(f)" class="sm:col-span-2" :hint="t('rules.placeholderHint')">
+      <UFormField v-else-if="f.kind === 'textarea'" :label="label(f)" class="sm:col-span-2" :hint="t('rules.placeholderHint', { examples: '{{name}} {{mac}} {{egress}} {{person}}' })">
         <UTextarea :model-value="block[f.key] ?? ''" :rows="3" class="w-full" @update:model-value="set(f.key, $event || (f.key === 'body' && block.type === 'webhook' ? null : ''))" />
       </UFormField>
       <UFormField v-else-if="f.kind === 'headers'" :label="label(f)" class="sm:col-span-2">
