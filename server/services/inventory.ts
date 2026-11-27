@@ -14,6 +14,7 @@ import { Doc, MacAddress, type WireStation } from '../unifi/endpoints/schemas'
 import { UnifiError } from '../unifi/errors'
 import type { WriteContext } from '../unifi/writes'
 import { liveBus } from '../utils/bus'
+import { dashboardIncidents } from '../engine/infra/incidents/store'
 import { infraDashboard } from '../engine/infra/device-views'
 import { ownedBlocks } from '../engine/blocks'
 import { clientDisplayName } from './client-identity'
@@ -265,7 +266,7 @@ export function createInventory(db: Db, service: ControllerService, routing?: Re
           overrides: 0, unifiTotal: snapshot().routes.length },
         upcoming: managed?.upcoming ?? [], recentSwitches: managed?.recentSwitches ?? [], recentAudit: audit.list({ limit: 10 }).items,
         throughput: cache?.throughput() ?? [],
-        infra: infraDashboard(db, service, at), incidents: [],
+        infra: infraDashboard(db, service, at), incidents: dashboardIncidents(db, service.runtime?.scope),
       })
     },
   }

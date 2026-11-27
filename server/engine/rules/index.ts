@@ -24,7 +24,6 @@ import { createRuleActions, type RuleEvent } from './actions'
 
 type Effects = Parameters<typeof createRuleActions>[2]
 type Options = { now?: () => number, http?: HttpTransport }
-const futureTriggers = new Set(['incident.opened'])
 const stateful = new Set(['device.offline', 'traffic.threshold'])
 const mockHttp: HttpTransport = async (_url, init) => Response.json({ echo: init?.body ?? null })
 
@@ -32,6 +31,9 @@ export function matchesTrigger(trigger: RuleTriggerT, event: RuleEvent) {
   if (trigger.type !== event.type) return false
   if ('macs' in trigger && trigger.macs.length && !trigger.macs.some(mac => mac === event.mac)) return false
   if ('mac' in trigger && trigger.mac !== null && trigger.mac !== event.mac) return false
+  if (trigger.type === 'infra.offline' && event.planned === true) return false
+  if (trigger.type === 'incident.opened' && event.severity !== 'critical'
+    && (trigger.minSeverity === 'critical' || event.severity !== 'warning')) return false
   if (trigger.type === 'infra.rebooted' && trigger.unexpectedOnly && event.unexpected !== true) return false
   if (trigger.type === 'infra.overheat' && (typeof event.tempC !== 'number' || event.tempC < trigger.celsius)) return false
   if ('switchMac' in trigger && trigger.switchMac !== null && trigger.switchMac !== event.switchMac) return false
@@ -179,9 +181,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         : rule.lastRunAt !== null && ts - rule.lastRunAt < rule.cooldownSeconds * 1000 ? 'cooldown'
           : !conditionsPass(rule, ts, event) ? 'conditions' : null
       let changed = false
-      const future = futureTriggers.has(rule.trigger.type)
-      if (test && future) results.push({ action: rule.trigger.type, ok: false, message: 'rule.result.not_implemented' })
-      else if (!skipped) {
+      if (!skipped) {
         for (const action of rule.actions) {
           if (lifecycle.signal.aborted || leased?.() === false) break
           try {
@@ -215,7 +215,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
     const runtime = service.runtime
     if (typeof mac !== 'string' || typeof scope !== 'string' || scope !== runtime?.scope || !runtime.active()) return
     return db.select().from(infraDevices).where(and(eq(infraDevices.mac, mac), eq(infraDevices.scope, scope),
-      eq(infraDevices.lastState, 'offline'))).get()
+      eq(infraDevices.lastState, 'offline'), eq(infraDevices.offlinePlanned, false))).get()
   }
 
   function refreshInfraScope() {
@@ -239,7 +239,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
       return Promise.resolve([])
     }
     const offline = db.select().from(infraDevices).where(and(eq(infraDevices.scope, scope),
-      eq(infraDevices.lastState, 'offline'))).all()
+      eq(infraDevices.lastState, 'offline'), eq(infraDevices.offlinePlanned, false))).all()
     const pending: ReturnType<typeof run>[] = []
     const seen = new Set<string>()
     const at = now()
@@ -309,10 +309,9 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
   }
 
   const dispatch = async (event: RuleEvent) => {
-    if (futureTriggers.has(event.type)) return []
     if (event.type === 'poe.budget') return typeof event.switchMac === 'string' && typeof event.percent === 'number'
       ? evaluateBudget(event.switchMac, event.percent) : []
-    if (event.type === 'infra.offline') return evaluateOutages()
+    if (event.type === 'infra.offline') return event.planned === true ? [] : evaluateOutages()
     const interested = enabled().filter(row => row.trigger.type === event.type)
     if (!interested.length) return []
     const enriched = enrich(event)
@@ -496,6 +495,7 @@ export function createRules(db: Db, service: ControllerService, effects: Effects
         ...(trigger.type === 'infra.rebooted' && { unexpected: trigger.unexpectedOnly }),
         ...(trigger.type === 'infra.online' && { downSec: 60 }),
         ...(trigger.type === 'infra.offline' && { downSec: trigger.minutes * 60 }),
+        ...(trigger.type === 'incident.opened' && { severity: trigger.minSeverity }),
         ...(trigger.type === 'infra.firmware' && { version: device?.upgradeTo ?? device?.firmware ?? '0.0.0' }),
         ...(trigger.type === 'person.room_entered' || trigger.type === 'person.room_left' ? {
           roomId: trigger.roomId ?? db.select({ id: rooms.id }).from(rooms).orderBy(rooms.order, rooms.id).limit(1).get()?.id ?? null,

@@ -158,7 +158,8 @@
     "portEventNotFound": "Port event not found",
     "dryRun": "This operation needs live mode to complete safely",
     "roomApRequired": "Only access points can be assigned to rooms",
-    "roomNotFound": "Room not found"
+    "roomNotFound": "Room not found",
+    "incidentNotFound": "Incident not found"
   },
   "fmt": {
     "h": "{h}h",
@@ -1439,7 +1440,8 @@
       "denied": "Denied {person}’s extension request"
     },
     "push": {
-      "routeOpened": "Opened a drifted route from a notification"
+      "routeOpened": "Opened a drifted route from a notification",
+      "incidentOpened": "Opened an incident from a notification"
     },
     "rule": {
       "run": "Rule “{name}” ran"
@@ -1457,6 +1459,12 @@
     },
     "quota": {
       "routeOverlap": "{person}’s quota egress overlaps “{route}” — applied as an override"
+    },
+    "incident": {
+      "opened": "Incident opened: {name}",
+      "escalated": "Incident escalated to critical: {name}",
+      "resolved": "Incident resolved: {name}",
+      "updated": "Incident updated: {name}"
     }
   },
   "presence": {
@@ -1710,6 +1718,14 @@
         "title": "PoE schedule “{name}” failed",
         "body": "Port {port} on {switch}: {error}"
       }
+    },
+    "incident_opened": {
+      "title": "Incident: {description}",
+      "body": "Unifire merged the related alerts into one incident — open it for the likely root cause and impact."
+    },
+    "incident_resolved": {
+      "title": "Incident resolved",
+      "body": "{description} (lasted about {duration} s)"
     }
   },
   "rule": {
@@ -2482,6 +2498,32 @@
       "flapping": "Port {port} on {switch} dropped its link {flaps} times in an hour",
       "new_device": "Unknown device {peer} plugged into port {port} on {switch}",
       "peer_changed": "{peer} is now on port {port} of {switch}"
+    }
+  },
+  "incident": {
+    "title": {
+      "egress_down": "Egress “{name}” is down, affecting {clients} clients",
+      "wan_down": "{name} is down, affecting {clients} clients",
+      "device_offline": "{name} went offline, taking {devices} devices and {clients} clients with it",
+      "device_rebooted": "{name} rebooted unexpectedly; {clients} clients dropped briefly",
+      "uplink_down": "Uplink of {name} lost; {devices} devices affected",
+      "port_issue": "A port on {name} keeps dropping its link",
+      "mass_disconnect": "{clients} clients dropped off {name} at once"
+    },
+    "signal": {
+      "egress_down": "Egress “{name}” down",
+      "egress_up": "Egress “{name}” back",
+      "wan_down": "{name} down",
+      "wan_up": "{name} back",
+      "device_offline": "{name} offline",
+      "device_online": "{name} back online",
+      "device_rebooted": "{name} rebooted unexpectedly",
+      "uplink_down": "Uplink of {name} lost",
+      "uplink_up": "Uplink of {name} back",
+      "port_issue": "Port issue on {name}",
+      "mass_disconnect": "{count} clients dropped off {name}",
+      "clients_returned": "Clients are returning to {name}",
+      "config_change": "Config change: {name}"
     }
   }
 }

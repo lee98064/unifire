@@ -4,7 +4,7 @@ import { PoeOverview, PoeQualification, PoeSchedule, PoeScheduleInput, type PoeO
   type PoeScheduleStatusT, type PortViewT } from '#shared/schemas/infra'
 import type { z } from 'zod'
 import type { Db } from '../../db'
-import { poeApplied, poeOffLog, poeOverrides, poeSchedules, settings as settingsTable } from '../../db/schema'
+import { poeApplied, poeOffLog, poeOverrides, poeSchedules, rules, settings as settingsTable } from '../../db/schema'
 import { createAuditService } from '../../services/audit'
 import { systemContext, type ControllerService } from '../../services/controller'
 import { createSettingsService, validateTimezone } from '../../services/settings'
@@ -180,8 +180,9 @@ export function createPoe(db: Db, service: ControllerService, now = Date.now, bu
   }
 
   function remember(key: PortKey, previous: { previousMode: string, createdEntry: boolean }, schedule: Schedule | undefined,
-    source: Hold['source'], at: number) {
-    db.insert(poeApplied).values({ ...key, ...previous, at, scheduleId: schedule?.id ?? null, source, phase: 'applying' }).run()
+    source: Hold['source'], at: number, label: string | null) {
+    db.insert(poeApplied).values({ ...key, ...previous, at, scheduleId: schedule?.id ?? null,
+      label: schedule?.name ?? label, source, phase: 'applying' }).run()
     publish(key)
   }
 
@@ -297,7 +298,9 @@ export function createPoe(db: Db, service: ControllerService, now = Date.now, bu
           beforeSend(previous) {
             const sentAt = now()
             if (desiredPoe(row, override, sentAt) !== 'off') throw new UnifiError('POE_DESIRED_CHANGED')
-            remember(key, previous, source === 'schedule' ? row : undefined, source, sentAt)
+            const ruleName = override?.ruleId
+              ? db.select({ name: rules.name }).from(rules).where(eq(rules.id, override.ruleId)).get()?.name : undefined
+            remember(key, previous, source === 'schedule' ? row : undefined, source, sentAt, ruleName ?? port?.name ?? null)
           },
           readBack: () => confirmOff(key, row),
         })
@@ -470,7 +473,12 @@ export function createPoe(db: Db, service: ControllerService, now = Date.now, bu
       try {
         await run.writes.qualifyPoe(key.switchMac, key.portIdx, ctx, {
           acknowledgedAp: input.acknowledgedAp,
-          beforeSend(previous) { remember(key, previous, undefined, 'qualification', now()); sent = true },
+          beforeSend(previous) {
+            const port = run.cache.snapshot().devices.find(device => device.mac === key.switchMac)?.port_table
+              ?.find(port => portIndex(port.port_idx) === key.portIdx)
+            remember(key, previous, undefined, 'qualification', now(), typeof port?.name === 'string' ? port.name : null)
+            sent = true
+          },
           rollback: () => sent ? heldPort(db, key) : undefined,
           beforeRestore: () => { db.update(poeApplied).set({ phase: 'restoring' }).where(portKey(poeApplied, key)).run() },
           readBack: mode => { if (mode !== 'off') confirmOn(key, null, true) },

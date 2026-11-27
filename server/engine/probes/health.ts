@@ -1,9 +1,8 @@
+export { wanStatus } from '../../unifi/wan'
 import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { EgressHistory, type EgressHealthT, type EgressHistoryT, type HealthStatusT, type PublicIpT } from '#shared/schemas/egress'
 import type { Db } from '../../db'
 import { egressHealth, egressHealthTransitions, egressIpChecks, egressSampleRollups, egressSamples } from '../../db/schema'
-import type { WireDevice, WireDoc } from '../../unifi/endpoints/schemas'
-import { wanTelemetry } from '../../unifi/wan'
 import { UnifiError } from '../../unifi/errors'
 import { archiveReportSamples, utcHour } from '../reports/egress-archive'
 
@@ -35,26 +34,6 @@ export function classifyHealth(input: { attempts: (number | null)[] | null, prio
       : lossPct > 0 || latencyMs !== null && input.baseline !== null && latencyMs > 2.5 * input.baseline ? 'degraded' : 'healthy'
   const source = input.wan === false ? 'unifi' : input.attempts ? 'probe' : input.wan === null ? 'none' : 'unifi'
   return { value: { status, latencyMs, lossPct, jitterMs, source } satisfies Partial<EgressHealthT>, failedRounds }
-}
-
-function statusOf(value: WireDoc | null | undefined) {
-  if (!value) return null
-  const status = typeof value.status === 'string' ? value.status.toLowerCase() : null
-  if (value.up === false || value.is_up === false || value.reachable === false || value.is_reachable === false
-    || status && ['down', 'error', 'offline', 'disconnected', 'failed'].includes(status)) return false
-  if (value.up === true || value.is_up === true || value.reachable === true || value.is_reachable === true
-    || status && ['ok', 'up', 'healthy', 'connected', 'online'].includes(status)) return true
-  return null
-}
-
-export function wanStatus(gateway: WireDevice | null, records: WireDoc[], group: string | null) {
-  const name = group?.toLowerCase()
-  const key = name === 'wan' || name === 'wan1' ? 'wan1' : name === 'wan2' ? 'wan2' : name === 'wan3' ? 'wan3' : null
-  if (!key) return null
-  const reports = records.filter(record => [record.subsystem, record.wan_networkgroup, record.wan]
-    .some(value => typeof value === 'string' && (value.toLowerCase() === key || key === 'wan1' && value.toLowerCase() === 'wan')))
-  const statuses = [statusOf(wanTelemetry(gateway, group)), ...reports.map(statusOf)]
-  return statuses.includes(false) ? false : statuses.includes(true) ? true : null
 }
 
 export function latestPublicIp(db: Db, id: string): PublicIpT | null {

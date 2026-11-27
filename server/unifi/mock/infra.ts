@@ -80,16 +80,23 @@ export function buildMockDevices() {
 }
 
 export const MockScenario = z.enum([
-  'reboot-ap', 'offline-switch', 'recover', 'downgrade-port', 'port-errors',
+  'reboot-ap', 'offline-switch', 'config-then-outage', 'recover', 'downgrade-port', 'port-errors',
   'flap-port', 'new-device', 'roam', 'sticky', 'overheat', 'firmware-available',
 ])
 type Scenario = z.infer<typeof MockScenario>
 type MockStation = WireStation & { online: boolean }
 
-export function createMockFleet(clients: Map<string, MockStation>, now: () => number, random: () => number) {
+export type MockBootTimes = { get: (mac: string) => number | undefined, set: (mac: string, at: number) => void }
+
+export function createMockFleet(clients: Map<string, MockStation>, now: () => number, random: () => number, boots?: MockBootTimes) {
   const devices = buildMockDevices()
   const graph = createDeviceGraph(devices)
-  const boot = new Map(devices.map(device => [device.mac, now() - (finiteNumber(device.uptime) ?? 0) * 1000]))
+  const boot = new Map(devices.map(device => {
+    const saved = boots?.get(device.mac)
+    const at = saved ?? (boots ? now() : 0) - (finiteNumber(device.uptime) ?? 0) * 1000
+    if (saved === undefined) boots?.set(device.mac, at)
+    return [device.mac, at]
+  }))
   const baseline = new Map(devices.map(device => [device.mac, structuredClone(device)]))
   const phone = [...clients.values()].find(client => client.hostname === 'alder-phone')!
   const home = { ap_mac: phone.ap_mac, channel: phone.channel, signal: phone.signal }
@@ -134,7 +141,9 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
 
   function reboot(macs: readonly string[]) {
     for (const mac of macs) if (graph.byMac.has(mac)) {
-      boot.set(mac, now())
+      const at = now()
+      boot.set(mac, at)
+      boots?.set(mac, at)
       const device = graph.byMac.get(mac)!
       device.uptime = 0
       if (device['system-stats']) device['system-stats'].uptime = '0'
@@ -244,6 +253,7 @@ export function createMockFleet(clients: Map<string, MockStation>, now: () => nu
       case 'reboot-ap':
         reboot([AP1])
         return { mac: AP1, uptimeSec: ap.uptime }
+      case 'config-then-outage':
       case 'offline-switch': {
         offline.add(SWITCH_MAC)
         for (const device of graph.descendants(SWITCH_MAC)) offline.add(device.mac)

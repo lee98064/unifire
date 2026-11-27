@@ -33,3 +33,22 @@ export function gatewayRates(device: WireDevice, groups: (string | null)[]) {
   const aggregate = wanRates(device)
   return aggregate.rxBps !== null && aggregate.txBps !== null ? aggregate : groups.length <= 1 ? wanRates(uplink) : aggregate
 }
+
+function statusOf(value: WireDoc | null | undefined) {
+  if (!value) return null
+  const status = typeof value.status === 'string' ? value.status.toLowerCase() : null
+  if (value.up === false || value.is_up === false || value.reachable === false || value.is_reachable === false
+    || status && ['down', 'error', 'offline', 'disconnected', 'failed'].includes(status)) return false
+  if (value.up === true || value.is_up === true || value.reachable === true || value.is_reachable === true
+    || status && ['ok', 'up', 'healthy', 'connected', 'online'].includes(status)) return true
+  return null
+}
+
+export function wanStatus(gateway: WireDevice | null, records: WireDoc[], group: string | null) {
+  const key = wanKey(group)
+  if (!key || !/^wan\d+$/.test(key)) return null
+  const reports = records.filter(record => [record.subsystem, record.wan_networkgroup, record.wan]
+    .some(value => wanKey(value) === key))
+  const statuses = [statusOf(wanTelemetry(gateway, group)), ...reports.map(statusOf)]
+  return statuses.includes(false) ? false : statuses.includes(true) ? true : null
+}

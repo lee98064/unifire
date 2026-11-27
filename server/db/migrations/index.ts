@@ -17,7 +17,9 @@ import { portsPoeSql } from './0008-ports-poe'
 
 import { roomsRoamingSql } from './0009-rooms-roaming'
 
-const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }, { version: 6, sql: reportsSql }, { version: 7, sql: infraSql }, { version: 8, sql: portsPoeSql }, { version: 9, sql: roomsRoamingSql }]
+import { incidentsSql } from './0010-incidents'
+
+const migrations = [{ version: 1, sql: initialSql }, { version: 2, sql: routingSql }, { version: 3, sql: snapshotsSql }, { version: 4, sql: accessSql }, { version: 5, sql: automationSql }, { version: 6, sql: reportsSql }, { version: 7, sql: infraSql }, { version: 8, sql: portsPoeSql }, { version: 9, sql: roomsRoamingSql }, { version: 10, sql: incidentsSql }]
 
 export function migrateDatabase(sqlite: Database.Database) {
   sqlite.transaction(() => {

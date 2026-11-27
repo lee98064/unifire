@@ -63,8 +63,8 @@ export function createInfra(db: Db, service: ControllerService, options: { now?:
     const poll = runtime?.cache.devicePoll()
     if (!runtime?.active() || !poll || poll === lastPoll) return
     const snapshot = runtime.cache.snapshot()
-    health.sample(snapshot.devices, snapshot.activeClients, runtime.scope, poll.at, observePortEnergy)
     sampler.sample(snapshot.devices, runtime.config.site, runtime.scope, poll.at, runtime.ledger.explainsDeviceReboot)
+    health.sample(snapshot.devices, snapshot.activeClients, runtime.scope, poll.at, observePortEnergy)
     for (const device of snapshot.devices) {
       if (device.adopted === false || device.state === 0 || device.state === 6) continue
       const used = finiteNumber(device.total_used_power)

@@ -6,7 +6,7 @@ import { portEventHistory } from './port-history'
 import { DAY, HOUR, MINUTE } from '../access-time'
 
 const rollupBucket = sql<number>`cast(${deviceSamples.ts} / ${HOUR} as integer) * ${HOUR}`
-const online = sql<number>`case when ${deviceSamples.state} = 'online' then 1.0 else 0.0 end`
+const online = sql<number>`case when ${deviceSamples.state} = 'online' or ${deviceSamples.planned} = 1 then 1.0 else 0.0 end`
 
 export function archiveDeviceSamples(db: Pick<Db, 'run' | 'delete'>, from: number, at: number,
   retention: { retainRawDays: number, retainRollupDays: number }) {
@@ -14,14 +14,16 @@ export function archiveDeviceSamples(db: Pick<Db, 'run' | 'delete'>, from: numbe
   db.run(sql`
     insert into device_rollups_hourly (mac, hour_ts, online_fraction,
       cpu_avg, cpu_max, mem_avg, mem_max, temp_avg, temp_max, clients_avg, clients_max,
-      rx_avg, rx_max, tx_avg, tx_max, poe_w_avg)
+      rx_avg, rx_max, tx_avg, tx_max, poe_w_avg, report_minutes)
     select mac, ${rollupBucket}, avg(${online}),
       avg(cpu), max(cpu), avg(mem), max(mem), avg(temp), max(temp), avg(clients), max(clients),
-      avg(rx_bps), max(rx_bps), avg(tx_bps), max(tx_bps), avg(poe_w)
+      avg(rx_bps), max(rx_bps), avg(tx_bps), max(tx_bps), avg(poe_w),
+      json_group_array(json_array((ts % ${HOUR}) / ${MINUTE}, ${online}, cpu, mem, temp))
     from ${deviceSamples}
     where ts >= ${from} and ts < ${hour}
     group by mac, 2
-    on conflict(mac, hour_ts) do nothing
+    on conflict(mac, hour_ts) do update set report_minutes = excluded.report_minutes
+      where device_rollups_hourly.report_minutes is null
   `)
   db.delete(deviceSamples).where(lt(deviceSamples.ts, at - retention.retainRawDays * DAY)).run()
   db.delete(deviceRollupsHourly).where(lt(deviceRollupsHourly.hourTs, hour - retention.retainRollupDays * DAY)).run()

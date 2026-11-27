@@ -4,7 +4,7 @@ import { createServer as createSecureServer, type ServerOptions } from 'node:htt
 import { WebSocket, WebSocketServer } from 'ws'
 import { Doc, Docs, Route, Station, type WireDoc } from '../endpoints/schemas'
 import { osPaths } from '../paths'
-import { createMockFleet } from './infra'
+import { createMockFleet, type MockBootTimes } from './infra'
 import { buildFixtures, createRandom, DEMO_ROUTES, MOCK_PASSWORD, MOCK_SITE, MOCK_USERNAME, probeProfiles, SELF_MAC } from './fixtures'
 
 type Failure = 'html' | '401' | 'loginRequired' | '403' | '404' | '429'
@@ -36,6 +36,7 @@ export async function startMockController(options: {
   sessionTtlMs?: number
   tls?: ServerOptions
   now?: () => number
+  bootTimes?: MockBootTimes
 } = {}) {
   const now = options.now ?? Date.now
   const started = now()
@@ -48,7 +49,7 @@ export async function startMockController(options: {
   const wlans = new Map(fixtures.wlans.map(wlan => [wlan._id, Doc.parse(wlan)]))
   const savedWlan = options.guestWlan && wlans.get(options.guestWlan.id)
   if (savedWlan && options.guestWlan) savedWlan.x_passphrase = options.guestWlan.passphrase
-  const fleet = createMockFleet(clients, now, createRandom((options.seed ?? 903) + 1))
+  const fleet = createMockFleet(clients, now, createRandom((options.seed ?? 903) + 1), options.bootTimes)
   const { devices } = fleet
   const portForwards = new Map<string, WireDoc>([['demo-forward', { _id: 'demo-forward', name: 'Demo port forward',
     enabled: true, src: 'any', dst_port: '8443', fwd: '10.235.0.25', fwd_port: '443', proto: 'tcp' }]])
@@ -332,7 +333,6 @@ export async function startMockController(options: {
         const macs = Array.isArray(body.macs) ? body.macs : []
         const targets = devices.filter(item => macs.includes(item.mac))
         if (!targets.length) return failure(res, '404')
-        fleet.reboot(targets.map(device => device.mac))
         emit('device:sync', targets)
       } else if (body.cmd === 'set-locate' || body.cmd === 'unset-locate') {
         const device = devices.find(item => item.mac === body.mac)
@@ -446,6 +446,7 @@ export async function startMockController(options: {
     config: { url, username: MOCK_USERNAME, password: MOCK_PASSWORD, site: MOCK_SITE, verifyMode: 'insecure' as const },
     paths, emit, tick, setOnline,
     scenario(kind: Parameters<typeof fleet.scenario>[0], source: 'ws' | 'poll' = 'ws') {
+      if (kind === 'config-then-outage') togglePortForward()
       const result = fleet.scenario(kind)
       emit('device:sync', devices)
       if (source === 'ws' && (kind === 'roam' || kind === 'sticky' || kind === 'recover')) emit('sta:sync', [...clients.values()].filter(fleet.activeClient))

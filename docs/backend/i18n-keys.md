@@ -18,7 +18,7 @@
 | Key | English description | Params |
 |---|---|---|
 | `errors.invalidInput` | The request failed validation. | None |
-| `errors.invalidCursor` | The audit pagination cursor is invalid. | None |
+| `errors.invalidCursor` | The pagination cursor is invalid. | None |
 | `errors.invalidTimezone` | The time zone is not a supported IANA identifier. | None |
 | `errors.authRequired` | Sign in to continue. | None |
 | `errors.forbidden` | This action requires an administrator. | None |
@@ -332,3 +332,40 @@ Rule notifications use the administrator-provided templates. The test action use
 | `errors.roomNotFound` | The requested room does not exist. | — |
 | `errors.roomApRequired` | A room assignment requires an access point. | — |
 | `rule.result.kickSkipped` | A client kick was skipped because the client did not meet the kick conditions. | — |
+
+## WP11 — incident correlation and infrastructure report
+
+All incident titles receive `name`, `devices`, `clients`, and `people`. All incident signals receive
+`name`, `port` (port index), `count`, and `ago` (minutes). Inapplicable signal params are empty.
+
+| Key | Meaning | Additional params |
+| --- | --- | --- |
+| `incident.title.egress_down` | An egress became unavailable. | — |
+| `incident.title.wan_down` | A gateway WAN went down. | — |
+| `incident.title.device_offline` | An adopted device went offline. | — |
+| `incident.title.device_rebooted` | An adopted device rebooted unexpectedly. | — |
+| `incident.title.uplink_down` | A link between adopted devices went down. | — |
+| `incident.title.port_issue` | Port flapping caused an incident. | — |
+| `incident.title.mass_disconnect` | A group of clients disconnected from one device. | — |
+| `incident.signal.egress_down` | An egress went down. | — |
+| `incident.signal.egress_up` | An egress recovered. | — |
+| `incident.signal.wan_down` | A gateway WAN went down. | — |
+| `incident.signal.wan_up` | A gateway WAN recovered. | — |
+| `incident.signal.device_offline` | An adopted device went offline. | — |
+| `incident.signal.device_online` | An adopted device came online. | — |
+| `incident.signal.device_rebooted` | An adopted device rebooted unexpectedly. | — |
+| `incident.signal.uplink_down` | An adopted device's link went down. | — |
+| `incident.signal.uplink_up` | An adopted device's link came back up. | — |
+| `incident.signal.port_issue` | A port health event occurred. | — |
+| `incident.signal.mass_disconnect` | Several clients disconnected from a device. | — |
+| `incident.signal.clients_returned` | Most affected clients came back online. | — |
+| `incident.signal.config_change` | An audit entry records a configuration change. | — |
+| `notification.incident_opened.title`, `notification.incident_opened.body` | An incident opened or escalated to critical. | `incidentId`, `severity`, `description` (localized incident title), title params |
+| `notification.incident_resolved.title`, `notification.incident_resolved.body` | An incident resolved after recovery. | Same as opened, plus `duration` (seconds) |
+| `audit.incident.opened` | The engine opened an incident. | Title params |
+| `audit.incident.escalated` | An incident escalated to critical. | Title params |
+| `audit.incident.resolved` | An incident recovered and cleared the quiet period. | Title params, `duration` (seconds) |
+| `audit.incident.updated` | An administrator updated an incident's acknowledgement or note. | `name` |
+| `audit.push.incidentOpened` | An administrator followed an incident notification action. | — |
+| `infra.issue.poe_scheduled_off` | Unifire is holding the device's PoE power off or allowing time for it to boot. | `schedule` (schedule, rule, or port label) |
+| `errors.incidentNotFound` | The requested incident does not exist in the current controller scope. | — |

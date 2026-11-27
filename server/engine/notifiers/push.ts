@@ -18,6 +18,7 @@ const Action = z.discriminatedUnion('type', [
   z.object({ type: z.enum(['approve_device', 'block_device']), mac: Mac }),
   z.object({ type: z.enum(['approve_extension', 'deny_extension']), requestId: Id }),
   z.object({ type: z.literal('open'), managedRouteId: Id }),
+  z.object({ type: z.literal('open_incident'), incidentId: Id }),
 ])
 export type NotificationAction = z.infer<typeof Action>
 const Audience = z.union([z.literal('push'), z.string().startsWith('telegram:')])
@@ -91,6 +92,9 @@ export function createPush(db: Db, access: Pick<ReturnType<typeof createAccess>,
       await access.approval(action.mac, { decision: action.type === 'approve_device' ? 'approve' : 'block' }, { actor: userActor(user) })
     } else if (action.type === 'approve_extension' || action.type === 'deny_extension') {
       access.extensions.decide(action.requestId, { decision: action.type === 'approve_extension' ? 'approve' : 'deny' }, user)
+    } else if (action.type === 'open_incident') {
+      audit.record({ actor: userActor(user), category: 'system', action: 'push.incidentOpened', severity: 'info',
+        target: { type: 'incident', id: action.incidentId, label: action.incidentId }, messageKey: 'audit.push.incidentOpened' })
     } else if (action.type === 'open') {
       audit.record({ actor: userActor(user), category: 'route', action: 'push.routeOpened', severity: 'info',
         target: { type: 'route', id: action.managedRouteId, label: action.managedRouteId }, messageKey: 'audit.push.routeOpened' })

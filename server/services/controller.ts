@@ -10,7 +10,7 @@ import {
   type ControllerModeT, type ControllerStatusT,
 } from '#shared/schemas/controller'
 import type { Db } from '../db'
-import { controller, egresses, guestWifi, managedRoutes, poeApplied, quotaRoutes, settings } from '../db/schema'
+import { controller, egresses, guestWifi, infraDevices, managedRoutes, poeApplied, quotaRoutes, settings } from '../db/schema'
 import { probeCapabilities } from '../unifi/capabilities'
 import { createUnifiTransport, type UnifiConfig } from '../unifi/client'
 import { createUnifiEndpoints } from '../unifi/endpoints'
@@ -93,7 +93,7 @@ export async function createControllerService(db: Db, options: {
 }): Promise<ControllerService> {
   const audit = createAuditService(db)
   const settingsService = createSettingsService(db)
-  const engine = new EventEmitter<{ event: [ControllerEvent] }>()
+  const engine = new EventEmitter<{ event: [ControllerEvent] }>().setMaxListeners(20)
   const beforeWrite = new Set<BeforeWrite>()
   const beforeRoutingChange = new Set<() => Promise<void>>()
   let stopped = false
@@ -109,7 +109,19 @@ export async function createControllerService(db: Db, options: {
   if (options.mock) {
     const guest = db.select().from(guestWifi).get()
     const passphrase = guest?.encryptedPassphrase ? decrypt(guest.encryptedPassphrase) : null
-    mock = await startMockController({ lively: options.lively, guestWlan: guest?.wlanId && typeof passphrase === 'string'
+    const bootKey = (mac: string) => 'mock.boot.' + mac
+    mock = await startMockController({ lively: options.lively, bootTimes: {
+      get(mac) {
+        const stored = db.select().from(settings).where(eq(settings.key, bootKey(mac))).get()?.value
+        if (typeof stored === 'number') return stored
+        const old = db.select().from(infraDevices).where(and(eq(infraDevices.mac, mac), eq(infraDevices.scope, 'mock:default'))).get()
+        if (old?.uptimeAt != null && old.lastUptime !== null) return old.uptimeAt - old.lastUptime * 1000
+      },
+      set(mac, at) {
+        db.insert(settings).values({ key: bootKey(mac), value: at })
+          .onConflictDoUpdate({ target: settings.key, set: { value: at } }).run()
+      },
+    }, guestWlan: guest?.wlanId && typeof passphrase === 'string'
       ? { id: guest.wlanId, passphrase } : undefined })
     if (!savedController(db)) db.insert(controller).values({
       id: 1, url: MOCK_ROW, username: mock.config.username, encryptedPassword: encrypt(mock.config.password),

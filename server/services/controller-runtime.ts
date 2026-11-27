@@ -4,6 +4,7 @@ import { createAutomation } from '../engine/automation'
 import { createAuditWatch } from '../engine/audit-watch'
 import { createSpeedtests } from '../engine/reports/speedtest'
 import { createSnapshots } from '../engine/snapshots'
+import { createIncidentEngine } from '../engine/infra/incidents/signals'
 import { createInfra } from '../engine/infra'
 import { createRouting } from '../engine'
 import { UnifiError } from '../unifi/errors'
@@ -14,6 +15,7 @@ import { createAccess } from './access'
 import { seedMockAutomation } from './seed-automation'
 import { acquireLease, ENGINE_LEASE, releaseLease, renewLease } from './lease'
 
+let auditWatch: ReturnType<typeof createAuditWatch> | undefined
 let infra: ReturnType<typeof createInfra> | undefined
 let speedtests: ReturnType<typeof createSpeedtests> | undefined
 let automation: ReturnType<typeof createAutomation> | undefined
@@ -38,6 +40,13 @@ export async function useInfra() {
   await service.ready()
   if (!infra || service !== current) throw new UnifiError('UNIFI_INACTIVE')
   return infra
+}
+
+export async function checkMockConfig() {
+  const watch = auditWatch
+  if (!watch || !current?.status().mock) return
+  await watch.fingerprint()
+  await watch.fingerprint()
 }
 
 export async function useSpeedtests() {
@@ -95,12 +104,16 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
   let stopInsights: (() => Promise<unknown>) | undefined
   let stopRouting: (() => Promise<void>) | undefined
   let stopAutomation: (() => Promise<void>) | undefined
+  let stopIncidents: (() => void) | undefined
   let stopInfra: (() => Promise<void>) | undefined
   let stopAccess: (() => Promise<void>) | undefined
 
   async function stopServices() {
     const service = current
     const reportWorker = speedtests
+    stopIncidents?.()
+    stopIncidents = undefined
+    auditWatch = undefined
     infra = undefined
     current = undefined
     routing = undefined
@@ -134,10 +147,10 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
       snapshots = createSnapshots(db, current)
       const snapshotJob = snapshots.start()
       snapshotsReady = snapshotJob.ready.catch(() => {})
-      const stopWatch = createAuditWatch(db, current).start()
+      auditWatch = createAuditWatch(db, current)
+      const stopWatch = auditWatch.start()
       stopInsights = () => Promise.allSettled([snapshotJob.stop(), stopWatch()])
       routing = createRouting(db, current)
-      stopRouting = routing.start()
       access = createAccess(db, current)
       const hasLease = () => Date.now() < expiresAt
       stopAccess = access.start(hasLease)
@@ -148,7 +161,9 @@ async function runControllerRuntime(db: Db, mock: boolean, lively: boolean, onEr
       infra = createInfra(db, current)
       automation = createAutomation(db, current, access, routing.managed, infra)
       stopAutomation = automation.start(hasLease)
+      stopIncidents = createIncidentEngine(db, current).start(hasLease)
       stopInfra = infra.start(hasLease)
+      stopRouting = routing.start()
     } catch (error) {
       expiresAt = 0
       try { await stopServices() } finally { releaseLease(ENGINE_LEASE, owner, db) }

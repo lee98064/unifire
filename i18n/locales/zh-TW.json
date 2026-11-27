@@ -158,7 +158,8 @@
     "portEventNotFound": "找不到這個連接埠事件",
     "dryRun": "這個操作必須在寫入模式下才能安全完成",
     "roomApRequired": "只有 AP 可以指派到房間",
-    "roomNotFound": "找不到這個房間"
+    "roomNotFound": "找不到這個房間",
+    "incidentNotFound": "找不到這個事故"
   },
   "fmt": {
     "h": "{h} 小時",
@@ -1439,7 +1440,8 @@
       "denied": "已拒絕 {person} 的延長申請"
     },
     "push": {
-      "routeOpened": "從通知開啟了漂移路由"
+      "routeOpened": "從通知開啟了漂移路由",
+      "incidentOpened": "從通知開啟事故"
     },
     "rule": {
       "run": "規則「{name}」已執行"
@@ -1457,6 +1459,12 @@
     },
     "quota": {
       "routeOverlap": "{person} 的配額出口與受管路由「{route}」重疊，改用臨時出口"
+    },
+    "incident": {
+      "opened": "發生事故：{name}",
+      "escalated": "事故升級為嚴重：{name}",
+      "resolved": "事故已解除：{name}",
+      "updated": "更新事故：{name}"
     }
   },
   "presence": {
@@ -1710,6 +1718,14 @@
         "title": "PoE 排程「{name}」執行失敗",
         "body": "{switch} 第 {port} 埠：{error}"
       }
+    },
+    "incident_opened": {
+      "title": "發生事故：{description}",
+      "body": "Unifire 已把相關的異常合併成一起事故，打開可以看推測的根因與影響範圍。"
+    },
+    "incident_resolved": {
+      "title": "事故已解除",
+      "body": "{description}（持續約 {duration} 秒）"
     }
   },
   "rule": {
@@ -2482,6 +2498,32 @@
       "flapping": "{switch} 第 {port} 埠 1 小時內斷線 {flaps} 次",
       "new_device": "{switch} 第 {port} 埠接上了陌生裝置 {peer}",
       "peer_changed": "{switch} 第 {port} 埠改接 {peer}"
+    }
+  },
+  "incident": {
+    "title": {
+      "egress_down": "出口「{name}」斷線，影響 {clients} 台裝置",
+      "wan_down": "{name} 斷線，影響 {clients} 台裝置",
+      "device_offline": "{name} 離線，連帶 {devices} 台設備、{clients} 台裝置受影響",
+      "device_rebooted": "{name} 非預期重開機，{clients} 台裝置短暫斷線",
+      "uplink_down": "{name} 的上連中斷，{devices} 台設備受影響",
+      "port_issue": "{name} 的連接埠反覆斷線",
+      "mass_disconnect": "{name} 上有 {clients} 台裝置同時斷線"
+    },
+    "signal": {
+      "egress_down": "出口「{name}」斷線",
+      "egress_up": "出口「{name}」恢復",
+      "wan_down": "{name} 斷線",
+      "wan_up": "{name} 恢復",
+      "device_offline": "{name} 離線",
+      "device_online": "{name} 恢復上線",
+      "device_rebooted": "{name} 非預期重開機",
+      "uplink_down": "{name} 的上連中斷",
+      "uplink_up": "{name} 的上連恢復",
+      "port_issue": "{name} 連接埠異常",
+      "mass_disconnect": "{name} 上 {count} 台裝置同時斷線",
+      "clients_returned": "{name} 上的裝置陸續回來了",
+      "config_change": "設定變更：{name}"
     }
   }
 }

@@ -19,9 +19,9 @@ export type Notification = {
   member?: { personId: string }
   variant?: 'extension_decided' | 'test'
 }
-const warning = new Set<NotificationEventT>(['new_device', 'route_drift', 'quota_warning', 'extension_request', 'poe_cycle', 'external_change', 'port_issue', 'poe_schedule'])
+const warning = new Set<NotificationEventT>(['new_device', 'route_drift', 'quota_warning', 'extension_request', 'poe_cycle', 'external_change', 'port_issue', 'poe_schedule', 'incident_opened'])
 const error = new Set<NotificationEventT>(['egress_down', 'quota_exceeded', 'controller_error'])
-const success = new Set<NotificationEventT>(['guest_wifi_rotated', 'egress_up'])
+const success = new Set<NotificationEventT>(['guest_wifi_rotated', 'egress_up', 'incident_resolved'])
 const actionPrefix = '/api/push/action?token='
 const escapeHeader = (value: string) => /^[\x20-\x7e]+$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value).toString('base64')}?=`
 
@@ -72,6 +72,7 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
       return typeof value === 'string' ? value : undefined
     }
     const egressId = string('egressId')
+    const incidentId = string('incidentId')
     const routeId = string('managedRouteId')
     const personId = string('personId')
     const quotaId = string('quotaId')
@@ -84,7 +85,7 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
       typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean').map(([key, value]) => [key, String(value)]))
     const url = input.member ? '/me' : input.event === 'new_device' || input.event === 'extension_request' ? '/approvals'
       : input.event === 'device_firmware' && string('mac') ? `/devices/${encodeURIComponent(string('mac')!)}`
-        : routeId ? `/routes/${encodeURIComponent(routeId)}` : egressId ? '/egresses' : '/'
+        : incidentId ? `/insight/incidents/${encodeURIComponent(incidentId)}` : routeId ? `/routes/${encodeURIComponent(routeId)}` : egressId ? '/egresses' : '/'
     return { data: safeData, params, url }
   }
 
@@ -106,6 +107,9 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
       if (input.event === 'extension_request' && typeof data.requestId === 'string') actions = [
         ['approve', { type: 'approve_extension', requestId: data.requestId }], ['deny', { type: 'deny_extension', requestId: data.requestId }],
       ]
+      if ((input.event === 'incident_opened' || input.event === 'incident_resolved') && typeof data.incidentId === 'string') {
+        actions = [['open', { type: 'open_incident', incidentId: data.incidentId }]]
+      }
       if (input.event === 'route_drift' && typeof data.managedRouteId === 'string') actions = [
         ['open', { type: 'open', managedRouteId: data.managedRouteId }],
       ]
@@ -130,11 +134,16 @@ export function createNotifier(db: Db, access: Pick<ReturnType<typeof createAcce
     const kind = typeof data.kind === 'string' ? data.kind : ''
     if (input.event === 'port_issue' && kind) params.description = await t(language, `port.event.${kind}`, params)
     if (input.event === 'poe_schedule' && params.reason) params.reason = await t(language, params.reason, params)
+    if ((input.event === 'incident_opened' || input.event === 'incident_resolved') && typeof data.titleKey === 'string') {
+      const vars = Object.entries(data.titleParams ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+      Object.assign(params, Object.fromEntries(vars))
+      params.description = await t(language, data.titleKey, params)
+    }
     const key = input.event === 'poe_schedule' && ['drift', 'error', 'blocked'].includes(kind)
       ? `notification.poe_schedule.${kind}` : `notification.${input.variant ?? input.event}`
     const [title, body] = input.message ? [input.message.title, input.message.body]
       : await Promise.all([t(language, `${key}.title`, params), t(language, `${key}.body`, params)])
-    const level = error.has(input.event) || (input.event === 'port_issue' && kind === 'flapping') || (input.event === 'poe_schedule' && kind === 'error') ? 3 : warning.has(input.event) ? 2 : success.has(input.event) ? 1 : 0
+    const level = error.has(input.event) || (input.event === 'incident_opened' && params.severity === 'critical') || (input.event === 'port_issue' && kind === 'flapping') || (input.event === 'poe_schedule' && kind === 'error') ? 3 : warning.has(input.event) ? 2 : success.has(input.event) ? 1 : 0
     const site = settings.get().siteUrl
 
     switch (config.type) {

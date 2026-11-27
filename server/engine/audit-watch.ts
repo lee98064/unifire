@@ -12,8 +12,8 @@ import { compareMaps, digest, fieldDiff, labelResolver, type Collections } from 
 import { DAY } from './snapshots/store'
 import { describeSystemLog } from './unifi-log'
 
-const watched = ['trafficroutes', 'objects', 'firewall-policies', 'wlanconf', 'portforward', 'networkconf', 'static-dns'] as const
-const configurationEvent = /route|object|firewall|wlan|wifi|port.?forward|network.?conf|static.?dns|config/i
+const watched = ['trafficroutes', 'objects', 'firewall-policies', 'wlanconf', 'portforward', 'networkconf', 'static-dns', 'devices'] as const
+const configurationEvent = /route|object|firewall|wlan|wifi|port.?forward|port.?profile|port.*config|network.?conf|static.?dns|config/i
 const external = { type: 'external', id: null, name: null } as const
 const unifiLog = { type: 'unifi-log', id: null, name: null } as const
 const lookback = 10 * 60_000
@@ -51,6 +51,7 @@ export function createAuditWatch(db: Db, service: ControllerService, now = Date.
       for (const [resource, current] of collections) {
         const before = baseline.get(resource)
         if (before) for (const { id, left, right } of compareMaps(before, current)) {
+          if (resource === 'devices' && (!left || !right)) continue
           if (runtime.ledger.explains(resource, id, left?.hash, right?.hash)) continue
           const label = right?.label ?? left!.label
           audit.record({
@@ -60,7 +61,7 @@ export function createAuditWatch(db: Db, service: ControllerService, now = Date.
           })
           service.engine.emit('event', { type: 'config.external_change', resource, itemId: id, label })
         }
-        baseline.set(resource, current)
+        baseline.set(resource, resource === 'devices' && before ? new Map([...before, ...current]) : current)
       }
     }).finally(() => {
       fingerprinting = undefined

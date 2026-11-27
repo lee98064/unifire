@@ -159,12 +159,12 @@ describe('infrastructure sampling', () => {
       expect(devices).toHaveBeenCalledTimes(1)
       await vi.advanceTimersByTimeAsync(100)
       expect(devices).toHaveBeenCalledTimes(2)
-      expect(events).not.toContainEqual({ type: 'infra.offline', mac: AP1 })
+      expect(events).not.toContainEqual(expect.objectContaining({ type: 'infra.offline', mac: AP1 }))
       devices.mockRejectedValueOnce(new Error('failed poll'))
       await expect(cache.refresh('devices')).rejects.toThrow('failed poll')
-      expect(events).not.toContainEqual({ type: 'infra.offline', mac: AP1 })
+      expect(events).not.toContainEqual(expect.objectContaining({ type: 'infra.offline', mac: AP1 }))
       await cache.refresh('devices')
-      expect(events).toContainEqual({ type: 'infra.offline', mac: AP1 })
+      expect(events).toContainEqual({ type: 'infra.offline', mac: AP1, at: at + 10_000 })
       expect(store.db.select().from(infraDevices).where(eq(infraDevices.mac, AP1)).get()?.lastState).toBe('offline')
     } finally {
       cache.stop()
@@ -203,14 +203,14 @@ describe('infrastructure sampling', () => {
     expect(events.filter(event => event.type === 'infra.firmware')).toEqual([
       { type: 'infra.firmware', mac: AP1, version: '3.0' }, { type: 'infra.firmware', mac: AP1, version: '3.1' },
     ])
-    expect(events).toContainEqual({ type: 'infra.online', mac: AP1, downSec: 120 })
+    expect(events).toContainEqual({ type: 'infra.online', mac: AP1, downSec: 120, at: time })
     expect(ledger.explainsDeviceReboot(AP1, time)).toBe(false)
   })
 
   it('detects a boot during an outage even without a prior uptime reading', () => {
     sample([reading({ state: 0 })], site, scope, at)
     sample([reading({ uptime: 12 })], site, scope, at + MINUTE)
-    expect(events).toContainEqual({ type: 'infra.rebooted', mac: AP1, unexpected: true })
+    expect(events).toContainEqual({ type: 'infra.rebooted', mac: AP1, unexpected: true, at: at + MINUTE })
     expect(deviceEvents(store.db, AP1).transitions[0]).toMatchObject({ reason: 'unexpected_reboot', downSec: 60 })
   })
 

@@ -11,6 +11,9 @@ import type { InfraEvent } from '../../unifi/ws'
 import { HOUR, MINUTE } from '../access-time'
 import { archiveDeviceSamples, availabilityByDevice } from './device-history'
 
+import { createDeviceGraph, deviceAncestors, lastKnownParents } from './poe-safety'
+import { plannedPoePorts, plannedPower } from './poe-state'
+
 type Device = ReturnType<typeof normalizeDevice>
 type Saved = typeof infraDevices.$inferSelect
 type RebootReason = Extract<DeviceTransitionT['reason'], 'unifire_restart' | 'upgrade' | 'unexpected_reboot'>
@@ -52,7 +55,10 @@ export function createDeviceSampler(db: Db, options: {
     }
     const config = settings.get().infra
     const events: InfraEvent[] = []
+    const outages: { depth: number, event: InfraEvent }[] = []
     const readings = new Map(devices.filter(device => device.adopted !== false).map(device => [device.mac, device]))
+    const graph = createDeviceGraph(devices)
+    const ports = plannedPoePorts(db, scope, at, graph)
     const nextVisible = new Map(visible)
     const hour = Math.floor(at / HOUR) * HOUR
     const ts = Math.floor(at / MINUTE) * MINUTE
@@ -61,6 +67,7 @@ export function createDeviceSampler(db: Db, options: {
 
     db.transaction(tx => {
       const stored = new Map(tx.select().from(infraDevices).where(eq(infraDevices.scope, scope)).all().map(row => [row.mac, row]))
+      const parents = lastKnownParents(graph.parent, stored.values())
       for (const mac of new Set([...stored.keys(), ...readings.keys()])) {
         const previous = stored.get(mac)
         const reading = readings.get(mac)
@@ -77,19 +84,30 @@ export function createDeviceSampler(db: Db, options: {
 
         const state = device?.state ?? 'offline'
         const from = previous?.lastState ?? null
+        const parent = parents.get(mac)
+        const uplink = device?.uplink
+        const lastUplink = parent && uplink?.mac !== parent.mac
+          ? { mac: parent.mac, name: null, type: 'unknown' as const, remotePort: parent.port, localPort: parent.localPort ?? null,
+              speedMbps: null, fullDuplex: null, signal: null, rxBps: null, txBps: null }
+          : uplink?.mac ? { ...uplink, remotePort: parent?.port ?? uplink.remotePort }
+          : previous?.lastUplink ?? null
+        const planned = plannedPower(mac, parents, ports) !== undefined
+        const offlinePlanned = state === 'offline' && planned
+        const unplannedNow = state === 'offline' && previous?.offlinePlanned && !offlinePlanned
         const firstSeen = previous?.firstSeen ?? at
         const lastSeen = device
           ? Math.max(previous?.lastSeen ?? 0, wireTime(reading?.last_seen) ?? (state === 'online' ? at : 0)) || null
           : previous?.lastSeen ?? null
         const offlineSince = state === 'online' ? null
-          : previous?.offlineSince ?? (state === 'offline' ? at : null)
+          : unplannedNow ? at : previous?.offlineSince ?? (state === 'offline' ? at : null)
         const downSec = state === 'online' && previous?.offlineSince != null ? (at - previous.offlineSince) / 1000 : null
         const uptime = state === 'online' ? device?.uptimeSec ?? null : null
         const firmware = device?.firmware ?? previous?.firmware ?? null
         const upgradeTo = device ? device.upgradeTo : previous?.upgradeTo ?? null
-        const reboot = previous && device ? classifyReboot(previous, device, at, explains) : null
+        const reboot = previous && device ? classifyReboot(previous, device, at,
+          (mac, ts) => planned || previous.offlinePlanned || explains(mac, ts)) : null
         const fields = {
-          lastSeen, lastState: state, firmware, upgradeTo, offlineSince,
+          lastSeen, lastState: state, firmware, upgradeTo, offlineSince, offlinePlanned, lastUplink,
           lastUptime: uptime ?? previous?.lastUptime ?? null,
           uptimeAt: uptime !== null ? at : previous?.uptimeAt ?? null,
           upgrading: state === 'upgrading' || state !== 'online' && (previous?.upgrading === true
@@ -106,20 +124,25 @@ export function createDeviceSampler(db: Db, options: {
         } else tx.update(infraDevices).set(fields).where(eq(infraDevices.mac, mac)).run()
 
         const telemetry = state === 'offline' ? undefined : device
-        const values = { state, uptime: telemetry?.uptimeSec ?? null, cpu: telemetry?.cpuPct ?? null,
+        const values = { state, planned: offlinePlanned, uptime: telemetry?.uptimeSec ?? null, cpu: telemetry?.cpuPct ?? null,
           mem: telemetry?.memPct ?? null, temp: telemetry?.tempC ?? null, clients: telemetry?.clients ?? null,
           rxBps: telemetry?.rxBps ?? null, txBps: telemetry?.txBps ?? null, poeW: telemetry?.poe?.usedW ?? null }
         tx.insert(deviceSamples).values({ mac, ts, ...values })
           .onConflictDoUpdate({ target: [deviceSamples.mac, deviceSamples.ts], set: values }).run()
 
-        if (state !== from || reboot) {
+        if (state !== from || reboot || offlinePlanned !== (previous?.offlinePlanned ?? false)) {
           const reason = reboot ?? (from === null ? 'adopted' : state === 'offline' ? 'offline'
             : downSec !== null ? 'online' : 'state')
-          tx.insert(deviceTransitions).values({ mac, ts: at, from, to: state, reason, downSec }).run()
+          tx.insert(deviceTransitions).values({ mac, ts: at, from, to: state, reason, downSec, planned: offlinePlanned }).run()
         }
-        if (state === 'offline' && from !== 'offline') events.push({ type: 'infra.offline', mac })
-        if (state === 'online' && from !== null && from !== 'online') events.push({ type: 'infra.online', mac, downSec: downSec ?? 0 })
-        if (reboot) events.push({ type: 'infra.rebooted', mac, unexpected: reboot === 'unexpected_reboot' })
+        if (state === 'offline' && (from !== 'offline' || offlinePlanned !== previous?.offlinePlanned)) {
+          outages.push({ depth: deviceAncestors(mac, parents).length,
+            event: { type: 'infra.offline', mac, ...(offlinePlanned && { planned: true }), at } })
+        }
+        if (state === 'online' && from !== null && from !== 'online') events.push({ type: 'infra.online', mac, downSec: downSec ?? 0, at })
+        if (reboot && !planned && !previous?.offlinePlanned) {
+          events.push({ type: 'infra.rebooted', mac, unexpected: reboot === 'unexpected_reboot', at })
+        }
         if (previous && firmware !== null && firmware !== previous.firmware) {
           tx.insert(firmwareHistory).values({ mac, ts: at, from: previous?.firmware ?? null, to: firmware }).run()
         }
@@ -133,7 +156,7 @@ export function createDeviceSampler(db: Db, options: {
           } else if (tempC <= config.tempWarnC - 3) nextHot.delete(mac)
         }
 
-        const view = { device, lastSeen, state, firmware, upgradeTo }
+        const view = { device, lastSeen, state, firmware, upgradeTo, offlinePlanned }
         if (reboot || !isDeepStrictEqual(nextVisible.get(mac), view)) changed.add(mac)
         nextVisible.set(mac, view)
       }
@@ -151,6 +174,8 @@ export function createDeviceSampler(db: Db, options: {
     }
     availability = currentAvailability
     if (changed.size) options.changed([...changed])
+    // A single poll can discover an entire subtree outage. Start with its upstream device.
+    for (const { event } of outages.sort((a, b) => a.depth - b.depth)) options.emit(event)
     for (const event of events) options.emit(event)
   }
 

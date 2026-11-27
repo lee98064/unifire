@@ -5,6 +5,30 @@ import { isUplink, poeCapable, portIndex } from '../../unifi/poe-ports'
 
 type Attachment = { mac: string, port: number | null, localPort?: number | null }
 
+export function lastKnownParents(parent: ReadonlyMap<string, Attachment>,
+  devices: Iterable<{ mac: string, lastUplink: { mac: string | null, remotePort: number | null, localPort: number | null } | null }>) {
+  const parents = new Map(parent)
+  for (const { mac, lastUplink } of devices) {
+    if (!lastUplink?.mac) continue
+    const current = parents.get(mac)
+    if (!current) parents.set(mac, { mac: lastUplink.mac, port: lastUplink.remotePort, localPort: lastUplink.localPort })
+    else if (current.mac === lastUplink.mac && current.port === null) {
+      parents.set(mac, { ...current, port: lastUplink.remotePort })
+    }
+  }
+  return parents
+}
+
+export function deviceAncestors(mac: string, parents: ReadonlyMap<string, { mac: string }>) {
+  const seen = new Set([mac])
+  const result: string[] = []
+  for (let parent = parents.get(mac); parent && !seen.has(parent.mac); parent = parents.get(parent.mac)) {
+    seen.add(parent.mac)
+    result.push(parent.mac)
+  }
+  return result
+}
+
 export function lastPortConnection(port: WireDoc) {
   return Doc.safeParse(port.last_connection).data
 }

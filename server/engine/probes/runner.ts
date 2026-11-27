@@ -57,7 +57,7 @@ export function createProbeRunner(db: Db, service: ControllerService, routes: Re
       const { status, latencyMs, lossPct, jitterMs, source } = measured.value
       const changed = previous !== status
       const signalChanged = !continuous || changed || prior?.value.lossPct !== lossPct || prior?.failedRounds !== measured.failedRounds
-      return { egressId: row.id, previous, changed, signalChanged, failedRounds: measured.failedRounds,
+      return { egressId: row.id, name: row.name, wan, enabledWan: row.kind === 'wan' && row.enabled, previous, changed, signalChanged, failedRounds: measured.failedRounds,
         value: { status, latencyMs, lossPct, jitterMs, source, lastCheckAt: at, since: changed ? at : prior?.value.since ?? at } }
     }))
     if (!run.active()) return
@@ -75,11 +75,13 @@ export function createProbeRunner(db: Db, service: ControllerService, routes: Re
       compactSamples(db, at)
       lastCompaction = at
     }
+    service.engine.emit('event', { type: 'wan.observed', at, readings: readings.filter(row => row.enabledWan)
+      .map(row => ({ id: row.egressId, name: row.name, up: row.wan })) })
     for (const { egressId, value, changed, signalChanged, previous } of readings) {
-      if (signalChanged) service.engine.emit('event', { type: 'egress.healthChanged', egressId })
+      if (signalChanged) service.engine.emit('event', { type: 'egress.healthChanged', egressId, at })
       if (!changed) continue
-      if (value.status === 'down') service.engine.emit('event', { type: 'egress.down', egressId })
-      else if (previous === 'down' && value.status !== 'unknown') service.engine.emit('event', { type: 'egress.up', egressId })
+      if (value.status === 'down') service.engine.emit('event', { type: 'egress.down', egressId, at })
+      else if (previous === 'down' && value.status !== 'unknown') service.engine.emit('event', { type: 'egress.up', egressId, at })
     }
     if (at - lastEmission >= 10_000) {
       lastEmission = at

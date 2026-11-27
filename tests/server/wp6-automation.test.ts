@@ -117,6 +117,33 @@ describe('WP6 automation with fake transports', () => {
       .toEqual([['https://push.example.test/member', 0, 0], ['https://push.example.test/member', 0, 0]])
   })
 
+  it('localizes incident delivery and gives the open action an audited incident destination', async () => {
+    const { db } = database
+    const admin = user('admin', 'admin')
+    const messages: ReturnType<typeof PushPayload.parse>[] = []
+    const notifier = createNotifier(db, access, {
+      now: () => at,
+      translate: async (_locale, key, params) => key.startsWith('incident.title.') ? params?.name ?? ''
+        : key.endsWith('.body') ? [params?.description, params?.duration].filter(Boolean).join(' ') : key,
+      push: async (_subscription, payload) => {
+        messages.push(PushPayload.parse(JSON.parse(String(payload))))
+        return { statusCode: 201, body: '', headers: {} }
+      },
+    })
+    notifier.push.subscribe(admin.id, { endpoint: 'https://push.example.test/admin', keys: { p256dh: 'fake', auth: 'fake' } })
+    notifier.channels.create(channel({ type: 'webpush' }, ['incident_opened', 'incident_resolved']))
+    const data = { incidentId: 'test-incident', severity: 'critical', titleKey: 'incident.title.device_offline',
+      titleParams: { name: 'Core Switch', devices: '5', clients: '22', people: '1' } }
+    await notifier.notify({ event: 'incident_opened', data })
+    await notifier.notify({ event: 'incident_resolved', data: { ...data, duration: 90 } })
+    expect(messages.map(message => message.body)).toEqual(['Core Switch', 'Core Switch 90'])
+    expect(messages[0]).toMatchObject({ url: '/insight/incidents/test-incident',
+      actions: [{ action: 'open', endpoint: expect.stringMatching(/^\/api\/push\/action\?token=/) }] })
+    const token = messages[0]!.actions[0]!.endpoint.split('=')[1]!
+    await expect(notifier.push.execute(token)).resolves.toEqual({ ok: true })
+    expect(db.select().from(auditEvents).where(eq(auditEvents.action, 'push.incidentOpened')).get()?.target?.id).toBe('test-incident')
+  })
+
   it('ignores Telegram callbacks from the wrong chat and binds actions to the polling audience', async () => {
     const admin = user('telegram-admin', 'admin')
     const calls: { method: string, body: Record<string, unknown> }[] = []

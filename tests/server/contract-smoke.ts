@@ -7,7 +7,8 @@ import { SetupStatus } from '../../shared/schemas/auth'
 import { GuestWifi, PoeWatchdog, Rule, RuleRun, WolTarget } from '../../shared/schemas/automation'
 import { ControllerStatus } from '../../shared/schemas/controller'
 import { Egress } from '../../shared/schemas/egress'
-import { ClientRoams, InfraDevice, InfraDeviceDetail, PoeOverview, PoeQualification, PoeSchedule, PortDetail, PortEvent, Room, RoomTimeline, StickyClient, Topology } from '../../shared/schemas/infra'
+import { Paged } from '../../shared/schemas/common'
+import { ClientRoams, Incident, IncidentDetail, InfraDevice, InfraDeviceDetail, InfraReport, PoeOverview, PoeQualification, PoeSchedule, PortDetail, PortEvent, Room, RoomTimeline, StickyClient, Topology } from '../../shared/schemas/infra'
 import { IspReport, Snapshot, SpeedtestStatus, UsageReport } from '../../shared/schemas/insight'
 import { ManagedRoute, UnifiRoute } from '../../shared/schemas/routes'
 import { DashboardSummary, Settings } from '../../shared/schemas/system'
@@ -176,12 +177,12 @@ async function run() {
     snapshotItem: { params: { id: snapshot.id, resource: 'trafficroutes', itemId } },
     audit: { query: { limit: '10' } },
     ispReport: { query: { month } },
+    infraReport: { query: { month } },
     usageReport: { query: { range: '7d' } },
   }
-  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET' && !/^WP11\b/.test(api[name].note ?? ''))
-  const readResults = await Promise.allSettled(allReads.map(name => get(name, options[name])))
+  const allReads = (Object.keys(api) as ApiName[]).filter(name => api[name].method === 'GET')
+  const readResults = await Promise.allSettled(allReads.filter(name => name !== 'incident').map(name => get(name, options[name])))
   assert.ok(readResults.every(result => result.status === 'fulfilled'), 'One or more contract GETs failed')
-  assert.equal(covered.size, allReads.length)
   const topology = Topology.parse(values.get('topology'))
   const topologyRoot = 'dev:' + gateway.mac
   assert.deepEqual(topology.nodes.filter(node => node.parentId === null).map(node => node.id), [topologyRoot])
@@ -282,15 +283,74 @@ async function run() {
   }
   const coreDetail = () => call('device', { params: { mac: core.mac } }).then(data => InfraDeviceDetail.parse(data))
   const apDetail = () => call('device', { params: deviceParams }).then(data => InfraDeviceDetail.parse(data))
+  const incidentPage = (query?: Record<string, string>) => call('incidents', { query }).then(Paged(Incident).parse)
+  const incidentDetail = (id: string) => call('incident', { params: { id } }).then(IncidentDetail.parse)
+  const originalIncidents = Settings.parse(values.get('settings')).incidents
+  await call('settingsSave', { body: { incidents: { ...originalIncidents, quietMinutes: 1 } } })
+
+  async function waitForIncidentResolution(id: string) {
+    const initial = await incidentDetail(id)
+    const latest = initial.signals.at(-1)?.ts ?? initial.openedAt
+    await delay(Math.max(0, latest + 60_000 - Date.now()))
+    const deadline = Date.now() + 8_000
+    let detail = await incidentDetail(id)
+    while (detail.status === 'open' && Date.now() < deadline) {
+      await delay(500)
+      detail = await incidentDetail(id)
+    }
+    assert.equal(detail.status, 'resolved', `Incident did not resolve: ${detail.titleKey}`)
+    assert.ok(detail.resolvedAt !== null && detail.resolvedAt < Date.now())
+  }
+
   await scenario('reboot-ap')
   const rebooted = await apDetail()
   assert.ok(rebooted.uptimeSec !== null && rebooted.uptimeSec < 10)
   assert.ok(rebooted.lastReboot)
+  const reboot = first((await incidentPage({ status: 'open' })).items, 'reboot incident')
+  assert.equal(reboot.root?.kind, 'device_rebooted')
+  assert.equal(reboot.root.ref?.id, ap.mac)
+  assert.equal(reboot.severity, 'warning')
+  await waitForIncidentResolution(reboot.id)
+
   const offline = await scenario('offline-switch') as { macs: string[] }
   assert.equal(offline.macs.length, 5)
   assert.equal((await coreDetail()).state, 'offline')
+  const firstPage = await incidentPage({ limit: '1' })
+  const outage = await incidentDetail(firstPage.items[0]!.id)
+  assert.equal(outage.status, 'open')
+  assert.equal(outage.root?.kind, 'device_offline')
+  assert.equal(outage.root.ref?.id, core.mac)
+  assert.equal(outage.severity, 'critical')
+  assert.ok(outage.signals.some(signal => signal.kind === 'device_offline' && signal.ref?.id === ap.mac))
+  assert.ok(outage.signals.some(signal => signal.kind === 'mass_disconnect'))
+  assert.ok(firstPage.nextCursor)
+  assert.equal((await incidentPage({ limit: '1', cursor: firstPage.nextCursor })).items[0]?.id, reboot.id)
+  const incidentDashboard = DashboardSummary.parse(await call('dashboard', { label: 'Dashboard with one open incident' }))
+  assert.equal(incidentDashboard.infra.openIncidents, 1)
+  assert.equal(incidentDashboard.incidents[0]?.id, outage.id)
+  const acknowledged = Incident.parse(await call('incidentUpdate', {
+    params: { id: outage.id }, body: { acknowledged: true, note: 'Checked the core switch' },
+  }))
+  assert.equal(acknowledged.acknowledged, true)
+  assert.equal((await incidentDetail(outage.id)).note, 'Checked the core switch')
   await scenario('recover')
   assert.equal((await coreDetail()).state, 'online')
+  await waitForIncidentResolution(outage.id)
+
+  await scenario('config-then-outage')
+  const suspectOutages = (await incidentPage({ status: 'open' })).items
+  assert.equal(suspectOutages.length, 1)
+  const suspectOutage = await incidentDetail(suspectOutages[0]!.id)
+  assert.equal(suspectOutage.root?.ref?.id, core.mac)
+  assert.ok(suspectOutage.signals.some(signal => signal.kind === 'config_change' && signal.suspect
+    && signal.ref?.label === 'Demo port forward'))
+  assert.ok(suspectOutage.diff?.fromSnapshotId)
+  await scenario('recover')
+  const infra = InfraReport.parse(await call('infraReport', { query: { month: monthAt(suspectOutage.openedAt) } }))
+  assert.ok(infra.incidents.count >= 3)
+  assert.ok(infra.devices.some(device => device.mac === core.mac && device.outages >= 2))
+  await call('settingsSave', { body: { incidents: originalIncidents } })
+
   const link = await scenario('downgrade-port') as { portIdx: number }
   assert.equal((await coreDetail()).ports.find(port => port.idx === link.portIdx)?.speedMbps, 100)
   const errors = await scenario('port-errors') as { rxErrors: number, txErrors: number }
@@ -415,6 +475,7 @@ async function run() {
   const max = dashboardTimes[19]!
   console.log(`Dashboard HTTP p95 ${p95.toFixed(1)} ms, max ${max.toFixed(1)} ms (20 mock requests)`)
   assert.ok(max < 150, 'Dashboard exceeded 150 ms')
+  assert.equal(covered.size, allReads.length)
   return allReads.length
 }
 

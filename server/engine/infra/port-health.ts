@@ -9,6 +9,7 @@ import { systemContext, type ControllerService } from '../../services/controller
 import { createSettingsService } from '../../services/settings'
 import { deviceName, deviceState, finiteNumber } from '../../unifi/device-shape'
 import type { WireDevice, WireDoc, WireStation } from '../../unifi/endpoints/schemas'
+import type { ControllerEvent } from '../../unifi/ws'
 import { liveBus } from '../../utils/bus'
 import { DAY, HOUR } from '../access-time'
 import { createDeviceGraph, createPoeSafety } from './poe-safety'
@@ -82,6 +83,7 @@ export function createPortHealth(db: Db, service: ControllerService, bus = liveB
     const { selfMac, selfIp } = service.status()
     const safety = createPoeSafety(graph, stations, { mac: selfMac, ip: selfIp })
     const hour = Math.floor(at / HOUR) * HOUR
+    const linkEvents: ControllerEvent[] = []
     const emitted: { row: typeof portEvents.$inferInsert, notify: boolean }[] = []
     db.transaction(tx => {
       const approved = new Set(tx.select({ mac: clients.mac }).from(clients).where(eq(clients.approval, 'approved')).all().map(row => row.mac))
@@ -102,8 +104,20 @@ export function createPortHealth(db: Db, service: ControllerService, bus = liveB
           const recent = recentDeltas(tx, key, at)
           const baseline = speedBaseline(previous, view, at, config.downgradeMinPolls, skip)
           const firstSeen = previous?.firstSeen ?? at
-          const lastDrop = delta.flaps > 0 ? at : previous?.lastDrop ?? null
-          let flapAt = previous?.lastDrop != null && at - previous.lastDrop < HOUR ? previous.flapAt : null
+          const previousDrop = previous?.lastDrop ?? null
+          const lastDrop = delta.flaps > 0 ? at : previousDrop
+          const rearmed = previousDrop !== null && at - previousDrop >= HOUR && (view.up || delta.flaps > 0)
+          let flapAt = rearmed ? null : previous?.flapAt ?? null
+          if (previous?.flapAt != null && rearmed) {
+            // End the previous burst before publishing any new flapping event from this poll.
+            linkEvents.push({ type: 'port.stable', switchMac: device.mac, portIdx: view.idx,
+              at: delta.flaps > 0 ? previousDrop + HOUR : at })
+          }
+          const peer = view.peer?.kind === 'device' ? view.peer.mac : previous?.peerKind === 'device' ? previous.peerMac : null
+          if (!skip && peer && previous && previous.up !== view.up) {
+            linkEvents.push({ type: 'port.link', switchMac: device.mac, portIdx: view.idx,
+              peerMac: peer, downstreamMac: view.isUplink ? device.mac : peer, at, up: view.up })
+          }
           let errorAt = previous?.errorAt ?? null
           const addEvent = (kind: Kind) => {
             const switchName = deviceName(device)
@@ -167,13 +181,14 @@ export function createPortHealth(db: Db, service: ControllerService, bus = liveB
       if (hour !== archiveHour) archivePorts(tx, archiveHour, at, config)
     })
     archiveHour = hour
+    for (const event of linkEvents) service.engine.emit('event', event)
     for (const { row, notify } of emitted) {
       const { switchMac, portIdx, kind, id } = row
       audit.record({ actor: systemContext.actor, category: 'device', action: `port.${kind}`, severity: row.severity,
         target: { type: 'port', id: `${switchMac}/${portIdx}`, label: row.portName ?? String(portIdx) },
         messageKey: row.messageKey, messageParams: row.messageParams }, at)
       bus.emit({ type: 'port.event', data: { id, switchMac, portIdx, kind } })
-      service.engine.emit('event', { type: 'port.issue', switchMac, portIdx, kind, eventId: id })
+      service.engine.emit('event', { type: 'port.issue', switchMac, portIdx, kind, eventId: id, at })
       if (notify) service.engine.emit('event', { type: 'notification', event: 'port_issue', ...row.messageParams,
         switchMac, portIdx, kind, eventId: id })
     }

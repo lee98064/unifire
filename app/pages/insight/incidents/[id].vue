@@ -68,7 +68,7 @@ const tree = computed(() => {
   }
   const out: { node: TopologyNodeT, depth: number, hit: boolean }[] = []
   const walk = (parent: string | null, depth: number) => {
-    for (const n of nodes.filter(x => x.parentId === parent && keep.has(x.id) && x.kind !== 'egress')) {
+    for (const n of nodes.filter(x => x.parentId === parent && keep.has(x.id) && x.kind !== 'egress' && !(x.kind === 'client_group' && !x.clients))) {
       out.push({ node: n, depth, hit: affected.has(n.id) })
       walk(n.id, depth + 1)
     }

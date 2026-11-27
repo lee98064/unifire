@@ -3,23 +3,29 @@ import { Agent as HttpAgent } from 'node:http'
 import { Agent as HttpsAgent } from 'node:https'
 import WebSocket from 'ws'
 import { z } from 'zod'
-import type { PortEvent } from '#shared/schemas/infra'
+import type { IncidentSeverityT, PortEvent } from '#shared/schemas/infra'
 import type { SnapshotResourceT } from '#shared/schemas/insight'
 import type { UnifiTransport } from './client'
 import { Doc, MacAddress, type WireDoc } from './endpoints/schemas'
 import { UnifiError } from './errors'
 
 export type InfraEvent =
-  | { type: 'infra.offline', mac: string }
-  | { type: 'infra.online', mac: string, downSec: number }
-  | { type: 'infra.rebooted', mac: string, unexpected: boolean }
+  | { type: 'infra.offline', mac: string, planned?: boolean, at?: number }
+  | { type: 'infra.online', mac: string, downSec: number, at?: number }
+  | { type: 'infra.rebooted', mac: string, unexpected: boolean, at?: number }
   | { type: 'infra.overheat', mac: string, tempC: number }
   | { type: 'infra.temperature', mac: string, tempC: number }
   | { type: 'infra.firmware', mac: string, version: string }
 
 export type ControllerEvent =
   | InfraEvent
-  | { type: 'port.issue', switchMac: string, portIdx: number, kind: z.output<typeof PortEvent>['kind'], eventId: string }
+  | { type: 'port.issue', switchMac: string, portIdx: number, kind: z.output<typeof PortEvent>['kind'], eventId: string, at?: number }
+  | { type: 'port.stable', switchMac: string, portIdx: number, at: number }
+  | { type: 'port.link', switchMac: string, portIdx: number, peerMac: string, downstreamMac: string, up: boolean, at: number }
+  | { type: 'wan.observed', readings: { id: string, name: string, up: boolean | null }[], at: number }
+  | { type: 'incident.opened', id: string, titleKey: string, titleParams: Record<string, string>, severity: IncidentSeverityT }
+  | { type: 'notification', event: 'incident_opened' | 'incident_resolved', incidentId: string,
+    titleKey: string, titleParams: Record<string, string>, severity: IncidentSeverityT, duration?: number }
   | { type: 'poe.reading', switchMac: string, percent: number }
   | { type: 'notification', event: 'port_issue' | 'poe_schedule', switchMac: string, portIdx: number,
     kind: string, [field: string]: unknown }
@@ -33,8 +39,8 @@ export type ControllerEvent =
   | { type: 'controller.reconnected' | 'controller.mode' | 'routing.settings' }
   | { type: 'rules.changed', ruleIds: string[] }
   | { type: 'routing.changed', managedRouteId: string }
-  | { type: 'egress.healthChanged', egressId: string }
-  | { type: 'egress.down' | 'egress.up', egressId: string }
+  | { type: 'egress.healthChanged', egressId: string, at?: number }
+  | { type: 'egress.down' | 'egress.up', egressId: string, at?: number }
   | { type: 'egress.ip_changed', egressId: string, previousIp: string, ip: string }
   | { type: 'client.new', mac: string, displayName: string }
   | { type: 'person.room_entered' | 'person.room_left', personId: string, roomId: string, room?: string }

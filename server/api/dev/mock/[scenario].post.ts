@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { useController, useInfra } from '../../../services/controller-runtime'
+import { checkMockConfig, useController, useInfra } from '../../../services/controller-runtime'
 import { MockScenario } from '../../../unifi/mock/infra'
 import { apiError, readApiParams } from '../../../utils/api-error'
 import { adminControllerHandler } from '../../../utils/controller-api'
@@ -15,9 +15,13 @@ export default adminControllerHandler(async event => {
   await useInfra()
   const cache = service.runtime?.cache
   if (!cache) throw notFound()
+  const external = parsed.data === 'config-then-outage'
+  if (external) await checkMockConfig()
   const result = apply(parsed.data)
-  await Promise.all([cache.refreshAfterCurrent('devices'), cache.refreshAfterCurrent('activeClients')])
-  // Missing devices are confirmed after two successful polls.
-  if (parsed.data === 'offline-switch' || parsed.data === 'downgrade-port') await cache.refresh('devices')
+  if (external) await checkMockConfig()
+  await cache.refreshAfterCurrent('devices')
+  // Confirm missing adopted devices before processing the burst of client disconnects.
+  if (external || parsed.data === 'offline-switch' || parsed.data === 'downgrade-port') await cache.refresh('devices')
+  await cache.refreshAfterCurrent('activeClients')
   return { ok: true, scenario: parsed.data, result }
 })

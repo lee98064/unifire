@@ -9,7 +9,8 @@ import type { EgressHealthT, EgressKindT, HealthStatusT } from '#shared/schemas/
 import type { GuestWifiT, PoeWatchdogT, RuleT, RuleRunT, WatchdogEventT, WolTargetT } from '#shared/schemas/automation'
 import type { AuditEventT, SnapshotResourceT, SnapshotT } from '#shared/schemas/insight'
 import type { FailoverPolicyT, ManagedRouteStateT, ManagedRouteT, RotationGeneratorT, ScheduleGridT, SwitchReasonT } from '#shared/schemas/routes'
-import type { DeviceTransitionT, InfraDeviceT } from '#shared/schemas/infra'
+import type { DeviceTransitionT, IncidentSignalT, IncidentT, InfraDeviceT } from '#shared/schemas/infra'
+import type { SignalFacts } from '../engine/infra/incidents/correlate'
 import type { ChannelTypeT, NotificationEventT } from '#shared/schemas/system'
 
 export const people = sqliteTable('people', {
@@ -574,6 +575,8 @@ export const infraDevices = sqliteTable('infra_devices', {
   lastUptime: real('last_uptime'),
   uptimeAt: integer('uptime_at'),
   offlineSince: integer('offline_since'),
+  offlinePlanned: integer('offline_planned', { mode: 'boolean' }).notNull().default(false),
+  lastUplink: text('last_uplink', { mode: 'json' }).$type<NonNullable<InfraDeviceT['uplink']>>(),
   upgrading: integer('upgrading', { mode: 'boolean' }).notNull().default(false),
   roomId: text('room_id'),
   locateUntil: integer('locate_until'),
@@ -584,6 +587,7 @@ export const deviceSamples = sqliteTable('device_samples', {
   ts: integer('ts').notNull(),
   state: text('state').$type<InfraDeviceT['state']>().notNull(),
   uptime: real('uptime'),
+  planned: integer('planned', { mode: 'boolean' }).notNull().default(false),
   cpu: real('cpu'),
   mem: real('mem'),
   temp: real('temp'),
@@ -604,6 +608,8 @@ export const deviceRollupsHourly = sqliteTable('device_rollups_hourly', {
   rxAvg: real('rx_avg'), rxMax: real('rx_max'),
   txAvg: real('tx_avg'), txMax: real('tx_max'),
   poeWAvg: real('poe_w_avg'),
+  reportMinutes: text('report_minutes', { mode: 'json' }).$type<[offset: number, online: number,
+    cpu: number | null, mem: number | null, temp: number | null][]>(),
 }, t => [primaryKey({ columns: [t.mac, t.hourTs] }), index('device_rollups_hourly_ts').on(t.hourTs)])
 
 export const deviceTransitions = sqliteTable('device_transitions', {
@@ -614,6 +620,7 @@ export const deviceTransitions = sqliteTable('device_transitions', {
   to: text('to_state').$type<DeviceTransitionT['to']>().notNull(),
   reason: text('reason').$type<DeviceTransitionT['reason']>(),
   downSec: real('down_sec'),
+  planned: integer('planned', { mode: 'boolean' }).notNull().default(false),
 }, t => [index('device_transitions_mac_ts').on(t.mac, t.ts)])
 
 export const firmwareHistory = sqliteTable('firmware_history', {
@@ -737,6 +744,7 @@ export const poeApplied = sqliteTable('poe_applied', {
   createdEntry: integer('created_entry', { mode: 'boolean' }).notNull(),
   at: integer('at').notNull(),
   scheduleId: text('schedule_id'),
+  label: text('label'),
   source: text('source').$type<'schedule' | 'manual' | 'rule' | 'qualification' | 'snapshot'>().notNull(),
   phase: text('phase').$type<'applying' | 'held' | 'restoring'>().notNull(),
 }, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
@@ -744,6 +752,7 @@ export const poeApplied = sqliteTable('poe_applied', {
 export const poeGrace = sqliteTable('poe_grace', {
   ...infraPort(),
   until: integer('until').notNull(),
+  label: text('label'),
 }, t => [primaryKey({ columns: [t.scope, t.switchMac, t.portIdx] })])
 
 export const poeOffLog = sqliteTable('poe_off_log', {
@@ -841,3 +850,45 @@ export const stickyNudges = sqliteTable('sticky_nudges', {
   mac: text('mac').notNull(),
   ts: integer('ts').notNull(),
 }, t => [index('sticky_nudges_client').on(t.scope, t.mac, t.ts), index('sticky_nudges_ts').on(t.ts)])
+
+export const incidents = sqliteTable('incidents', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull(),
+  openedAt: integer('opened_at').notNull(),
+  latestAt: integer('latest_at').notNull(),
+  resolvedAt: integer('resolved_at'),
+  status: text('status').$type<IncidentT['status']>().notNull(),
+  severity: text('severity').$type<IncidentT['severity']>().notNull(),
+  titleKey: text('title_key').notNull(),
+  titleParams: text('title_params', { mode: 'json' }).$type<IncidentT['titleParams']>().notNull(),
+  root: text('root', { mode: 'json' }).$type<NonNullable<IncidentT['root']>>().notNull(),
+  impact: text('impact', { mode: 'json' }).$type<IncidentT['impact']>().notNull(),
+  affectedNodes: text('affected_nodes', { mode: 'json' }).$type<string[]>().notNull(),
+  baselineClients: integer('baseline_clients').notNull(),
+  signalCount: integer('signal_count').notNull(),
+  suspectCount: integer('suspect_count').notNull(),
+  acknowledged: integer('acknowledged', { mode: 'boolean' }).notNull().default(false),
+  note: text('note'),
+}, t => [index('incidents_scope_status_opened').on(t.scope, t.status, t.openedAt, t.id),
+  index('incidents_opened').on(t.openedAt)])
+
+export const incidentSignals = sqliteTable('incident_signals', {
+  id: text('id').primaryKey(),
+  scope: text('scope').notNull(),
+  incidentId: text('incident_id').references(() => incidents.id, { onDelete: 'cascade' }),
+  ts: integer('ts').notNull(),
+  kind: text('kind').$type<IncidentSignalT['kind']>().notNull(),
+  severity: text('severity').$type<IncidentSignalT['severity']>().notNull(),
+  ref: text('ref', { mode: 'json' }).$type<IncidentSignalT['ref']>(),
+  messageKey: text('message_key').notNull(),
+  messageParams: text('message_params', { mode: 'json' }).$type<IncidentSignalT['messageParams']>().notNull(),
+  suspect: integer('suspect', { mode: 'boolean' }).notNull().default(false),
+  facts: text('facts', { mode: 'json' }).$type<SignalFacts>().notNull(),
+}, t => [index('incident_signals_incident_ts').on(t.incidentId, t.ts),
+  index('incident_signals_scope_ts').on(t.scope, t.kind, t.ts)])
+
+export const incidentWanState = sqliteTable('incident_wan_state', {
+  scope: text('scope').notNull(),
+  egressId: text('egress_id').notNull(),
+  up: integer('up', { mode: 'boolean' }).notNull(),
+}, t => [primaryKey({ columns: [t.scope, t.egressId] })])
