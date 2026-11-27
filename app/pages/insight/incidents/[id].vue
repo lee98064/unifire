@@ -2,7 +2,8 @@
 import type { IncidentDetailT, IncidentSignalT, IncidentT, TopologyT, TopologyNodeT } from '#shared/schemas/infra'
 
 const route = useRoute()
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
+const listFmt = computed(() => new Intl.ListFormat(locale.value === 'zh-TW' ? 'zh-Hant' : 'en', { type: 'conjunction' }))
 const fmt = useFormat()
 const api = useApi()
 const id = computed(() => String(route.params.id))
@@ -125,10 +126,10 @@ async function patch(body: { acknowledged?: boolean, note?: string | null }) {
           <span v-for="eid in inc.impact.egresses" :key="eid" class="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-(--uf-surface) ring-1 ring-(--ui-border-muted) text-[12px]">
             <span class="size-2 rounded-full" :style="{ background: egressById.get(eid)?.color }" />{{ egressById.get(eid)?.name ?? eid }}
           </span>
-          <span class="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-(--uf-surface) ring-1 ring-(--ui-border-muted) text-[12px] text-toned"><UIcon name="i-lucide-monitor-smartphone" class="size-3.5 text-dimmed" />{{ t('incidents.clientsN', { n: inc.impact.clients }) }}</span>
+          <span class="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-(--uf-surface) ring-1 ring-(--ui-border-muted) text-[12px] text-toned"><UIcon name="i-lucide-monitor-smartphone" class="size-3.5 text-dimmed" />{{ t('incidents.clientsN', { n: inc.impact.clients }, inc.impact.clients) }}</span>
           <div v-if="inc.impact.people.length" class="flex items-center gap-1.5 h-7 pl-1 pr-2.5 rounded-full bg-(--uf-surface) ring-1 ring-(--ui-border-muted)">
             <div class="flex -space-x-1.5"><PersonAvatar v-for="pid in inc.impact.people.slice(0, 5)" :key="pid" :avatar="person(pid)?.avatar ?? '?'" :color="person(pid)?.color ?? '#888'" :size="20" class="ring-2 ring-(--uf-surface) rounded-full" /></div>
-            <span class="text-[12px] text-toned">{{ inc.impact.people.map(p => person(p)?.name).filter(Boolean).join('、') }}</span>
+            <span class="text-[12px] text-toned">{{ listFmt.format(inc.impact.people.map(p => person(p)?.name).filter((n): n is string => !!n)) }}</span>
           </div>
         </div>
       </div>
@@ -159,7 +160,7 @@ async function patch(body: { acknowledged?: boolean, note?: string | null }) {
               <div v-for="r in tree" :key="r.node.id" class="flex items-center gap-2 rounded-md px-1 py-1 text-[12.5px]" :class="r.hit ? 'bg-error/8' : ''" :style="{ paddingLeft: `${4 + r.depth * 16}px` }">
                 <UIcon v-if="r.depth" name="i-lucide-corner-down-right" class="size-3 text-dimmed shrink-0" />
                 <StatusDot :status="r.hit ? 'down' : r.node.state === 'down' ? 'down' : r.node.state === 'warning' ? 'degraded' : 'healthy'" :size="7" />
-                <span class="truncate" :class="r.hit ? 'text-error font-medium' : 'text-toned'">{{ r.node.kind === 'client_group' ? t('topology.clientsN', { n: r.node.clients }) : r.node.label }}</span>
+                <span class="truncate" :class="r.hit ? 'text-error font-medium' : 'text-toned'">{{ r.node.kind === 'client_group' ? t('topology.clientsN', { n: r.node.clients }, r.node.clients) : r.node.label }}</span>
               </div>
             </div>
             <template #footer><UButton to="/devices/topology" size="xs" color="neutral" variant="ghost" trailing-icon="i-lucide-arrow-right">{{ t('nav.topology') }}</UButton></template>

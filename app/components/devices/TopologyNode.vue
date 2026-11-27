@@ -70,7 +70,7 @@ const deviceState = computed(() => (n.value.state === 'down' ? 'offline' : n.val
       class="flex items-center gap-2 w-[170px] px-2.5 py-1.5 rounded-lg bg-(--uf-surface-2) ring-1 ring-(--ui-border-muted) cursor-pointer hover:ring-(--ui-border-accented) transition"
     >
       <UIcon :name="n.id.split(':').length > 2 ? 'i-lucide-ethernet-port' : 'i-lucide-wifi'" class="size-3.5 text-dimmed shrink-0" />
-      <span class="text-[11.5px] text-toned uf-num">{{ t('topology.clientsN', { n: n.clients }) }}</span>
+      <span class="text-[11.5px] text-toned uf-num">{{ t('topology.clientsN', { n: n.clients }, n.clients) }}</span>
       <div v-if="people.length" class="flex -space-x-1.5 ml-auto">
         <PersonAvatar v-for="p in people.slice(0, 3)" :key="p!.id" :avatar="p!.avatar" :color="p!.color" :size="18" class="ring-2 ring-(--uf-surface-2) rounded-full" />
       </div>

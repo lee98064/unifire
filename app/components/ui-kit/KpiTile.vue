@@ -20,7 +20,7 @@ defineProps<{ label: string, value: string | number, icon?: string, hint?: strin
       ><UIcon :name="icon" class="size-4" /></span>
     </div>
     <div class="flex items-end justify-between gap-2">
-      <span class="text-[26px] leading-none font-semibold tracking-tight text-highlighted uf-num">{{ value }}</span>
+      <span class="text-[26px] leading-none font-semibold tracking-tight text-highlighted uf-num whitespace-nowrap">{{ value }}</span>
       <slot />
     </div>
     <span v-if="hint" class="text-[12px] text-dimmed -mt-1 truncate">{{ hint }}</span>
